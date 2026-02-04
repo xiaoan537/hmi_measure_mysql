@@ -12,6 +12,7 @@
 
 namespace core
 {
+    // 表示一个测量结果及其MES上传状态的综合信息。这个结构体用于在UI层显示测量结果列表，包括其上传状态和相关信息。
     struct MesUploadRow
     {
         QString measurement_uuid;
@@ -28,22 +29,24 @@ namespace core
         QDateTime mes_updated_at_utc;
     };
 
+    // 定义查询测量结果时的过滤条件。用户可以通过这个结构体指定时间范围、工件类型、合格性和MES状态等条件来筛选需要查看的测量结果。
     struct MesUploadFilter
     {
-        QDateTime from_utc;
-        QDateTime to_utc;
-        QString part_id_like; // optional
-        QString part_type;    // "", "A", "B"
-        int ok_filter = -1;   // -1=all, 1=ok, 0=ng
-        QString mes_status;   // "", "NOT_QUEUED", "PENDING", ...
+        QDateTime from_utc;   // 查询起始时间
+        QDateTime to_utc;     // 查询结束时间
+        QString part_id_like; // optional，工件ID模糊匹配（可选）
+        QString part_type;    // "", "A", "B"，工件类型过滤:""（全部）、"A"、"B"
+        int ok_filter = -1;   // -1=all, 1=ok, 0=ng,合格性过滤：-1（全部）、1（合格）、0（不合格）
+        QString mes_status;   // "", "NOT_QUEUED", "PENDING", ...，MES状态过滤：""（全部）、"NOT_QUEUED"、"PENDING"等
     };
 
+    // 表示一个待上传的MES任务。这个结构体主要用于上传工作线程（Worker）获取和处理上传任务。payload_json字段包含了要发送给MES系统的完整数据。
     struct MesOutboxTask
     {
-        quint64 id = 0;
-        QString measurement_uuid;
-        QString payload_json;
-        int attempt_count = 0;
+        quint64 id = 0;           // 任务ID，数据库主键
+        QString measurement_uuid; // 关联的测量UUID，外键引用 MesUploadRow
+        QString payload_json;     // 任务负载，JSON 格式字符串
+        int attempt_count = 0;    // 重试次数，初始为 0
     };
 
     class Db
@@ -57,20 +60,26 @@ namespace core
         // bool insertResultWithRawIndex(const MeasureResult& r, const RawWriteInfo& raw, QString* err);
         bool insertResultWithRawIndexV2(const MeasureResult &r, const RawWriteInfoV2 &raw, QString *err);
 
-        // --- MES manual upload ---
+        // --- MES manual upload ，查询上传记录---
+        // 根据过滤条件查询测量结果及其MES上传状态。返回一个MesUploadRow数组，每个元素包含一个测量结果的完整信息和上传状态。
         QVector<MesUploadRow> queryMesUploadRows(const MesUploadFilter &f, int limit, QString *err);
 
-        // 把某条 measurement_uuid 入队（若已 SENT 则跳过返回 false 并给 err 说明）
+        // 将指定的测量结果加入MES上传队列。如果该测量结果已经成功上传（状态为SENT），则跳过并返回false。这个函数通常由用户手动触发，用于将选中的测量结果加入上传队列。
         bool queueMesUploadByUuid(const QString &measurement_uuid, QString *err);
 
-        // 将 FAILED 变回 PENDING（用于“重试失败”按钮），不重建 payload
+        // 重试失败的上传任务。将状态为FAILED的任务重新设置为PENDING状态，但不重建payload。用于"重试失败"按钮功能，返回成功重置的任务数量。
         int retryFailed(const QVector<QString> &uuids, QString *err);
 
         // Worker side
+        // 重置长时间处于发送状态的任务。如果某个任务处于SENDING状态超过指定时间（stale_seconds），则将其重置为PENDING状态，防止因异常情况导致的任务卡死。
         bool resetStaleSending(int stale_seconds, QString *err);
+        // 获取下一个待处理的上传任务。上传工作线程调用此函数获取下一个需要上传的任务。函数会查找状态为PENDING且到达重试时间的任务。
         bool fetchNextDueOutbox(MesOutboxTask *task, QString *err);
+        // 标记任务为发送中状态。在开始上传前调用，将任务状态从PENDING改为SENDING，防止其他工作线程同时处理同一任务。
         bool markOutboxSending(quint64 id, QString *err);
+        // 标记任务为已发送状态。上传成功后调用，记录HTTP响应码和响应内容，将任务状态设置为SENT。
         bool markOutboxSent(quint64 id, int http_code, const QString &resp, QString *err);
+        // 标记任务为失败状态。上传失败后调用，记录错误信息和下次重试时间，将任务状态设置为FAILED。
         bool markOutboxFailed(quint64 id, int http_code, const QString &resp,
                               const QString &error, int next_retry_seconds, QString *err);
 

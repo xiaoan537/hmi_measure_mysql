@@ -30,6 +30,16 @@ namespace core
         c.paths.log_dir = s.value("log_dir", "./data/logs").toString();
         s.endGroup();                                           // 结束 "paths" 配置组
 
+        // MES 配置解析
+        s.beginGroup("mes");
+        c.mes.enabled = (s.value("enabled", 0).toInt() != 0);
+        c.mes.url = s.value("url", "").toString();
+        c.mes.auth_token = s.value("auth_token", "").toString();
+        c.mes.timeout_ms = s.value("timeout_ms", 5000).toInt();
+        c.mes.retry_base_seconds = s.value("retry_base_seconds", 30).toInt();
+        c.mes.retry_max_seconds = s.value("retry_max_seconds", 21600).toInt();
+        s.endGroup();
+
         return c;
     }
 

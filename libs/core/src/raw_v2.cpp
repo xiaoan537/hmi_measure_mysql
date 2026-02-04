@@ -108,6 +108,7 @@ namespace core
         ds.setByteOrder(QDataStream::LittleEndian);
         ds.setFloatingPointPrecision(QDataStream::SinglePrecision);
 
+        // 写入payload头部信息
         ds << quint8(channels);
         ds << quint8(unit_code);
         ds << quint16(rings);
@@ -158,6 +159,7 @@ namespace core
                                          reinterpret_cast<const unsigned char *>(payload.constData()),
                                          payload.size());
 
+        // 写入数据块头部信息
         out.writeRawData(type4, 4);    // 字符格式化写入
         out << quint16(chunk_version); // 小端序写入
         out << quint16(flags);
@@ -165,6 +167,7 @@ namespace core
         out << quint32(crc);
         out.writeRawData(payload.constData(), payload.size());
 
+        // 更新文件级CRC，先计算出当前chunk的crc，再用当前chunk的crc更新文件及payload的crc，得到新的文件级crc
         if (file_crc)
         {
             // 把chunk header + payload都纳入文件crc
@@ -305,9 +308,9 @@ namespace core
         // META
         if (!s.meta_json.trimmed().isEmpty())
         {
-            const QByteArray payload = makeChunkPayload_META(s.meta_json);
+            const QByteArray payload = makeChunkPayload_META(s.meta_json); // 生成meta类型的payload字节数组
             const char t[4] = {'M', 'E', 'T', 'A'};
-            writeChunk(ds, t, 1, 0, payload, &file_crc);
+            writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入meta类型的chunk到文件流ds
             info.chunk_mask |= CHUNK_META;
         }
 
@@ -315,9 +318,9 @@ namespace core
         if (!s.confocal4.isEmpty())
         {
             const QByteArray payload = makeChunkPayload_MATRIX(
-                4, 16, 72, 5.0f, 0, s.confocal4);
+                4, 16, 72, 5.0f, 0, s.confocal4); // 生成confocal4类型的payload字节数组
             const char t[4] = {'C', 'O', 'N', 'F'};
-            writeChunk(ds, t, 1, 0, payload, &file_crc);
+            writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入confocal4类型的chunk到文件流ds
             info.chunk_mask |= CHUNK_CONF;
 
             // 主扫描优先用 CONF
@@ -335,9 +338,9 @@ namespace core
         if (!s.runout2.isEmpty())
         {
             const QByteArray payload = makeChunkPayload_MATRIX(
-                2, 16, 72, 5.0f, 0, s.runout2);
+                2, 16, 72, 5.0f, 0, s.runout2); // 生成runout2类型的payload字节数组
             const char t[4] = {'R', 'U', 'N', 'O'};
-            writeChunk(ds, t, 1, 0, payload, &file_crc);
+            writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入runout2类型的chunk到文件流ds
             info.chunk_mask |= CHUNK_RUNO;
 
             // 如果没有 CONF，则 RUNO 为主扫描
@@ -353,14 +356,14 @@ namespace core
 
         // GT2R（PLC给的长度结果，mm）
         {
-            const QByteArray payload = makeChunkPayload_GT2R(1, s.gt2r_mm3); // 1=mm
+            const QByteArray payload = makeChunkPayload_GT2R(1, s.gt2r_mm3); // 1=mm，生成gt2r_mm3类型的payload字节数组
             const char t[4] = {'G', 'T', '2', 'R'};
-            writeChunk(ds, t, 1, 0, payload, &file_crc);
+            writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入gt2r_mm3类型的chunk到文件流ds，file_crc 是文件中除文件头外所有数据的CRC校验和，是文件中所有数据块（chunks）的累积CRC值
             info.chunk_mask |= CHUNK_GT2R;
         }
 
         /*
-        种阻塞可能会对系统性能产生以下影响：
+        这种阻塞可能会对系统性能产生以下影响：
 
         UI响应延迟：如果这是在主线程中执行，可能会导致UI短暂冻结
         吞吐量降低：频繁的fsync会降低整体写入性能
@@ -405,7 +408,7 @@ namespace core
         int got = 0;
         while (got < n)
         {
-            const int r = dev.read(buf + got, n - got);
+            const int r = dev.read(buf + got, n - got); // dev.read() 函数直接将数据写入到指定的内存地址
             if (r <= 0)
                 return false;
             got += r;
@@ -427,6 +430,13 @@ namespace core
         ds.setByteOrder(QDataStream::LittleEndian);
         ds.setFloatingPointPrecision(QDataStream::SinglePrecision);
 
+        /*
+        magic 是一个包含从文件开头读取的8个字节的数组
+        memcmp 函数比较这8个字节与字符串 "HMIRAW02" 是否完全相同
+        如果不相同（返回值不为0），说明文件格式不正确
+        */
+        // 读取文件头的8字节魔数，并使用readExactly中的dev.read()函数将读取到的字节写入到字节数组magic中，
+        // 并验证是否为HMIRAW02，确保文件格式正确
         char magic[8];
         if (!readExactly(f, magic, 8))
         {
@@ -443,6 +453,23 @@ namespace core
 
         quint16 header_size = 0, version = 0;
         quint32 endian = 0;
+
+        /*
+        数据读取流程
+        文件指针位置：
+        在执行这行代码前，已经读取了文件开头的8字节魔数（"HMIRAW02"）
+        文件指针现在位于第9个字节处
+
+        数据读取：
+        ds 是一个 QDataStream 对象，关联到文件
+        这行代码从当前文件位置连续读取三个值：
+            header_size：2字节（quint16）
+            version：2字节（quint16）
+            endian：4字节（quint32）
+        总共读取8字节的数据
+        */
+        // 读取文件头的16字节，分别根据header_size, version, endian的数据类型进行字节读取，
+        // 读取之后根据数据类型进行转换，存储到对应变量中进行验证。
         ds >> header_size >> version >> endian;
         if (version != 2 || header_size != 64 || endian != 1)
         {
@@ -466,8 +493,9 @@ namespace core
         // skip padding to 64
         const qint64 needSkip = 64 - f.pos();
         if (needSkip > 0)
-            f.read(needSkip);
+            f.read(needSkip);   // 跳过填充字节，确保下一个读取操作从64字节对齐位置开始
 
+        // 创建测量快照对象s，用于存储读取到的测量数据
         MeasurementSnapshot s;
         s.measurement_uuid = QString::fromUtf8(QByteArray(uuid36, 36));
         s.measured_at_utc = QDateTime::fromMSecsSinceEpoch((qint64)ms, Qt::UTC);
@@ -493,6 +521,7 @@ namespace core
                 return false;
             }
 
+            // 注意：要区分payload的crc、chunk的crc、文件的crc，这里计算和比较的就是payload的crc
             const quint32 gotCrc = crc32_update(0u,
                                                 reinterpret_cast<const unsigned char *>(payload.constData()),
                                                 payload.size());
@@ -575,6 +604,28 @@ namespace core
             // unknown chunk: skip (already read)
         }
 
+        /*
+        处理缺失数据：
+            如果文件中没有GT2R数据块，或者GT2R数据块损坏，gt2r_mm3 向量可能为空或大小不为3
+            这种情况下，代码会将 gt2r_mm3 设置为3个NaN（Not a Number）值
+
+        NaN值的用途：
+            std::numeric_limits<float>::quiet_NaN() 生成一个"安静"的NaN值
+            NaN值表示数据无效或缺失，但不会引发异常
+            后续代码可以通过检查值是否为NaN来判断数据是否有效
+
+        设计考虑：
+            注释"允许缺失，但你项目里建议必须有"表明：
+                文件格式上允许GT2R数据缺失
+                但项目业务逻辑上建议应该有GT2R数据
+            这种设计提供了灵活性，同时确保了数据结构的完整性
+            
+        作用：
+        向后兼容性：可能旧版本的文件格式不包含GT2R数据
+        错误容错：即使GT2R数据块损坏，程序也能继续运行
+        数据完整性：确保 gt2r_mm3 始终有3个元素，便于后续处理
+        明确的标记：使用NaN值明确标记数据无效，便于后续代码判断
+        */
         if (s.gt2r_mm3.size() != 3)
         {
             // 允许缺失，但你项目里建议必须有

@@ -590,12 +590,69 @@ namespace core
         return true;
     }
 
+    /*
+    SQL查询的作用
+        这段SQL查询（固定部分 + 动态部分）的核心作用是：
+        联合两个表进行查询：
+            主表：measure_result - 存储测量结果数据
+            从表：mes_outbox - 存储MES上传队列数据
+            通过LEFT JOIN连接，获取测量结果及其上传状态的完整信息
+        提供灵活的过滤条件：
+            固定部分：基本的表连接和基础筛选条件（状态为'READY'、时间范围）
+            动态部分：根据用户需求添加的额外过滤条件（工件ID、类型、合格性、MES状态等）
+    完整的工作流程
+        用户在UI界面设置过滤条件：
+            选择时间范围
+            输入工件ID（可选）
+            选择工件类型（可选）
+            选择合格性（可选）
+            选择MES状态（可选）
+        UI层调用queryMesUploadRows函数：
+            将用户设置的过滤条件封装为MesUploadFilter结构体
+            调用数据库层的查询函数
+        数据库层动态构建SQL查询：
+            基础SQL语句（固定部分）
+            根据过滤条件添加WHERE子句（动态部分）
+            执行查询并获取结果
+        结果处理和返回：
+            将查询结果映射到MesUploadRow结构体数组
+            返回给UI层
+        UI层显示结果：
+            将MesUploadRow数组显示在表格或列表中
+            用户可以看到测量结果及其MES上传状态
+    */
+    /*
+    queryMesUploadRows()函数，固定的 SQL 查询语句用于从两个数据表中联合查询测量结果及其对应的消息状态信息。
+    使用一定的筛选条件，结合两个表，筛选出需要的字段数据，然后再动态动态构建SQL查询，根据用户提供的过滤条件
+    （`MesUploadFilter` 结构体）向基础SQL语句添加额外的筛选条件（**就是上位机界面中数据管理UI中的筛选需要显示的数据**）。
+    然后将`MesUploadFilter` 结构体中的值和SQL的占位符进行绑定，进行动态筛选。最后将查询结果进行遍历轮询，
+    将每一个结果放入到`MesUploadRow`结构体中，最终将所有轮询的结果放入到QVector<MesUploadRow>数组中返回，
+    等待数据管理界面的调用。
+    */
     // 查询：measure_result LEFT JOIN mes_outbox
+    // 根据过滤条件查询测量结果及其MES上传状态。返回一个MesUploadRow数组，每个元素包含一个测量结果的完整信息和上传状态。
     QVector<core::MesUploadRow> core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit, QString *err)
     {
         QVector<MesUploadRow> out;
         QSqlQuery q(db_);
 
+        /*
+        表连接：
+            主表：measure_result（别名 r）- 存储测量结果
+            从表：mes_outbox（别名 o）- 存储MES上传队列
+            使用 LEFT JOIN 连接，确保即使没有对应的MES上传记录也能返回测量结果
+        连接条件：
+            通过 measurement_uuid 字段关联两表
+            只关联 event_type='MEASURE_RESULT_READY' 的MES记录
+        筛选条件：
+            r.status='READY' - 只查询状态为"READY"的测量结果
+            时间范围过滤：measured_at_utc 在指定时间区间内
+        查询字段：
+            测量结果信息：UUID、工件ID、类型、合格状态、测量时间、长度数据
+            MES上传信息：状态、尝试次数、错误信息、更新时间
+        */
+        // SQL 查询语句用于从两个数据表中联合查询测量结果及其对应的消息状态信息。使用一定的筛选条件（就是上位机界面中数据管理UI中的筛选需要显示的数据），结合两个表，
+        // 筛选出需要的字段数据，然后再动态动态构建SQL查询，根据用户提供的过滤条件（`MesUploadFilter` 结构体）向基础SQL语句添加额外的筛选条件。
         QString sql =
             "SELECT "
             " r.measurement_uuid, r.part_id, r.part_type, r.ok, r.measured_at_utc, r.total_len_mm, r.bc_len_mm, "
@@ -606,13 +663,17 @@ namespace core
             "WHERE r.status='READY' "
             "  AND r.measured_at_utc >= :from_utc AND r.measured_at_utc <= :to_utc ";
 
-        if (!f.part_id_like.trimmed().isEmpty())
+        /*
+        动态构建SQL查询语句的部分，根据用户提供的过滤条件（MesUploadFilter 结构体）向基础SQL语句添加额外的筛选条件
+        支持多条件组合过滤，用户可以根据需要指定任意组合的过滤条件
+        */
+        if (!f.part_id_like.trimmed().isEmpty()) // 工件ID模糊匹配（LIKE），如果非空，添加模糊匹配条件，允许用户通过部分工件ID进行搜索，例如：用户输入"ABC"可以匹配"ABC123"、"XYZABC"等
             sql += " AND r.part_id LIKE :part_id_like ";
-        if (!f.part_type.trimmed().isEmpty())
+        if (!f.part_type.trimmed().isEmpty()) // 工件类型精确匹配
             sql += " AND r.part_type = :part_type ";
-        if (f.ok_filter == 0 || f.ok_filter == 1)
+        if (f.ok_filter == 0 || f.ok_filter == 1) // 合格性过滤
             sql += " AND r.ok = :ok ";
-        if (!f.mes_status.trimmed().isEmpty())
+        if (!f.mes_status.trimmed().isEmpty()) // MES状态过滤
         {
             if (f.mes_status == "NOT_QUEUED")
                 sql += " AND o.id IS NULL ";
@@ -622,8 +683,8 @@ namespace core
 
         sql += " ORDER BY r.measured_at_utc DESC LIMIT :limit;";
 
-        q.prepare(sql);
-        q.bindValue(":from_utc", f.from_utc);
+        q.prepare(sql);                       // sql准备
+        q.bindValue(":from_utc", f.from_utc); // 参数绑定
         q.bindValue(":to_utc", f.to_utc);
         if (!f.part_id_like.trimmed().isEmpty())
             q.bindValue(":part_id_like", "%" + f.part_id_like + "%");
@@ -642,6 +703,23 @@ namespace core
             return out;
         }
 
+        /*
+        SQL查询结果的结构
+            当执行SQL查询后，数据库返回的结果确实是一个表格形式的数据结构，包含：
+                多行数据（每行代表一条记录）
+                多列数据（每列代表一个字段）
+        遍历查询结果的过程
+            初始状态：执行查询后，结果指针位于第一行之前（没有指向任何行）
+            使用q.next()遍历行：
+                每次调用q.next()会将指针移动到下一行
+                当成功移动到新行时返回true
+                当到达结果集末尾时返回false，循环结束
+            使用q.value(index)访问列：
+                index是列的索引，从0开始
+                索引顺序对应SQL查询中SELECT语句的字段顺序
+        */
+        // 经过sql查询之后，会得到一个查询结果，sql查询的结果是一个表格，其中每一行对应一个测量结果，每一列对应一个字段,这样就可以遍历查询结果。
+        // 处理查询结果的部分，负责将数据库查询结果映射到 MesUploadRow 结构体。遍历查询结果，将每行数据填充到MesUploadRow对象并添加到输出列表
         while (q.next())
         {
             MesUploadRow r;
@@ -776,6 +854,7 @@ namespace core
             raw.meta_json = r.value(10).toString();
         }
 
+        // 3）构建 payload_json 消息负载
         const QString payload = core::buildMesPayloadV1(mr, raw);
 
         QSqlQuery ins(db_);
@@ -800,6 +879,7 @@ namespace core
         return true;
     }
 
+    // 将mes_outbox中状态为FAILED的记录重置为PENDING，这里重试次数没有增加1
     int core::Db::retryFailed(const QVector<QString> &uuids, QString *err)
     {
         if (uuids.isEmpty())
@@ -820,11 +900,13 @@ namespace core
                     *err = q.lastError().text();
                 return cnt;
             }
+            // 在数据库操作（如INSERT、UPDATE、DELETE）后，numRowsAffected用于表示操作影响的数据库表中的行数。
             cnt += q.numRowsAffected();
         }
         return cnt;
     }
 
+    // 将mes_outbox中状态为SENDING且更新时间超过stale_seconds的记录重置为FAILED,重置过期发送中的记录为失败状态
     bool core::Db::resetStaleSending(int stale_seconds, QString *err)
     {
         QSqlQuery q(db_);
@@ -841,6 +923,8 @@ namespace core
         return true;
     }
 
+    // 从mes_outbox中获取下一个待处理任务，这里只获取状态为PENDING或FAILED的记录，且next_retry_at_utc小于等于当前时间的记录，
+    // 这里按照id升序排序，确保先处理旧的记录
     bool core::Db::fetchNextDueOutbox(MesOutboxTask *task, QString *err)
     {
         if (!task)
@@ -869,6 +953,7 @@ namespace core
         return true;
     }
 
+    // 将mes_outbox中状态为PENDING或FAILED的记录更新为SENDING状态，这里重试次数增加1
     bool core::Db::markOutboxSending(quint64 id, QString *err)
     {
         QSqlQuery q(db_);
@@ -883,6 +968,7 @@ namespace core
         return true;
     }
 
+    // 将mes_outbox中状态为SENDING的记录更新为SENT状态，这里记录http_code和响应体
     bool core::Db::markOutboxSent(quint64 id, int http_code, const QString &resp, QString *err)
     {
         QSqlQuery q(db_);
@@ -892,7 +978,7 @@ namespace core
             " updated_at_utc=UTC_TIMESTAMP(3) "
             "WHERE id=:id;");
         q.bindValue(":c", http_code);
-        q.bindValue(":r", resp.left(4000)); // 防止过大
+        q.bindValue(":r", resp.left(4000)); // 防止过大, 截断响应体, 防止数据库字段长度限制。resp.left(4000)的意思是取响应体的前4000个字符
         q.bindValue(":id", QVariant::fromValue<qulonglong>(id));
         if (!q.exec())
         {
@@ -903,6 +989,8 @@ namespace core
         return true;
     }
 
+    // 将mes_outbox中状态为SENDING的记录更新为FAILED状态，这里记录http_code、响应体和错误信息，
+    // 并设置下一次重试时间为当前时间加上next_retry_seconds秒
     bool core::Db::markOutboxFailed(quint64 id, int http_code, const QString &resp,
                                     const QString &error, int next_retry_seconds, QString *err)
     {

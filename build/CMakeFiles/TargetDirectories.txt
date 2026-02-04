@@ -1,8 +1,0 @@
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/CMakeFiles/edit_cache.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/CMakeFiles/rebuild_cache.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/libs/core/CMakeFiles/core.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/libs/core/CMakeFiles/edit_cache.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/libs/core/CMakeFiles/rebuild_cache.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/apps/hmi_qt/CMakeFiles/hmi_qt.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/apps/hmi_qt/CMakeFiles/edit_cache.dir
-/home/xiaoan/QT_Project/work/hmi_measure_mysql/build/apps/hmi_qt/CMakeFiles/rebuild_cache.dir

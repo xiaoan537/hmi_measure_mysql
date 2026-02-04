@@ -1,1 +1,0 @@
-/usr/lib/ccache/g++ CMakeFiles/hmi_qt.dir/main.cpp.o -o hmi_qt  /usr/lib/x86_64-linux-gnu/libQt5Widgets.so.5.15.3 /usr/lib/x86_64-linux-gnu/libQt5Sql.so.5.15.3 ../../libs/core/libcore.a /usr/lib/x86_64-linux-gnu/libQt5Gui.so.5.15.3 /usr/lib/x86_64-linux-gnu/libQt5Core.so.5.15.3 /usr/lib/x86_64-linux-gnu/libQt5Sql.so.5.15.3 /usr/lib/x86_64-linux-gnu/libQt5Core.so.5.15.3 

@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD 17)
 # 强制使用指定的 C++ 标准，不允许降级
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Qt 项目强烈建议打开（否则 Q_OBJECT / .ui 可能出 vtable/moc 问题）
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+
 # 添加子目录 libs/core（该目录必须包含 CMakeLists.txt）
 add_subdirectory(libs/core)
 # 添加子目录 apps/hmi_qt（该目录必须包含 CMakeLists.txt）
