@@ -28,7 +28,18 @@ namespace core
     // MES 推送配置结构体
     struct MesConfig
     {
-        bool enabled = false;          // 是否启用推送
+        // 全局开关：是否启用 MES 集成（URL/token 等生效）。若为 false，则手动/自动都不可用。
+        bool enabled = false;
+
+        // 手动上传开关：控制 UI “Upload / Retry”等手动入队与触发发送（不影响查询展示）。
+        bool manual_enabled = true;
+
+        // 自动上传开关：控制后台定时器自动拉取 outbox 并发送。
+        bool auto_enabled = true;
+
+        // 自动上传轮询间隔（ms）。仅在 auto_enabled=true 时使用。
+        int auto_interval_ms = 1000;
+
         QString url;                   // MES 接口地址（单条上传）
         QString auth_token;            // Bearer token（可选）
         int timeout_ms = 5000;         // HTTP 超时（ms）

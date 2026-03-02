@@ -36,6 +36,10 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
     btnUpload_ = new QPushButton("Upload Selected", this);
     btnRetry_ = new QPushButton("Retry FAILED (Selected)", this);
 
+    const bool manualOn = (cfg_.mes.enabled && cfg_.mes.manual_enabled);
+    btnUpload_->setEnabled(manualOn);
+    btnRetry_->setEnabled(manualOn);
+
     connect(btnQuery_, &QPushButton::clicked, this, &MesUploadWidget::onQuery);
     connect(btnUpload_, &QPushButton::clicked, this, &MesUploadWidget::onUploadSelected);
     connect(btnRetry_, &QPushButton::clicked, this, &MesUploadWidget::onRetrySelectedFailed);
@@ -150,9 +154,9 @@ QVector<QString> MesUploadWidget::selectedUuids() const
 // 上传按钮点击时调用，将选中的测量结果加入上传队列，触发 worker_->kick() 开始上传，刷新查询结果。
 void MesUploadWidget::onUploadSelected()
 {
-    if (!cfg_.mes.enabled || cfg_.mes.url.trimmed().isEmpty())
+    if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled || cfg_.mes.url.trimmed().isEmpty())
     {
-        QMessageBox::warning(this, "MES", "MES disabled or URL empty in app.ini");
+        QMessageBox::warning(this, "MES", "MES manual upload disabled or URL empty in app.ini");
         return;
     }
 
@@ -191,6 +195,12 @@ void MesUploadWidget::onUploadSelected()
 // 重试按钮点击时调用，将选中的失败测量结果重新加入上传队列，触发 worker_->kick() 开始上传，刷新查询结果。
 void MesUploadWidget::onRetrySelectedFailed()
 {
+    if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled)
+    {
+        QMessageBox::warning(this, "MES", "MES manual upload is disabled in app.ini");
+        return;
+    }
+
     const auto uuids = selectedUuids();
     if (uuids.isEmpty())
     {
