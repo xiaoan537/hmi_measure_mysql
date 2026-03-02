@@ -14,7 +14,7 @@ class MesWorker;
 
 class MesUploadWidget : public QWidget
 {
-    // 使用Q_OBJECT宏，支持Qt的信号槽机制
+    // 使用Q_OBJECT宏，支持Qt的信号槽机制，使得该类能够定义信号和槽函数，进行对象间的通信和事件处理。
     Q_OBJECT
 public:
     MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, QWidget *parent = nullptr);

@@ -181,7 +181,7 @@ void MesUploadWidget::onUploadSelected()
 
     if (worker_)
         worker_->kick();
-    onQuery();
+    onQuery(); // 刷新查询结果，更新表格显示。
 
     QMessageBox::information(
         this, "MES",

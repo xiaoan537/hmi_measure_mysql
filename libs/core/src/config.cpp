@@ -40,6 +40,23 @@ namespace core
         c.mes.retry_max_seconds = s.value("retry_max_seconds", 21600).toInt();
         s.endGroup();
 
+        // 点阵扫描配置解析（由上位机侧配置，与 PLC 约定一致）
+        // A 型：CONF 4ch
+        s.beginGroup("scan_a");
+        c.scan_a.rings = s.value("rings", 1).toInt();
+        c.scan_a.points_per_ring = s.value("points_per_ring", 72).toInt();
+        c.scan_a.angle_step_deg = s.value("angle_step_deg", 5.0).toDouble();
+        c.scan_a.order_code = (quint16)s.value("order_code", 1).toInt();
+        s.endGroup();
+
+        // B 型：RUNO 2ch
+        s.beginGroup("scan_b");
+        c.scan_b.rings = s.value("rings", 1).toInt();
+        c.scan_b.points_per_ring = s.value("points_per_ring", 72).toInt();
+        c.scan_b.angle_step_deg = s.value("angle_step_deg", 5.0).toDouble();
+        c.scan_b.order_code = (quint16)s.value("order_code", 1).toInt();
+        s.endGroup();
+
         return c;
     }
 

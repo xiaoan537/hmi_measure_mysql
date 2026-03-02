@@ -1,5 +1,6 @@
 #pragma once
 #include <QString>
+#include <QtGlobal>
 
 namespace core
 {
@@ -35,12 +36,30 @@ namespace core
         int retry_max_seconds = 21600; // 最大重试间隔（秒）
     };
 
+    // 点阵扫描配置（由上位机侧配置，与 PLC 约定一致）
+    // rings：转几圈（当前=1，后续可能=2）
+    // points_per_ring：每圈采样点数（当前=72，后续可能变）
+    // angle_step_deg：点间角度步进（例如 5.0）
+    // order_code：线性展开顺序（0=legacy ch->ring->pt, 1=ring->ch->pt）
+    struct ScanConfig
+    {
+        int rings = 1;
+        int points_per_ring = 72;
+        float angle_step_deg = 5.0f;
+        quint16 order_code = 1;
+    };
+
     // 应用程序配置结构体，整合所有配置为一个单一配置对象，便于统一管理
     struct AppConfig
     {
         DbConfig db;
         PathConfig paths;
         MesConfig mes;
+
+        // A 型：CONF 4ch
+        ScanConfig scan_a;
+        // B 型：RUNO 2ch
+        ScanConfig scan_b;
     };
 
     // 函数声明

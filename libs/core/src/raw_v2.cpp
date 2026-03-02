@@ -95,10 +95,11 @@ namespace core
     // 一个测量点阵数据打包函数，用于将测量数据转换为二进制格式以便存储
     static QByteArray makeChunkPayload_MATRIX(
         quint8 channels, quint16 rings, quint16 points, float angle_step_deg,
-        quint8 unit_code, // 0=um
+        quint8 unit_code,          // 0=um
+        quint16 order_code,        // 0=legacy(ch->ring->pt), 1=ring->ch->pt
         const QVector<float> &data)
     {
-        // payload = [channels u8][unit u8][rings u16][points u16][angle_step f32][reserved u16] + float32[]
+        // payload = [channels u8][unit u8][rings u16][points u16][angle_step f32][order_code u16] + float32[]
         QByteArray payload;
         payload.reserve(16 + data.size() * 4); // 预留空间：16字节头部 + 数据数组大小，每个数据点4字节
         QBuffer buf(&payload);
@@ -114,7 +115,7 @@ namespace core
         ds << quint16(rings);
         ds << quint16(points);
         ds << float(angle_step_deg);
-        ds << quint16(0); // reserved
+        ds << quint16(order_code);
 
         for (float v : data)
             ds << float(v);
@@ -223,11 +224,11 @@ namespace core
             return false;
         }
 
-        // A: CONF 4*16*72（可选但通常有）
-        // B: RUNO 2*16*72（可选但通常有）
-        // lambda表达式，[]表示不获取外部任何变量
-        auto expectSize = [](int ch)
-        { return ch * 16 * 72; };
+        // A: CONF 4*R*P（可选但通常有）
+        // B: RUNO 2*R*P（可选但通常有）
+        // R/P 由上位机配置（MeasurementSnapshot::conf_spec / run_spec），与 PLC 约定一致。
+        auto expectSize = [](int ch, int rings, int points)
+        { return ch * rings * points; };
         /*
         条件判断设计：!s.confocal4.isEmpty()确保只有当数据存在时才检查大小
         灵活性：支持A型、B型或A+B型工件
@@ -237,16 +238,20 @@ namespace core
         这种条件判断确实容易让人误解为"必须同时满足"，但实际上是"分别检查各自的存在性和有效性"。
         */
         // 条件判断设计：!s.confocal4.isEmpty()确保只有当数据存在时才检查大小,否则直接跳出if判断
-        if (!s.confocal4.isEmpty() && s.confocal4.size() != expectSize(4))
+        if (!s.confocal4.isEmpty() && s.confocal4.size() != expectSize(4, s.conf_spec.rings, s.conf_spec.points_per_ring))
         {
             if (err)
-                *err = "confocal4 size mismatch: expect 4*16*72.";
+                *err = QString("confocal4 size mismatch: expect 4*%1*%2.")
+                           .arg(s.conf_spec.rings)
+                           .arg(s.conf_spec.points_per_ring);
             return false;
         }
-        if (!s.runout2.isEmpty() && s.runout2.size() != expectSize(2))
+        if (!s.runout2.isEmpty() && s.runout2.size() != expectSize(2, s.run_spec.rings, s.run_spec.points_per_ring))
         {
             if (err)
-                *err = "runout2 size mismatch: expect 2*16*72.";
+                *err = QString("runout2 size mismatch: expect 2*%1*%2.")
+                           .arg(s.run_spec.rings)
+                           .arg(s.run_spec.points_per_ring);
             return false;
         }
 
@@ -318,7 +323,13 @@ namespace core
         if (!s.confocal4.isEmpty())
         {
             const QByteArray payload = makeChunkPayload_MATRIX(
-                4, 16, 72, 5.0f, 0, s.confocal4); // 生成confocal4类型的payload字节数组
+                4,
+                quint16(s.conf_spec.rings),
+                quint16(s.conf_spec.points_per_ring),
+                float(s.conf_spec.angle_step_deg),
+                0,
+                quint16(s.conf_spec.order_code),
+                s.confocal4); // 生成confocal4类型的payload字节数组
             const char t[4] = {'C', 'O', 'N', 'F'};
             writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入confocal4类型的chunk到文件流ds
             info.chunk_mask |= CHUNK_CONF;
@@ -328,9 +339,9 @@ namespace core
             {
                 info.scan_kind = "CONF";
                 info.main_channels = 4;
-                info.rings = 16;
-                info.points_per_ring = 72;
-                info.angle_step_deg = 5.0f;
+                info.rings = s.conf_spec.rings;
+                info.points_per_ring = s.conf_spec.points_per_ring;
+                info.angle_step_deg = s.conf_spec.angle_step_deg;
             }
         }
 
@@ -338,7 +349,13 @@ namespace core
         if (!s.runout2.isEmpty())
         {
             const QByteArray payload = makeChunkPayload_MATRIX(
-                2, 16, 72, 5.0f, 0, s.runout2); // 生成runout2类型的payload字节数组
+                2,
+                quint16(s.run_spec.rings),
+                quint16(s.run_spec.points_per_ring),
+                float(s.run_spec.angle_step_deg),
+                0,
+                quint16(s.run_spec.order_code),
+                s.runout2); // 生成runout2类型的payload字节数组
             const char t[4] = {'R', 'U', 'N', 'O'};
             writeChunk(ds, t, 1, 0, payload, &file_crc); // 写入runout2类型的chunk到文件流ds
             info.chunk_mask |= CHUNK_RUNO;
@@ -348,9 +365,9 @@ namespace core
             {
                 info.scan_kind = "RUNO";
                 info.main_channels = 2;
-                info.rings = 16;
-                info.points_per_ring = 72;
-                info.angle_step_deg = 5.0f;
+                info.rings = s.run_spec.rings;
+                info.points_per_ring = s.run_spec.points_per_ring;
+                info.angle_step_deg = s.run_spec.angle_step_deg;
             }
         }
 
@@ -579,9 +596,9 @@ namespace core
                 quint8 channels = 0, unit = 0;
                 quint16 rings = 0, points = 0;
                 float angle = 0.0f;
-                quint16 rsv = 0;
+                quint16 order_code = 0;
 
-                pd >> channels >> unit >> rings >> points >> angle >> rsv;
+                pd >> channels >> unit >> rings >> points >> angle >> order_code;
                 const int n = int(channels) * int(rings) * int(points);
 
                 QVector<float> arr;
@@ -594,9 +611,21 @@ namespace core
                 }
 
                 if (t == "CONF")
+                {
                     s.confocal4 = arr;
+                    s.conf_spec.rings = int(rings);
+                    s.conf_spec.points_per_ring = int(points);
+                    s.conf_spec.angle_step_deg = angle;
+                    s.conf_spec.order_code = order_code;
+                }
                 else
+                {
                     s.runout2 = arr;
+                    s.run_spec.rings = int(rings);
+                    s.run_spec.points_per_ring = int(points);
+                    s.run_spec.angle_step_deg = angle;
+                    s.run_spec.order_code = order_code;
+                }
 
                 continue;
             }

@@ -3,11 +3,16 @@
 #include <QNetworkReply>
 #include <QUrl>
 
+/*
+初始化基类 QObject，将父对象设为 parent，将 cfg_ 设为 cfg;member_name(initial_value)是初始化成员变量的标准语法。
+cfg_ 是成员变量名，(cfg) 是用来初始化的值（构造函数参数）。说白了，就是将构造函数中的参数 cfg 赋值给成员变量 cfg_，
+以便在类的其他成员函数中使用这个配置对象。只不过这个写法叫做初始化列表。在构造函数初始化时执行，确保成员变量在使用前已经被正确初始化。
+*/
 MesWorker::MesWorker(const core::AppConfig &cfg, QObject *parent)
     : QObject(parent), cfg_(cfg)
 {
-    timer_.setInterval(1000);                                     // 设置时间间隔为每1000毫秒（即1秒）触发一次
-    connect(&timer_, &QTimer::timeout, this, &MesWorker::onTick); // 当timer_定时器超时时，调用onTick()函数，每秒检查一次数据库中是否有待上传到 MES 的任务,'connect' 通常用于将信号与槽关联起来，表示两个对象之间的交互。
+    timer_.setInterval(1000);                                     // 设置时间间隔为每1000毫秒（即1秒）触发一次,把1000赋值给 timer_ 对象的 interval 属性，表示定时器每隔1秒钟触发一次 timeout 信号
+    connect(&timer_, &QTimer::timeout, this, &MesWorker::onTick); // QT中信号槽机制，将信号和槽函数进行连接。当timer_定时器超时时，调用onTick()函数，每秒检查一次数据库中是否有待上传到 MES 的任务,'connect' 通常用于将信号与槽关联起来，表示两个对象之间的交互。
 
     timeoutTimer_.setSingleShot(true); // timeoutTimer_ 专门用于监控 HTTP 请求的超时，setSingleShot(true) 表示该定时器只触发一次，不会自动重复,防止网络请求卡死（例如服务器无响应、网络故障等）
     connect(&timeoutTimer_, &QTimer::timeout, this, [this]()
@@ -99,35 +104,35 @@ void MesWorker::onTick()
     const QByteArray body = task.payload_json.toUtf8();
     reply_ = nam_.post(req, body);
 
-    connect(reply_, &QNetworkReply::finished, this, &MesWorker::onReplyFinished);
-    timeoutTimer_.start(cfg_.mes.timeout_ms);
+    connect(reply_, &QNetworkReply::finished, this, &MesWorker::onReplyFinished); // 连接 finished 信号，当 HTTP 请求完成时（无论成功或失败），会触发 onReplyFinished 槽函数，用于处理响应结果。
+    timeoutTimer_.start(cfg_.mes.timeout_ms);                                     // 启动超时定时器，设置超时时间为配置文件中指定的 timeout_ms（毫秒），如果在这个时间内网络请求没有完成，就会触发 timeoutTimer_ 的 timeout 信号，从而调用 lambda 函数强制中断网络请求，防止请求卡死。
 }
 
 // 处理 HTTP 请求完成信号，检查响应状态码、错误信息、响应体等，根据结果更新数据库状态（成功或失败），并触发 outboxChanged 信号通知界面刷新。
 void MesWorker::onReplyFinished()
 {
-    timeoutTimer_.stop();
+    timeoutTimer_.stop(); // 停止超时定时器，因为请求已完成（无论成功或失败），无需继续等待
 
-    const int httpCode = reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QString respBody = QString::fromUtf8(reply_->readAll());
-    const QString netErr = reply_->error() == QNetworkReply::NoError ? "" : reply_->errorString();
+    const int httpCode = reply_->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();      // 从网络回复对象中获取 HTTP 状态码，使用 attribute方法和 HttpStatusCodeAttribute枚举值来提取服务器响应的状态码，例如 200、400、500 等，以判断请求是否成功
+    const QString respBody = QString::fromUtf8(reply_->readAll());                                 // 从网络回复对象中获取响应体，使用 readAll方法读取服务器响应的全部内容，以便进行进一步的处理
+    const QString netErr = reply_->error() == QNetworkReply::NoError ? "" : reply_->errorString(); // 从网络回复对象中获取错误信息，使用 error方法检查是否有网络错误发生，若没有则为空字符串；若有错误，则调用 errorString方法获取具体的错误描述，例如连接超时、DNS 解析失败等。
 
-    reply_->deleteLater();
-    reply_ = nullptr;
+    reply_->deleteLater(); // 安全删除网络回复QNetworkReply对象，确保在请求完成后及时释放资源，防止内存泄漏。
+    reply_ = nullptr;      // 手动将 reply_ 指针设为 nullptr，确保在请求完成后及时释放资源，防止悬空指针问题。
 
     QString e;
-    const bool ok = (netErr.isEmpty() && httpCode >= 200 && httpCode < 300);
+    const bool ok = (netErr.isEmpty() && httpCode >= 200 && httpCode < 300); // 检查请求是否成功，根据 HTTP 状态码和网络错误信息判断。若 netErr 为空且 httpCode 在 200 到 300 之间（不包含 300），则认为请求成功。
 
     if (ok)
     {
-        if (!db_.markOutboxSent(current_.id, httpCode, respBody, &e))
+        if (!db_.markOutboxSent(current_.id, httpCode, respBody, &e)) // 若请求成功，调用 db_.markOutboxSent方法将任务状态更新为已发送（Sent），并记录 HTTP 状态码、响应体等信息。若更新失败，则记录错误信息并通过 emit logMessage 触发日志消息。
         {
             emit logMessage("markOutboxSent failed: " + e);
         }
     }
     else
     {
-        const int backoff = computeBackoffSeconds(current_.attempt_count);
+        const int backoff = computeBackoffSeconds(current_.attempt_count); // 若请求失败，计算下一次重试间隔（指数退避），并调用 db_.markOutboxFailed方法将任务状态更新为失败（Failed），记录 HTTP 状态码、响应体、错误信息等，并设置下一次重试时间。若更新失败，则记录错误信息并通过 emit logMessage 触发日志消息。
         const QString errMsg = netErr.isEmpty() ? QString("HTTP %1").arg(httpCode) : netErr;
         if (!db_.markOutboxFailed(current_.id, httpCode, respBody, errMsg, backoff, &e))
         {
@@ -136,5 +141,5 @@ void MesWorker::onReplyFinished()
     }
 
     busy_ = false;
-    emit outboxChanged();
+    emit outboxChanged(); // 触发 outboxChanged 信号，通知界面刷新，显示最新的任务状态（已发送或失败）。
 }

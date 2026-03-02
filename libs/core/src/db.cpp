@@ -751,10 +751,10 @@ namespace core
         return out;
     }
 
-    // 入队：若已存在 outbox：SENT -> 拒绝；其他 -> 重置为 PENDING；不存在 -> 生成 payload + INSERT
+    // 入队：若mes_outbox中已存在：状态为SENT -> 则拒绝，避免重复上传；状态为其他 -> 则重置为 PENDING；不存在 -> 生成 payload + INSERT
     bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err)
     {
-        // 1) 检查 outbox 是否存在
+        // 检查是否已经存在待上传记录， 即mes_outbox表 检查是否已经存在该 UUID 的待上传记录
         QSqlQuery q(db_);
         q.prepare("SELECT id, status FROM mes_outbox WHERE measurement_uuid=:u AND event_type='MEASURE_RESULT_READY' LIMIT 1;");
         q.bindValue(":u", uuid);
@@ -765,6 +765,7 @@ namespace core
             return false;
         }
 
+        // 如果存在且状态为 "SENT"，则返回错误，避免重复上传
         if (q.next())
         {
             const auto status = q.value(1).toString();
@@ -774,6 +775,7 @@ namespace core
                     *err = "Already SENT; skip.";
                 return false;
             }
+            // 如果存在且状态不是 "SENT"，则重置为 PENDING
             QSqlQuery u(db_);
             u.prepare(
                 "UPDATE mes_outbox "
@@ -789,7 +791,7 @@ namespace core
             return true;
         }
 
-        // 2) 不存在：从 DB 读 measure_result + raw_file_index，构建 payload_json
+        // 如果不存在：从 DB 读 measure_result + raw_file_index，构建 payload_json，INSERT 到 mes_outbox表中
         core::MeasureResult mr;
         {
             QSqlQuery r(db_);
