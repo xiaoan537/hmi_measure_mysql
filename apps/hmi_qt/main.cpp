@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  MainWindow w(cfg, &worker);
+  MainWindow w(cfg, iniPath, &worker);
   w.resize(1100, 650);
   w.show();
 
