@@ -48,7 +48,7 @@ void DataWidget::setupModel()
 {
   model_ = new QStandardItemModel(this);
   model_->setHorizontalHeaderLabels({
-    "Measured(UTC)", "PartID", "Type", "OK", "TotalLen", "BCLen", "MES", "Attempts", "UUID"
+    "Measured(UTC)", "PartID", "Type", "成功", "TotalLen", "BCLen", "MES", "Attempts", "UUID"
   });
   ui_->tableView->setModel(model_);
   ui_->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -69,12 +69,12 @@ void DataWidget::refresh()
   QString err;
   if (!db.open(cfg_.db, &err))
   {
-    QMessageBox::warning(this, "DB", err);
+    QMessageBox::warning(this, "数据库", err);
     return;
   }
   if (!db.ensureSchema(&err))
   {
-    QMessageBox::warning(this, "DB", err);
+    QMessageBox::warning(this, "数据库", err);
     return;
   }
 
@@ -97,7 +97,7 @@ void DataWidget::refresh()
   const auto rows = db.queryMesUploadRows(f, limit, &err);
   if (!err.isEmpty())
   {
-    QMessageBox::warning(this, "Query", err);
+    QMessageBox::warning(this, "查询", err);
     return;
   }
 
@@ -109,7 +109,7 @@ void DataWidget::refresh()
     model_->setItem(i, 0, new QStandardItem(r.measured_at_utc.toString("yyyy-MM-dd HH:mm:ss")));
     model_->setItem(i, 1, new QStandardItem(r.part_id));
     model_->setItem(i, 2, new QStandardItem(r.part_type));
-    model_->setItem(i, 3, new QStandardItem(r.ok ? "OK" : "NG"));
+    model_->setItem(i, 3, new QStandardItem(r.ok ? "成功" : "NG"));
     model_->setItem(i, 4, new QStandardItem(QString::number(r.total_len_mm, 'f', 3)));
     model_->setItem(i, 5, new QStandardItem(QString::number(r.bc_len_mm, 'f', 3)));
     model_->setItem(i, 6, new QStandardItem(r.mes_status));

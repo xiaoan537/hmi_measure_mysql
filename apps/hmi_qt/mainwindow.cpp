@@ -16,7 +16,7 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString& iniPath, MesWo
     : QMainWindow(parent), ui_(new Ui::MainWindow), iniPath_(iniPath)
 {
     ui_->setupUi(this);
-    setWindowTitle("HMI Measure");
+    setWindowTitle(QStringLiteral("工件自动测量装置"));
 
     // Left nav items
     ui_->navList->clear();

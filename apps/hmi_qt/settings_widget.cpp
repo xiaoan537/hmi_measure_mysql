@@ -198,8 +198,8 @@ void SettingsWidget::onTestDbClicked()
   auto c = readFromUi();
   if (!db.open(c.db, &err))
   {
-    QMessageBox::warning(this, "DB", err);
+    QMessageBox::warning(this, "数据库", err);
     return;
   }
-  QMessageBox::information(this, "DB", "DB connection OK");
+  QMessageBox::information(this, "数据库", "DB connection OK");
 }

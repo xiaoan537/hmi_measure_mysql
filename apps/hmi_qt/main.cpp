@@ -206,7 +206,7 @@ static bool persistOnce(const core::AppConfig &cfg,
 static int runDevAbWindow(QApplication &a, const core::AppConfig &cfg)
 {
   QWidget w;
-  w.setWindowTitle("HMI Measure - Dev Test (A/B)");
+  w.setWindowTitle("工件自动测量上位机 - Dev测试(A/B)");
   auto *layout = new QVBoxLayout(&w);
 
   auto *btnA = new QPushButton("Insert A (CONF 4xR xP + GT2R mm + META JSON)");
@@ -222,17 +222,17 @@ static int runDevAbWindow(QApplication &a, const core::AppConfig &cfg)
     if (!ensureDir(cfg.paths.data_root, &err) ||
         !ensureDir(cfg.paths.raw_dir, &err) ||
         !ensureDir(cfg.paths.log_dir, &err)) {
-      QMessageBox::critical(nullptr, "Paths", err);
+      QMessageBox::critical(nullptr, "路径", err);
       return;
     }
     const QString uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString partId = "A-TEST-0001";
     const auto snap = makeSnapshotA(cfg, uuid, partId);
     if (!persistOnce(cfg, snap, partId, &err)) {
-      QMessageBox::critical(nullptr, "Failed", err);
+      QMessageBox::critical(nullptr, "失败", err);
       return;
     }
-    QMessageBox::information(nullptr, "OK", "Inserted A record."); });
+    QMessageBox::information(nullptr, "成功", "已插入A型记录。"); });
 
   QObject::connect(btnB, &QPushButton::clicked, [&]()
                    {
@@ -240,17 +240,17 @@ static int runDevAbWindow(QApplication &a, const core::AppConfig &cfg)
     if (!ensureDir(cfg.paths.data_root, &err) ||
         !ensureDir(cfg.paths.raw_dir, &err) ||
         !ensureDir(cfg.paths.log_dir, &err)) {
-      QMessageBox::critical(nullptr, "Paths", err);
+      QMessageBox::critical(nullptr, "路径", err);
       return;
     }
     const QString uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString partId = "B-TEST-0001";
     const auto snap = makeSnapshotB(cfg, uuid, partId);
     if (!persistOnce(cfg, snap, partId, &err)) {
-      QMessageBox::critical(nullptr, "Failed", err);
+      QMessageBox::critical(nullptr, "失败", err);
       return;
     }
-    QMessageBox::information(nullptr, "OK", "Inserted B record."); });
+    QMessageBox::information(nullptr, "成功", "已插入B型记录。"); });
 
   w.resize(700, 160);
   w.show();
@@ -264,7 +264,11 @@ int main(int argc, char *argv[])
   const QString iniPath = resolveConfigPath(QCoreApplication::arguments());
   if (!QFileInfo::exists(iniPath))
   {
-    QMessageBox::critical(nullptr, "Config", QString("app.ini not found.\nTried: %1\nHint: run with --config=/full/path/to/app.ini").arg(iniPath));
+    QMessageBox::critical(
+    nullptr,
+    QStringLiteral("配置"),
+    QStringLiteral("未找到 app.ini。\n尝试路径：%1\n提示：运行时使用 --config=/完整/路径/app.ini")
+        .arg(iniPath));
     return 1;
   }
   const auto cfg = core::loadConfigIni(iniPath);
@@ -281,7 +285,7 @@ int main(int argc, char *argv[])
   QString err;
   if (!worker.start(&err))
   {
-    QMessageBox::critical(nullptr, "MES Worker", err);
+    QMessageBox::critical(nullptr, "MES工作线程", err);
     return 1;
   }
 

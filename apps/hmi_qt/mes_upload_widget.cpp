@@ -28,7 +28,7 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
     ui_->cbType->addItems({"ALL", "A", "B"});
 
     ui_->cbOk->clear();
-    ui_->cbOk->addItems({"ALL", "OK", "NG"});
+    ui_->cbOk->addItems({"ALL", "成功", "NG"});
 
     ui_->cbMesStatus->clear();
     ui_->cbMesStatus->addItems({"ALL", "NOT_QUEUED", "PENDING", "SENDING", "SENT", "FAILED"});
@@ -66,7 +66,7 @@ void MesUploadWidget::onQuery()
     f.part_id_like = ui_->edPartId->text().trimmed();
     f.part_type = (ui_->cbType->currentText() == "ALL") ? "" : ui_->cbType->currentText();
 
-    if (ui_->cbOk->currentText() == "OK")
+    if (ui_->cbOk->currentText() == "成功")
         f.ok_filter = 1;
     else if (ui_->cbOk->currentText() == "NG")
         f.ok_filter = 0;
@@ -78,7 +78,7 @@ void MesUploadWidget::onQuery()
     QString e;
     auto rows = db_.queryMesUploadRows(f, 500, &e);
     if (!e.isEmpty())
-        QMessageBox::warning(this, "Query", e);
+        QMessageBox::warning(this, "查询", e);
 
     fillTable(rows);
 }
@@ -127,14 +127,14 @@ void MesUploadWidget::onUploadSelected()
 {
     if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled || cfg_.mes.url.trimmed().isEmpty())
     {
-        QMessageBox::warning(this, "MES", "MES manual upload disabled or URL empty in app.ini");
+        QMessageBox::warning(this, "MES", "MES 手动上传被禁用，或 app.ini 中 URL 为空");
         return;
     }
 
     const auto uuids = selectedUuids();
     if (uuids.isEmpty())
     {
-        QMessageBox::information(this, "MES", "No rows selected.");
+        QMessageBox::information(this, "MES", "未选择任何行。");
         return;
     }
 
@@ -167,27 +167,27 @@ void MesUploadWidget::onRetrySelectedFailed()
 {
     if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled)
     {
-        QMessageBox::warning(this, "MES", "MES manual upload disabled in app.ini");
+        QMessageBox::warning(this, "MES", "app.ini 中已禁用 MES 手动上传");
         return;
     }
 
     const auto uuids = selectedUuids();
     if (uuids.isEmpty())
     {
-        QMessageBox::information(this, "MES", "No rows selected.");
+        QMessageBox::information(this, "MES", "未选择任何行。");
         return;
     }
 
     QString e;
     const int n = db_.retryFailed(uuids, &e);
     if (!e.isEmpty())
-        QMessageBox::warning(this, "Retry", e);
+        QMessageBox::warning(this, "重试", e);
 
     if (worker_)
         worker_->kick();
     onQuery();
 
-    QMessageBox::information(this, "Retry", QString("Re-queued FAILED rows: %1").arg(n));
+    QMessageBox::information(this, "重试", QString("已重新入队失败记录：%1").arg(n));
 }
 
 void MesUploadWidget::onOutboxChanged()

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <ui version="4.0">
  <class>MesUploadWidget</class>
  <widget class="QWidget" name="MesUploadWidget">
@@ -32,45 +32,45 @@
       <number>6</number>
      </property>
      <item>
-      <widget class="QDateTimeEdit" name="dtFrom"/>
+      <widget class="QDateTimeEdit" name="dtFrom" />
      </item>
      <item>
-      <widget class="QDateTimeEdit" name="dtTo"/>
+      <widget class="QDateTimeEdit" name="dtTo" />
      </item>
      <item>
       <widget class="QLineEdit" name="edPartId">
        <property name="placeholderText">
-        <string>part_id contains...</string>
+        <string>part_id 包含…</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="cbType"/>
+      <widget class="QComboBox" name="cbType" />
      </item>
      <item>
-      <widget class="QComboBox" name="cbOk"/>
+      <widget class="QComboBox" name="cbOk" />
      </item>
      <item>
-      <widget class="QComboBox" name="cbMesStatus"/>
+      <widget class="QComboBox" name="cbMesStatus" />
      </item>
      <item>
       <widget class="QPushButton" name="btnQuery">
        <property name="text">
-        <string>Query</string>
+        <string>查询</string>
        </property>
       </widget>
      </item>
     </layout>
    </item>
    <item>
-    <widget class="QTableView" name="tableView"/>
+    <widget class="QTableView" name="tableView" />
    </item>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayoutActions">
      <item>
       <widget class="QPushButton" name="btnUpload">
        <property name="text">
-        <string>Upload Selected</string>
+        <string>上传选中</string>
        </property>
       </widget>
      </item>
@@ -98,6 +98,6 @@
    </item>
   </layout>
  </widget>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

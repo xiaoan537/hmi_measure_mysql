@@ -175,8 +175,8 @@ void ProductionWidget::updateTrayRow(int slot, bool present, int result_code)
         item->setText(present ? "1" : "0");
     }
     if (auto *item = t->item(slot, 3)) {
-        if (result_code == 1) item->setText("OK");
-        else if (result_code == 2) item->setText("NG");
+        if (result_code == 1) item->setText("成功");
+        else if (result_code == 2) item->setText(QStringLiteral("不合格"));
         else item->setText("—");
     }
 }

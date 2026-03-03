@@ -1,9 +1,9 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <ui version="4.0">
  <class>ProductionWidget</class>
  <widget class="QWidget" name="ProductionWidget">
   <property name="windowTitle">
-   <string>Production</string>
+   <string>生产</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_root">
    <item>
@@ -482,6 +482,6 @@
 
   </layout>
  </widget>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>
