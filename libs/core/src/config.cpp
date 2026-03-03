@@ -32,15 +32,10 @@ namespace core
 
         // MES 配置解析
         s.beginGroup("mes");
-        const bool mesEnabled = (s.value("enabled", 0).toInt() != 0);
-        c.mes.enabled = mesEnabled;
-
-        // 兼容旧版：若未配置 manual_enabled/auto_enabled，则默认跟随 enabled。
-        const int defaultOn = mesEnabled ? 1 : 0;
-        c.mes.manual_enabled = (s.value("manual_enabled", defaultOn).toInt() != 0);
-        c.mes.auto_enabled = (s.value("auto_enabled", defaultOn).toInt() != 0);
+        c.mes.enabled = (s.value("enabled", 0).toInt() != 0);
+        c.mes.manual_enabled = (s.value("manual_enabled", 1).toInt() != 0);
+        c.mes.auto_enabled = (s.value("auto_enabled", 1).toInt() != 0);
         c.mes.auto_interval_ms = s.value("auto_interval_ms", 1000).toInt();
-
         c.mes.url = s.value("url", "").toString();
         c.mes.auth_token = s.value("auth_token", "").toString();
         c.mes.timeout_ms = s.value("timeout_ms", 5000).toInt();

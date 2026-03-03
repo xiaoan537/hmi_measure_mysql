@@ -1,0 +1,487 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ProductionWidget</class>
+ <widget class="QWidget" name="ProductionWidget">
+  <property name="windowTitle">
+   <string>Production</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_root">
+   <item>
+    <widget class="QGroupBox" name="groupStatus">
+     <property name="title">
+      <string>设备状态</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_status">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelMachineState">
+        <property name="text">
+         <string>Machine：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="lblMachineState">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="minimumWidth">
+         <number>120</number>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="labelStepState">
+        <property name="text">
+         <string>Step：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="3">
+       <widget class="QLabel" name="lblStepState">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="minimumWidth">
+         <number>80</number>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="4">
+       <widget class="QLabel" name="lblStepText">
+        <property name="text">
+         <string>—</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignVCenter|Qt::AlignLeft</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QLabel" name="labelStateSeq">
+        <property name="text">
+         <string>Seq：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="6">
+       <widget class="QLabel" name="lblStateSeq">
+        <property name="text">
+         <string>0</string>
+        </property>
+        <property name="minimumWidth">
+         <number>80</number>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelAlarmCode">
+        <property name="text">
+         <string>Alarm：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="lblAlarmCode">
+        <property name="text">
+         <string>0</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="labelAlarmLevel">
+        <property name="text">
+         <string>Level：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLabel" name="lblAlarmLevel">
+        <property name="text">
+         <string>0</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QLabel" name="labelPlcConn">
+        <property name="text">
+         <string>PLC：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="6">
+       <widget class="QLabel" name="lblPlcConn">
+        <property name="text">
+         <string>DISCONNECTED</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+
+      <item row="2" column="0">
+       <widget class="QLabel" name="labelTrayPresent">
+        <property name="text">
+         <string>Tray Present：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1" colspan="3">
+       <widget class="QLabel" name="lblTrayPresent">
+        <property name="text">
+         <string>0x0000</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignVCenter|Qt::AlignLeft</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="4">
+       <widget class="QLabel" name="labelMeasureDone">
+        <property name="text">
+         <string>measure_done：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="5" colspan="2">
+       <widget class="QLabel" name="lblMeasureDone">
+        <property name="text">
+         <string>0</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+       </widget>
+      </item>
+
+      <item row="3" column="0">
+       <widget class="QLabel" name="labelTrayOk">
+        <property name="text">
+         <string>Tray OK：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1" colspan="3">
+       <widget class="QLabel" name="lblTrayOk">
+        <property name="text">
+         <string>0x0000</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignVCenter|Qt::AlignLeft</set>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="4">
+       <widget class="QLabel" name="labelTrayNg">
+        <property name="text">
+         <string>Tray NG：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="5" colspan="2">
+       <widget class="QLabel" name="lblTrayNg">
+        <property name="text">
+         <string>0x0000</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignVCenter|Qt::AlignLeft</set>
+        </property>
+       </widget>
+      </item>
+
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QSplitter" name="splitterMain">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+
+     <widget class="QWidget" name="leftPane">
+      <layout class="QVBoxLayout" name="verticalLayout_left">
+       <item>
+        <widget class="QGroupBox" name="groupTray">
+         <property name="title">
+          <string>料架 16 槽</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_tray">
+          <item>
+           <widget class="QLabel" name="lblSlotEditHint">
+            <property name="text">
+             <string>提示：仅 step_state=0/10 允许修改 SlotID（其余禁写）。</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTableWidget" name="tableSlots">
+            <property name="alternatingRowColors">
+             <bool>true</bool>
+            </property>
+            <property name="selectionBehavior">
+             <enum>QAbstractItemView::SelectRows</enum>
+            </property>
+            <property name="editTriggers">
+             <set>QAbstractItemView::DoubleClicked|QAbstractItemView::EditKeyPressed</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_slotBtns">
+            <item>
+             <widget class="QPushButton" name="btnWriteSlotIds">
+              <property name="text">
+               <string>写入 SlotID（到 PLC）</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_slot">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnReloadSlotIds">
+              <property name="text">
+               <string>从 PLC 读取 SlotID</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+
+     <widget class="QWidget" name="rightPane">
+      <layout class="QVBoxLayout" name="verticalLayout_right">
+       <item>
+        <widget class="QGroupBox" name="groupInterlocks">
+         <property name="title">
+          <string>互锁 / 报警（interlock_mask）</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_interlocks">
+          <item>
+           <widget class="QScrollArea" name="scrollInterlocks">
+            <property name="widgetResizable">
+             <bool>true</bool>
+            </property>
+            <widget class="QWidget" name="scrollAreaWidgetContents">
+             <layout class="QVBoxLayout" name="verticalLayout_interlockChecks">
+              <item><widget class="QCheckBox" name="ckDoorOpen"><property name="text"><string>0 DOOR_OPEN</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckEstop"><property name="text"><string>1 E_STOP_ACTIVE</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckAirLow"><property name="text"><string>2 AIR_LOW</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckAxisNotHomed"><property name="text"><string>3 AXIS_NOT_HOMED</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckServoFault"><property name="text"><string>4 SERVO_FAULT</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckGripperFault"><property name="text"><string>5 GRIPPER_FAULT</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckTraySensorFault"><property name="text"><string>6 TRAY_SENSOR_FAULT</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckClampScanNotOk"><property name="text"><string>7 CLAMP_SCAN_NOT_OK</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckClampLenNotOk"><property name="text"><string>8 CLAMP_LEN_NOT_OK</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckConfocalOffline"><property name="text"><string>9 CONFOCAL_OFFLINE</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckGt2Offline"><property name="text"><string>10 GT2_OFFLINE</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckSpindleFault"><property name="text"><string>11 SPINDLE_FAULT</string></property></widget></item>
+              <item><widget class="QCheckBox" name="ckOddCount"><property name="text"><string>12 WORKPIECE_COUNT_ODD</string></property></widget></item>
+              <item>
+               <spacer name="verticalSpacer_interlock">
+                <property name="orientation"><enum>Qt::Vertical</enum></property>
+                <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <item>
+        <widget class="QGroupBox" name="groupMailbox">
+         <property name="title">
+          <string>最新测量包（Mailbox 预览）</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_mailbox">
+          <item row="0" column="0"><widget class="QLabel" name="labelMeasSeq"><property name="text"><string>meas_seq</string></property></widget></item>
+          <item row="0" column="1"><widget class="QLabel" name="lblMeasSeq"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+          <item row="0" column="2"><widget class="QLabel" name="labelPartType"><property name="text"><string>part_type</string></property></widget></item>
+          <item row="0" column="3"><widget class="QLabel" name="lblPartType"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+
+          <item row="1" column="0"><widget class="QLabel" name="labelSlot0"><property name="text"><string>slot0</string></property></widget></item>
+          <item row="1" column="1"><widget class="QLabel" name="lblSlot0"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+          <item row="1" column="2"><widget class="QLabel" name="labelSlot1"><property name="text"><string>slot1</string></property></widget></item>
+          <item row="1" column="3"><widget class="QLabel" name="lblSlot1"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+
+          <item row="2" column="0"><widget class="QLabel" name="labelPartId0"><property name="text"><string>part_id0</string></property></widget></item>
+          <item row="2" column="1" colspan="3"><widget class="QLabel" name="lblPartId0"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property></widget></item>
+
+          <item row="3" column="0"><widget class="QLabel" name="labelPartId1"><property name="text"><string>part_id1</string></property></widget></item>
+          <item row="3" column="1" colspan="3"><widget class="QLabel" name="lblPartId1"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property></widget></item>
+
+          <item row="4" column="0"><widget class="QLabel" name="labelOk0"><property name="text"><string>ok0</string></property></widget></item>
+          <item row="4" column="1"><widget class="QLabel" name="lblOk0"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+          <item row="4" column="2"><widget class="QLabel" name="labelOk1"><property name="text"><string>ok1</string></property></widget></item>
+          <item row="4" column="3"><widget class="QLabel" name="lblOk1"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+
+          <item row="5" column="0"><widget class="QLabel" name="labelFail0"><property name="text"><string>fail_reason0</string></property></widget></item>
+          <item row="5" column="1"><widget class="QLabel" name="lblFail0"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+          <item row="5" column="2"><widget class="QLabel" name="labelFail1"><property name="text"><string>fail_reason1</string></property></widget></item>
+          <item row="5" column="3"><widget class="QLabel" name="lblFail1"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+
+          <item row="6" column="0"><widget class="QLabel" name="labelLenTotal0"><property name="text"><string>total_len0(mm)</string></property></widget></item>
+          <item row="6" column="1"><widget class="QLabel" name="lblLenTotal0"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+          <item row="6" column="2"><widget class="QLabel" name="labelLenTotal1"><property name="text"><string>total_len1(mm)</string></property></widget></item>
+          <item row="6" column="3"><widget class="QLabel" name="lblLenTotal1"><property name="text"><string>—</string></property><property name="frameShape"><enum>QFrame::StyledPanel</enum></property></widget></item>
+
+          <item row="7" column="0" colspan="4">
+           <layout class="QHBoxLayout" name="horizontalLayout_mailboxBtns">
+            <item>
+             <widget class="QPushButton" name="btnReadMailbox">
+              <property name="text"><string>读取 Mailbox</string></property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnAckMailbox">
+              <property name="text"><string>ACK（pc_ack）</string></property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_mail">
+              <property name="orientation"><enum>Qt::Horizontal</enum></property>
+              <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnOpenLastRaw">
+              <property name="text"><string>打开最近 RAW</string></property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+
+         </layout>
+        </widget>
+       </item>
+
+      </layout>
+     </widget>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QGroupBox" name="groupControls">
+     <property name="title">
+      <string>运行控制（Command Block）</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_controls">
+      <item>
+       <widget class="QToolButton" name="btnModeAuto">
+        <property name="text"><string>AUTO</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="toolButtonStyle"><enum>Qt::ToolButtonTextOnly</enum></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="btnModeManual">
+        <property name="text"><string>MANUAL</string></property>
+        <property name="checkable"><bool>true</bool></property>
+        <property name="toolButtonStyle"><enum>Qt::ToolButtonTextOnly</enum></property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_ctrl1">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+       </spacer>
+      </item>
+      <item><widget class="QPushButton" name="btnStart"><property name="text"><string>START</string></property></widget></item>
+      <item><widget class="QPushButton" name="btnPause"><property name="text"><string>PAUSE</string></property></widget></item>
+      <item><widget class="QPushButton" name="btnResume"><property name="text"><string>RESUME</string></property></widget></item>
+      <item><widget class="QPushButton" name="btnStop"><property name="text"><string>STOP</string></property></widget></item>
+      <item>
+       <spacer name="horizontalSpacer_ctrl2">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+       </spacer>
+      </item>
+      <item><widget class="QPushButton" name="btnResetAlarm"><property name="text"><string>RESET_ALARM</string></property></widget></item>
+      <item><widget class="QPushButton" name="btnHomeAll"><property name="text"><string>HOME_ALL</string></property></widget></item>
+      <item>
+       <spacer name="horizontalSpacer_ctrl3">
+        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+        <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnDevDemo">
+        <property name="text"><string>DEV: 模拟状态</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

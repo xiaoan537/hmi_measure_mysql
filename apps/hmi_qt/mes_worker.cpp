@@ -11,7 +11,7 @@ cfg_ 是成员变量名，(cfg) 是用来初始化的值（构造函数参数）
 MesWorker::MesWorker(const core::AppConfig &cfg, QObject *parent)
     : QObject(parent), cfg_(cfg)
 {
-    timer_.setInterval(qMax(100, cfg_.mes.auto_interval_ms));                                     // 设置时间间隔为每1000毫秒（即1秒）触发一次,把1000赋值给 timer_ 对象的 interval 属性，表示定时器每隔1秒钟触发一次 timeout 信号
+    timer_.setInterval(cfg_.mes.auto_interval_ms);                                     // 设置时间间隔为每1000毫秒（即1秒）触发一次,把1000赋值给 timer_ 对象的 interval 属性，表示定时器每隔1秒钟触发一次 timeout 信号
     connect(&timer_, &QTimer::timeout, this, &MesWorker::onTick); // QT中信号槽机制，将信号和槽函数进行连接。当timer_定时器超时时，调用onTick()函数，每秒检查一次数据库中是否有待上传到 MES 的任务,'connect' 通常用于将信号与槽关联起来，表示两个对象之间的交互。
 
     timeoutTimer_.setSingleShot(true); // timeoutTimer_ 专门用于监控 HTTP 请求的超时，setSingleShot(true) 表示该定时器只触发一次，不会自动重复,防止网络请求卡死（例如服务器无响应、网络故障等）
@@ -39,10 +39,11 @@ bool MesWorker::start(QString *err)
 
     // 防止异常退出导致 SENDING 卡死
     db_.resetStaleSending(300, &e);
-    emit outboxChanged(); // 启动时可能 reset 了过期 SENDING，通知 UI 刷新一次
+    emit outboxChanged();
 
     if (cfg_.mes.enabled && cfg_.mes.auto_enabled)
     {
+        timer_.setInterval(cfg_.mes.auto_interval_ms);
         timer_.start();
     }
     return true;
@@ -51,10 +52,9 @@ bool MesWorker::start(QString *err)
 // 手动触发一次检查，用于快速响应 UI 操作
 void MesWorker::kick()
 {
-    // 手动触发：允许在 auto_enabled=0 的情况下也能发送
-    // 并且一次触发后会持续发送，直到队列为空
+    // 手动触发：尽可能把队列发送完
     force_drain_ = true;
-    trySendOnce(true);
+    onTick();
 }
 
 // 计算下一次重试间隔（指数退避）
@@ -77,17 +77,9 @@ int MesWorker::computeBackoffSeconds(int attempt_count) const
 // 检查数据库中是否有待上传到 MES 的任务，并启动上传流程
 void MesWorker::onTick()
 {
-    trySendOnce(false);
-}
-
-
-void MesWorker::trySendOnce(bool force)
-{
     if (!cfg_.mes.enabled)
         return;
-    if (!force && !cfg_.mes.auto_enabled)
-        return;
-    if (cfg_.mes.url.trimmed().isEmpty())
+    if (!cfg_.mes.auto_enabled && !force_drain_)
         return;
     if (busy_)
         return;
@@ -96,10 +88,10 @@ void MesWorker::trySendOnce(bool force)
     core::MesOutboxTask task;
     if (!db_.fetchNextDueOutbox(&task, &e))
     {
-        // 手动 drain 模式下，如果已无待发送任务，则退出 drain
+        // none or error (error也先不刷屏)
         if (force_drain_)
             force_drain_ = false;
-        return; // none or error (error也先不刷屏)
+        return;
     }
 
     if (!db_.markOutboxSending(task.id, &e))
@@ -107,26 +99,25 @@ void MesWorker::trySendOnce(bool force)
         emit logMessage("markOutboxSending failed: " + e);
         return;
     }
-
-    // PENDING/FAILED -> SENDING，也要让界面及时刷新（否则只能等发送完才看到变化）
-    emit outboxChanged();
+    emit outboxChanged(); // UI 立即看到 SENDING
 
     current_ = task;
     busy_ = true;
 
-    QNetworkRequest req(QUrl(cfg_.mes.url));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json; charset=utf-8");
-    req.setRawHeader("Idempotency-Key", task.measurement_uuid.toUtf8());
+    // 创建一个网络请求对象并设置其关键头部信息，以确保与服务器进行正确、安全的通信。
+    QNetworkRequest req(QUrl(cfg_.mes.url));                                              // 创建 QNetworkRequest 对象，用于设置 HTTP 请求的 URL;QUrl:Qt 中用于处理和解析 URL 的类。它能将字符串转换为结构化的 URL 对象，并自动处理编码、解析协议、主机、端口、路径等部分。
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json; charset=utf-8"); // 通过 setHeader方法设置了一个预定义头部，设置请求头的 Content-Type 为 application/json; charset=utf-8，确保服务器能正确解析请求体中的 JSON 数据。ContentTypeHeader是 Qt 提供的枚举值，对应 HTTP 标准中的 Content-Type头
+    req.setRawHeader("Idempotency-Key", task.measurement_uuid.toUtf8());                  // 通过 setRawHeader方法设置了一个自定义头部，setRawHeader用于设置那些不在 Qt 预定义枚举范围内的头部，设置请求头的 Idempotency-Key 为任务的 measurement_uuid，用于实现幂等性，防止重复上传相同数据。
     if (!cfg_.mes.auth_token.trimmed().isEmpty())
     {
-        req.setRawHeader("Authorization", QByteArray("Bearer ") + cfg_.mes.auth_token.toUtf8());
+        req.setRawHeader("Authorization", QByteArray("Bearer ") + cfg_.mes.auth_token.toUtf8()); // 通过 setRawHeader方法设置了一个自定义头部，设置请求头的 Authorization 为 Bearer 加上配置文件中的 auth_token，用于进行 HTTP 基本认证，确保与 MES 服务器的安全通信。
     }
 
     const QByteArray body = task.payload_json.toUtf8();
     reply_ = nam_.post(req, body);
 
-    connect(reply_, &QNetworkReply::finished, this, &MesWorker::onReplyFinished);
-    timeoutTimer_.start(cfg_.mes.timeout_ms);
+    connect(reply_, &QNetworkReply::finished, this, &MesWorker::onReplyFinished); // 连接 finished 信号，当 HTTP 请求完成时（无论成功或失败），会触发 onReplyFinished 槽函数，用于处理响应结果。
+    timeoutTimer_.start(cfg_.mes.timeout_ms);                                     // 启动超时定时器，设置超时时间为配置文件中指定的 timeout_ms（毫秒），如果在这个时间内网络请求没有完成，就会触发 timeoutTimer_ 的 timeout 信号，从而调用 lambda 函数强制中断网络请求，防止请求卡死。
 }
 
 // 处理 HTTP 请求完成信号，检查响应状态码、错误信息、响应体等，根据结果更新数据库状态（成功或失败），并触发 outboxChanged 信号通知界面刷新。
@@ -164,9 +155,10 @@ void MesWorker::onReplyFinished()
     busy_ = false;
     emit outboxChanged(); // 触发 outboxChanged 信号，通知界面刷新，显示最新的任务状态（已发送或失败）。
 
-    // 若是手动触发的 drain 模式，则继续发送下一条，直到队列为空
+    // 手动触发时，尽量把队列发送完
     if (force_drain_)
     {
-        trySendOnce(true);
+        // 下一条如果不存在，会在 onTick 内自动清掉 force_drain_
+        onTick();
     }
 }
