@@ -2,13 +2,32 @@
 #include <QWidget>
 #include <QVector>
 #include <QString>
-#include <QDateTime>
 #include <QtGlobal>
 #include <QVariantMap>
 
 #include "core/config.hpp"
 
 namespace Ui { class ProductionWidget; }
+
+
+struct SlotMeasureSummary
+{
+    QChar part_type = QChar('A');   // 'A' or 'B'
+    bool valid = false;             // 是否已有计算结果
+
+    // A 型
+    float a_total_len_mm = qQNaN();
+    float a_id_left_mm  = qQNaN();
+    float a_od_left_mm  = qQNaN();
+    float a_id_right_mm = qQNaN();
+    float a_od_right_mm = qQNaN();
+
+    // B 型
+    float b_ad_len_mm      = qQNaN();
+    float b_bc_len_mm      = qQNaN();
+    float b_runout_left_mm = qQNaN();
+    float b_runout_right_mm= qQNaN();
+};
 
 class ProductionWidget : public QWidget
 {
@@ -30,7 +49,9 @@ public:
     // slot_id_ascii[16][32]（QString 已去掉尾部 \0）
     void setSlotIds(const QVector<QString> &slot_ids);
 
-    // Mailbox header preview（仅用于 UI 展示；实际 RAW/DB 由后端完成）
+    // Mailbox header preview（生产页只展示“选中槽位”概要；详细请到诊断页）
+    void setSlotMeasureSummary(int slot, const SlotMeasureSummary &s);
+
     void setMailboxPreview(quint32 meas_seq,
                            QChar part_type,
                            quint16 slot0, quint16 slot1,
@@ -42,14 +63,11 @@ public:
                            float total_len1_mm);
 
 signals:
-    // 后续接入 Command Block 时由 MainWindow 连接到 plc_command_writer
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
 
-    // SlotID 读写（后续接入 SlotID Block）
     void requestWriteSlotIds(const QVector<QString> &slot_ids); // PC->PLC
     void requestReloadSlotIds();                                // PLC->PC
 
-    // Mailbox 读 & ACK（后续接入 Mailbox Block）
     void requestReadMailbox();
     void requestAckMailbox();
 
@@ -58,14 +76,14 @@ private slots:
     void onBtnReloadSlotIds();
     void onBtnReadMailbox();
     void onBtnAckMailbox();
-
-    // 仅用于 UI 演示
     void onBtnDevDemo();
 
 private:
-    void initSlotTable();
+    void initSlotCards();
+    void selectSlot(int slot);
+    void refreshSelectedDetail();
     void updateSlotEditability();
-    void updateTrayRow(int slot, bool present, int result_code); // result_code: 0=unknown,1=ok,2=ng
+    void updateSlotCard(int slot); // 使用 tray masks + slot ids 更新卡片文本/样式
     QString stepText(quint16 step) const;
 
 private:
@@ -77,4 +95,20 @@ private:
     quint16 tray_ok_ = 0;
     quint16 tray_ng_ = 0;
     bool plc_connected_ = false;
+
+    QVector<QString> slot_ids_;
+    QVector<SlotMeasureSummary> slot_meas_;
+    int selected_slot_ = 0;
+
+    // mailbox preview cache（仅用于展示）
+    quint32 mb_meas_seq_ = 0;
+    QChar mb_part_type_ = QChar('A');
+    quint16 mb_slot0_ = 0;
+    quint16 mb_slot1_ = 1;
+    QString mb_part_id0_;
+    QString mb_part_id1_;
+    bool mb_ok0_ = false;
+    bool mb_ok1_ = false;
+    quint16 mb_fail0_ = 0;
+    quint16 mb_fail1_ = 0;
 };
