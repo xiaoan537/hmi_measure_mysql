@@ -1187,6 +1187,227 @@ bool Db::bindCycleItemMeasurement(quint64 plc_cycle_item_id,
   return true;
 }
 
+// 这个接口先做“查最新 N 条”，后面 Data 页面很好接
+QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
+                                                            QString *err) {
+  QVector<MeasurementListRowEx> out;
+  if (limit <= 0)
+    limit = 50;
+
+  QSqlQuery q(db_);
+  q.prepare(
+      "SELECT "
+      "  m.id, m.measurement_uuid, "
+      "  m.part_id, m.part_type, m.slot_id, IFNULL(m.slot_index, -1), "
+      "  m.measure_mode, m.measure_round, m.result_judgement, m.review_status, "
+      "  m.measured_at_utc, "
+      "  r.total_len_mm, r.ad_len_mm, r.bc_len_mm, "
+      "  r.id_left_mm, r.id_right_mm, r.od_left_mm, r.od_right_mm, "
+      "  r.runout_left_mm, r.runout_right_mm "
+      "FROM measurement m "
+      "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+      "ORDER BY m.id DESC "
+      "LIMIT :lim;");
+  q.bindValue(":lim", limit);
+
+  if (!q.exec()) {
+    if (err)
+      *err = q.lastError().text();
+    return out;
+  }
+
+  while (q.next()) {
+    MeasurementListRowEx row;
+    row.measurement_id = q.value(0).toULongLong();
+    row.measurement_uuid = q.value(1).toString();
+
+    row.part_id = q.value(2).toString();
+    row.part_type = q.value(3).toString();
+    row.slot_id = q.value(4).toString();
+    row.slot_index = q.value(5).toInt();
+
+    row.measure_mode = q.value(6).toString();
+    row.measure_round = q.value(7).toInt();
+    row.result_judgement = q.value(8).toString();
+    row.review_status = q.value(9).toString();
+    row.measured_at_utc = q.value(10).toDateTime();
+
+    row.has_total_len = !q.value(11).isNull();
+    row.has_ad_len = !q.value(12).isNull();
+    row.has_bc_len = !q.value(13).isNull();
+    row.has_id_left = !q.value(14).isNull();
+    row.has_id_right = !q.value(15).isNull();
+    row.has_od_left = !q.value(16).isNull();
+    row.has_od_right = !q.value(17).isNull();
+    row.has_runout_left = !q.value(18).isNull();
+    row.has_runout_right = !q.value(19).isNull();
+
+    if (row.has_total_len)
+      row.total_len_mm = q.value(11).toDouble();
+    if (row.has_ad_len)
+      row.ad_len_mm = q.value(12).toDouble();
+    if (row.has_bc_len)
+      row.bc_len_mm = q.value(13).toDouble();
+    if (row.has_id_left)
+      row.id_left_mm = q.value(14).toDouble();
+    if (row.has_id_right)
+      row.id_right_mm = q.value(15).toDouble();
+    if (row.has_od_left)
+      row.od_left_mm = q.value(16).toDouble();
+    if (row.has_od_right)
+      row.od_right_mm = q.value(17).toDouble();
+    if (row.has_runout_left)
+      row.runout_left_mm = q.value(18).toDouble();
+    if (row.has_runout_right)
+      row.runout_right_mm = q.value(19).toDouble();
+
+    out.push_back(row);
+  }
+
+  return out;
+}
+
+// 这个接口适合后面详情页、RAW Viewer、Data 页右侧详情面板使用
+bool Db::getMeasurementDetailExById(quint64 measurement_id,
+                                    MeasurementDetailEx *out, QString *err) {
+  if (!out) {
+    if (err)
+      *err = "output pointer is null";
+    return false;
+  }
+
+  QSqlQuery q(db_);
+  q.prepare(
+      "SELECT "
+      "  m.id, m.measurement_uuid, "
+      "  m.plc_cycle_id, m.plc_cycle_item_id, m.task_id, m.task_item_id, "
+      "  m.part_id, m.part_type, m.slot_id, m.slot_index, m.item_index, "
+      "  m.measure_mode, m.measure_round, m.result_judgement, m.upload_kind, "
+      "  m.measured_at_utc, m.operator_id, "
+      "  m.review_status, m.reviewer_id, m.reviewed_at_utc, m.review_note, "
+      "  m.fail_reason_code, m.fail_reason_text, m.status, "
+      "  r.total_len_mm, r.ad_len_mm, r.bc_len_mm, "
+      "  r.id_left_mm, r.id_right_mm, r.od_left_mm, r.od_right_mm, "
+      "  r.runout_left_mm, r.runout_right_mm, "
+      "  r.tolerance_json, r.extra_json "
+      "FROM measurement m "
+      "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+      "WHERE m.id = :id "
+      "LIMIT 1;");
+  q.bindValue(":id", QVariant::fromValue<qulonglong>(measurement_id));
+
+  if (!q.exec()) {
+    if (err)
+      *err = q.lastError().text();
+    return false;
+  }
+
+  if (!q.next()) {
+    out->found = false;
+    return true;
+  }
+
+  out->found = true;
+  out->measurement_id = q.value(0).toULongLong();
+  out->measurement_uuid = q.value(1).toString();
+
+  out->plc_cycle_id = q.value(2);
+  out->plc_cycle_item_id = q.value(3);
+  out->task_id = q.value(4);
+  out->task_item_id = q.value(5);
+
+  out->part_id = q.value(6).toString();
+  out->part_type = q.value(7).toString();
+  out->slot_id = q.value(8).toString();
+  out->slot_index = q.value(9);
+  out->item_index = q.value(10);
+
+  out->measure_mode = q.value(11).toString();
+  out->measure_round = q.value(12).toInt();
+  out->result_judgement = q.value(13).toString();
+  out->upload_kind = q.value(14).toString();
+
+  out->measured_at_utc = q.value(15).toDateTime();
+  out->operator_id = q.value(16).toString();
+
+  out->review_status = q.value(17).toString();
+  out->reviewer_id = q.value(18).toString();
+  out->reviewed_at_utc = q.value(19).toDateTime();
+  out->review_note = q.value(20).toString();
+
+  out->fail_reason_code = q.value(21).toString();
+  out->fail_reason_text = q.value(22).toString();
+  out->status = q.value(23).toString();
+
+  out->total_len_mm = q.value(24);
+  out->ad_len_mm = q.value(25);
+  out->bc_len_mm = q.value(26);
+  out->id_left_mm = q.value(27);
+  out->id_right_mm = q.value(28);
+  out->od_left_mm = q.value(29);
+  out->od_right_mm = q.value(30);
+  out->runout_left_mm = q.value(31);
+  out->runout_right_mm = q.value(32);
+
+  out->tolerance_json = q.value(33).toString();
+  out->extra_json = q.value(34).toString();
+
+  return true;
+}
+
+// 这张 raw_file_index 不是一个简单“路径索引表”，它已经承载了一部分 raw
+// 文件元信息,意味着以后接 raw_v2 时，这张表依然很有价值，不只是简单挂个路径。
+bool Db::insertRawFileIndexForMeasurement(
+    const QString &measurement_uuid, quint64 measurement_id,
+    const QVariant &plc_cycle_id, const QString &file_path,
+    quint64 file_size_bytes, int format_version, quint64 file_crc32,
+    quint64 chunk_mask, const QString &scan_kind, int main_channels, int rings,
+    int points_per_ring, double angle_step_deg, const QString &meta_json,
+    const QString &raw_kind, QString *err) {
+  QSqlQuery q(db_);
+  q.prepare(
+      "INSERT INTO raw_file_index ("
+      " measurement_uuid, measurement_id, plc_cycle_id, "
+      " file_path, file_size_bytes, format_version, file_crc32, chunk_mask, "
+      " scan_kind, main_channels, rings, points_per_ring, angle_step_deg, "
+      " meta_json, raw_kind, created_at_utc"
+      ") VALUES ("
+      " :measurement_uuid, :measurement_id, :plc_cycle_id, "
+      " :file_path, :file_size_bytes, :format_version, :file_crc32, "
+      ":chunk_mask, "
+      " :scan_kind, :main_channels, :rings, :points_per_ring, :angle_step_deg, "
+      " :meta_json, :raw_kind, NOW(3)"
+      ");");
+
+  q.bindValue(":measurement_uuid", measurement_uuid);
+  q.bindValue(":measurement_id",
+              QVariant::fromValue<qulonglong>(measurement_id));
+  q.bindValue(":plc_cycle_id", plc_cycle_id);
+
+  q.bindValue(":file_path", file_path);
+  q.bindValue(":file_size_bytes",
+              QVariant::fromValue<qulonglong>(file_size_bytes));
+  q.bindValue(":format_version", format_version);
+  q.bindValue(":file_crc32", QVariant::fromValue<qulonglong>(file_crc32));
+  q.bindValue(":chunk_mask", QVariant::fromValue<qulonglong>(chunk_mask));
+
+  q.bindValue(":scan_kind", scan_kind); // "A" / "B" 或你当前旧链路里的值
+  q.bindValue(":main_channels", main_channels);
+  q.bindValue(":rings", rings);
+  q.bindValue(":points_per_ring", points_per_ring);
+  q.bindValue(":angle_step_deg", angle_step_deg);
+
+  q.bindValue(":meta_json", meta_json);
+  q.bindValue(":raw_kind", raw_kind); // MAILBOX_V2 / DERIVED / EXPORT
+
+  if (!q.exec()) {
+    if (err)
+      *err = q.lastError().text();
+    return false;
+  }
+  return true;
+}
+
 /*
 SQL查询的作用
     这段SQL查询（固定部分 + 动态部分）的核心作用是：

@@ -28,6 +28,91 @@ struct MesUploadRow {
   QDateTime mes_updated_at_utc;
 };
 
+struct MeasurementListRowEx {
+  quint64 measurement_id = 0;
+  QString measurement_uuid;
+
+  QString part_id;
+  QString part_type;
+  QString slot_id;
+  int slot_index = -1;
+
+  QString measure_mode; // NORMAL / RETEST / MANUAL / MIL_CHECK
+  int measure_round = 1;
+  QString result_judgement; // OK / NG / INVALID / ABORTED
+  QString review_status;    // PENDING / APPROVED / ...
+
+  QDateTime measured_at_utc;
+
+  double total_len_mm = 0.0;
+  double ad_len_mm = 0.0;
+  double bc_len_mm = 0.0;
+  double id_left_mm = 0.0;
+  double id_right_mm = 0.0;
+  double od_left_mm = 0.0;
+  double od_right_mm = 0.0;
+  double runout_left_mm = 0.0;
+  double runout_right_mm = 0.0;
+
+  bool has_total_len = false;
+  bool has_ad_len = false;
+  bool has_bc_len = false;
+  bool has_id_left = false;
+  bool has_id_right = false;
+  bool has_od_left = false;
+  bool has_od_right = false;
+  bool has_runout_left = false;
+  bool has_runout_right = false;
+};
+
+struct MeasurementDetailEx {
+  bool found = false;
+
+  quint64 measurement_id = 0;
+  QString measurement_uuid;
+
+  QVariant plc_cycle_id;
+  QVariant plc_cycle_item_id;
+  QVariant task_id;
+  QVariant task_item_id;
+
+  QString part_id;
+  QString part_type;
+  QString slot_id;
+  QVariant slot_index;
+  QVariant item_index;
+
+  QString measure_mode;
+  int measure_round = 1;
+  QString result_judgement;
+  QString upload_kind;
+
+  QDateTime measured_at_utc;
+  QString operator_id;
+
+  QString review_status;
+  QString reviewer_id;
+  QDateTime reviewed_at_utc;
+  QString review_note;
+
+  QString fail_reason_code;
+  QString fail_reason_text;
+  QString status;
+
+  QVariant total_len_mm;
+  QVariant ad_len_mm;
+  QVariant bc_len_mm;
+  QVariant id_left_mm;
+  QVariant id_right_mm;
+  QVariant od_left_mm;
+  QVariant od_right_mm;
+  QVariant runout_left_mm;
+  QVariant runout_right_mm;
+
+  QString tolerance_json;
+  QString extra_json;
+};
+
 // 定义查询测量结果时的过滤条件。用户可以通过这个结构体指定时间范围、工件类型、合格性和MES状态等条件来筛选需要查看的测量结果。
 struct MesUploadFilter {
   QDateTime from_utc;   // 查询起始时间
@@ -139,6 +224,20 @@ public:
 
   bool bindCycleItemMeasurement(quint64 plc_cycle_item_id,
                                 quint64 measurement_id, QString *err);
+
+  QVector<MeasurementListRowEx> queryLatestMeasurementsEx(int limit,
+                                                          QString *err);
+
+  bool getMeasurementDetailExById(quint64 measurement_id,
+                                  MeasurementDetailEx *out, QString *err);
+
+  bool insertRawFileIndexForMeasurement(
+      const QString &measurement_uuid, quint64 measurement_id,
+      const QVariant &plc_cycle_id, const QString &file_path,
+      quint64 file_size_bytes, int format_version, quint64 file_crc32,
+      quint64 chunk_mask, const QString &scan_kind, int main_channels,
+      int rings, int points_per_ring, double angle_step_deg,
+      const QString &meta_json, const QString &raw_kind, QString *err);
 
 private:
   QSqlDatabase db_; // QT 数据库连接对象 （私有，隐藏实现细节）

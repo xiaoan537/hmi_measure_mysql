@@ -457,6 +457,48 @@ int main(int argc, char *argv[]) {
   //                            "DbSmokeTest 成功，新表写入链路正常。");
   // }
 
+  QString qerr;
+  auto rows = db.queryLatestMeasurementsEx(10, &qerr);
+  qDebug() << "[QUERY] err =" << qerr << ", count =" << rows.size();
+  for (const auto &r : rows) {
+    qDebug() << "[QUERY]" << r.measurement_id << r.part_id << r.part_type
+             << r.measure_mode << r.measure_round << r.result_judgement
+             << r.measured_at_utc;
+  }
+
+  if (!rows.isEmpty()) {
+    core::MeasurementDetailEx d;
+    QString derr;
+    if (db.getMeasurementDetailExById(rows.first().measurement_id, &d, &derr)) {
+      qDebug() << "[DETAIL] found =" << d.found
+               << ", uuid =" << d.measurement_uuid << ", part =" << d.part_id
+               << ", total =" << d.total_len_mm << ", ad =" << d.ad_len_mm
+               << ", bc =" << d.bc_len_mm;
+    } else {
+      qDebug() << "[DETAIL] err =" << derr;
+    }
+  }
+
+  // QString err;
+  bool ok = db.insertRawFileIndexForMeasurement(
+      "11111111-2222-3333-4444-555555555555", // measurement_uuid
+      1,                                      // measurement_id
+      QVariant(1),                            // plc_cycle_id
+      "/tmp/test_a.raw",                      // file_path
+      1024,                                   // file_size_bytes
+      2,                                      // format_version
+      123456789,                              // file_crc32
+      0x03,                                   // chunk_mask
+      "A",                                    // scan_kind
+      4,                                      // main_channels
+      2,                                      // rings
+      72,                                     // points_per_ring
+      5.0,                                    // angle_step_deg
+      R"({"note":"raw index smoke test"})",   // meta_json
+      "MAILBOX_V2",                           // raw_kind
+      &err);
+  qDebug() << "[RAW-INDEX]" << ok << err;
+
   // 保留你原来的 A/B 插入测试：./hmi_qt --dev-ab
   if (QCoreApplication::arguments().contains("--dev-ab")) {
     return runDevAbWindow(a, cfg);
