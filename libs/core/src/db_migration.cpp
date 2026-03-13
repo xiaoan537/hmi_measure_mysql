@@ -650,3 +650,5 @@ bool Db::ensureSchema(QString *err) {
 
 
 } // namespace core
+
+// db_migration.cpp 实现了数据库迁移相关的功能，包括创建表、添加列、更新索引等。

@@ -166,3 +166,5 @@ bool Db::insertResultWithRawIndexV2(const MeasureResult &r,
 
 
 } // namespace core
+
+// db_legacy.cpp，把仍然服务旧链路、旧页面、旧结构的东西放进去，这个文件只负责，让你明白：这些是兼容层，不是未来主线。

@@ -68,3 +68,5 @@ int main(int argc, char *argv[]) {
 
   return a.exec();
 }
+
+// main.cpp减负，让main.cpp只做这件事：QApplication初始化、解析--config、加载配置、准备目录、启动服务、启动MainWindow，不再继承开发测试实现

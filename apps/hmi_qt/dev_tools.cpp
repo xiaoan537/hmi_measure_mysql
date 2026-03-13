@@ -2,27 +2,30 @@
 
 #include <QApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QDir>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QUuid>
 #include <QVBoxLayout>
 #include <QVariant>
-#include <QUuid>
 #include <QWidget>
-#include <QDebug>
 #include <limits>
 
 #include "core/config.hpp"
 #include "core/db.hpp"
+#include "core/measurement_ingest.hpp"
 #include "core/model.hpp"
 #include "core/raw_v2.hpp"
 #include "core/snapshot.hpp"
 
 static bool ensureDir(const QString &path, QString *err) {
   QDir d;
-  if (d.exists(path)) return true;
+  if (d.exists(path))
+    return true;
   if (!d.mkpath(path)) {
-    if (err) *err = QString("Failed to create dir: %1").arg(path);
+    if (err)
+      *err = QString("Failed to create dir: %1").arg(path);
     return false;
   }
   return true;

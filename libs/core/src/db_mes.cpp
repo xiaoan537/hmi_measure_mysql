@@ -441,3 +441,5 @@ bool core::Db::markOutboxFailed(quint64 id, int http_code, const QString &resp,
 }
 
 } // namespace core
+
+// db_mes.cpp 实现了数据库操作相关的功能，包括插入、查询、更新和删除mes_outbox表中的记录。这个文件只负责report、outbox、API log、task

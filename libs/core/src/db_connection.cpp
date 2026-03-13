@@ -127,3 +127,5 @@ bool Db::rollbackTx(QString *err) {
 
 
 } // namespace core
+
+// db_connection.cpp 实现了数据库连接相关的功能，包括打开连接、设置连接参数、执行事务等。
