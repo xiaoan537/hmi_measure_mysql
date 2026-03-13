@@ -1,7 +1,10 @@
 #include "data_widget.hpp"
 
 #include <QAbstractItemView>
+#include <QComboBox>
 #include <QDateTime>
+#include <QDateTimeEdit>
+#include <QDebug>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QLineEdit>
@@ -21,11 +24,20 @@ DataWidget::DataWidget(const core::AppConfig &cfg, QWidget *parent)
   ui_->setupUi(this);
   setupModel();
 
-  ui_->dateFrom->setDateTime(QDateTime::currentDateTime().addDays(-7));
-  ui_->dateTo->setDateTime(QDateTime::currentDateTime());
+  ui_->dateFrom->setDateTime(QDateTime::currentDateTime().addDays(-30));
+  ui_->dateTo->setDateTime(QDateTime::currentDateTime().addDays(1));
   ui_->spinLimit->setValue(200);
 
-  // 当前 Data 页先切到新 measurement 链路，MES 状态过滤暂未接入
+  ui_->comboType->clear();
+  ui_->comboType->addItem(QStringLiteral("全部"));
+  ui_->comboType->addItem(QStringLiteral("A型"));
+  ui_->comboType->addItem(QStringLiteral("B型"));
+
+  ui_->comboOk->clear();
+  ui_->comboOk->addItem(QStringLiteral("全部"));
+  ui_->comboOk->addItem(QStringLiteral("OK"));
+  ui_->comboOk->addItem(QStringLiteral("非OK"));
+
   ui_->comboMes->setEnabled(false);
   ui_->comboMes->setToolTip(
       QStringLiteral("当前页面已切到新测量记录查询，MES状态过滤后续再接入"));
@@ -81,15 +93,11 @@ void DataWidget::setupModel() {
   ui_->tableView->setSelectionMode(QAbstractItemView::SingleSelection);
   ui_->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ui_->tableView->horizontalHeader()->setStretchLastSection(true);
-
-  // 隐藏内部列：measurement_id / measurement_uuid
   ui_->tableView->setColumnHidden(0, true);
   ui_->tableView->setColumnHidden(8, true);
 }
 
-void DataWidget::onFilterChanged() {
-  // 当前先保持“显式点击刷新”，后续如有需要再做 debounce 自动刷新
-}
+void DataWidget::onFilterChanged() { refresh(); }
 
 QString DataWidget::makeMeasurementSummary(
     const core::MeasurementListRowEx &row) const {
@@ -129,18 +137,16 @@ void DataWidget::reloadFromNewMeasurementSchema() {
   }
 
   const QString partIdLike = ui_->editPartId->text().trimmed();
-  // const QString typeFilter = ui_->comboType->currentData().toString();
   const int typeFilterIndex = ui_->comboType->currentIndex();
-  // const int okFilter = ui_->comboOk->currentData().toInt();
   const int okFilterIndex = ui_->comboOk->currentIndex();
   const QDateTime fromUtc = ui_->dateFrom->dateTime().toUTC();
   const QDateTime toUtc = ui_->dateTo->dateTime().toUTC();
-  const int limit = ui_->spinLimit->value();
+  const int limit = qMax(1, ui_->spinLimit->value());
 
-  // 新接口当前只支持按 limit 查询，先取稍大一些再本地筛选
   QString qerr;
   const int fetchLimit = qMax(limit, 500);
   const auto rows = db.queryLatestMeasurementsEx(fetchLimit, &qerr);
+  qDebug() << "[DATA] query err =" << qerr << ", rows =" << rows.size();
   if (!qerr.isEmpty()) {
     QMessageBox::warning(this, QStringLiteral("查询"), qerr);
     return;
@@ -155,11 +161,6 @@ void DataWidget::reloadFromNewMeasurementSchema() {
       continue;
     }
 
-    // if (!typeFilter.isEmpty() && r.part_type != typeFilter) {
-    //   continue;
-    // }
-
-    // 假设 comboType 顺序是：全部 / A型 / B型
     if (typeFilterIndex == 1 && r.part_type != "A") {
       continue;
     }
@@ -168,19 +169,12 @@ void DataWidget::reloadFromNewMeasurementSchema() {
     }
 
     if (r.measured_at_utc.isValid()) {
-      if (r.measured_at_utc < fromUtc || r.measured_at_utc > toUtc) {
+      const QDateTime measuredUtc = r.measured_at_utc.toUTC();
+      if (measuredUtc < fromUtc || measuredUtc > toUtc) {
         continue;
       }
     }
 
-    // if (okFilter == 1 && r.result_judgement != "OK") {
-    //   continue;
-    // }
-    // if (okFilter == 0 && r.result_judgement == "OK") {
-    //   continue;
-    // }
-
-    // 假设 comboOk 三个选项顺序是：全部 / OK / 非OK
     if (okFilterIndex == 1 && r.result_judgement != "OK") {
       continue;
     }

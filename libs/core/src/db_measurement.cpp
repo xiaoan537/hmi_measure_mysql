@@ -227,8 +227,7 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
   if (limit <= 0)
     limit = 50;
 
-  QSqlQuery q(db_);
-  q.prepare(
+  const QString sql = QString(
       "SELECT "
       "  m.id, m.measurement_uuid, "
       "  m.part_id, m.part_type, m.slot_id, IFNULL(m.slot_index, -1), "
@@ -240,10 +239,10 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
       "FROM measurement m "
       "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
       "ORDER BY m.id DESC "
-      "LIMIT :lim;");
-  q.bindValue(":lim", limit);
+      "LIMIT %1;").arg(limit);
 
-  if (!q.exec()) {
+  QSqlQuery q(db_);
+  if (!q.exec(sql)) {
     if (err)
       *err = q.lastError().text();
     return out;
