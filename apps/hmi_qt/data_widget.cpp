@@ -7,6 +7,8 @@
 #include <QDebug>
 #include <QHeaderView>
 #include <QItemSelectionModel>
+#include <QGridLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -27,6 +29,14 @@ DataWidget::DataWidget(const core::AppConfig &cfg, QWidget *parent)
   ui_->dateFrom->setDateTime(QDateTime::currentDateTime().addDays(-30));
   ui_->dateTo->setDateTime(QDateTime::currentDateTime().addDays(1));
   ui_->spinLimit->setValue(200);
+
+  if (auto *grid = qobject_cast<QGridLayout *>(ui_->groupFilter->layout())) {
+    auto *lbTaskCard = new QLabel(QStringLiteral("卡号"), this);
+    editTaskCard_ = new QLineEdit(this);
+    editTaskCard_->setPlaceholderText(QStringLiteral("task_card_no contains..."));
+    grid->addWidget(lbTaskCard, 2, 4);
+    grid->addWidget(editTaskCard_, 2, 5);
+  }
 
   ui_->comboType->clear();
   ui_->comboType->addItem(QStringLiteral("全部"));
@@ -58,6 +68,10 @@ DataWidget::DataWidget(const core::AppConfig &cfg, QWidget *parent)
           &DataWidget::onFilterChanged);
   connect(ui_->dateTo, &QDateTimeEdit::dateTimeChanged, this,
           &DataWidget::onFilterChanged);
+  if (editTaskCard_) {
+    connect(editTaskCard_, &QLineEdit::textChanged, this,
+            &DataWidget::onFilterChanged);
+  }
 
   connect(ui_->tableView->selectionModel(),
           &QItemSelectionModel::currentRowChanged, this,
@@ -84,8 +98,8 @@ void DataWidget::setupModel() {
   model_ = new QStandardItemModel(this);
   model_->setHorizontalHeaderLabels(
       {QStringLiteral("测量ID"), QStringLiteral("测量时间"),
-       QStringLiteral("工件号"), QStringLiteral("型号"), QStringLiteral("模式"),
-       QStringLiteral("轮次"), QStringLiteral("判定"),
+       QStringLiteral("工件号"), QStringLiteral("卡号"), QStringLiteral("型号"),
+       QStringLiteral("模式"), QStringLiteral("轮次"), QStringLiteral("判定"),
        QStringLiteral("结果摘要"), QStringLiteral("UUID")});
 
   ui_->tableView->setModel(model_);
@@ -94,7 +108,7 @@ void DataWidget::setupModel() {
   ui_->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ui_->tableView->horizontalHeader()->setStretchLastSection(true);
   ui_->tableView->setColumnHidden(0, true);
-  ui_->tableView->setColumnHidden(8, true);
+  ui_->tableView->setColumnHidden(9, true);
 }
 
 void DataWidget::onFilterChanged() { refresh(); }
@@ -142,6 +156,7 @@ void DataWidget::reloadFromNewMeasurementSchema() {
   const QDateTime fromUtc = ui_->dateFrom->dateTime().toUTC();
   const QDateTime toUtc = ui_->dateTo->dateTime().toUTC();
   const int limit = qMax(1, ui_->spinLimit->value());
+  const QString taskCardLike = editTaskCard_ ? editTaskCard_->text().trimmed() : QString();
 
   QString qerr;
   const int fetchLimit = qMax(limit, 500);
@@ -158,6 +173,11 @@ void DataWidget::reloadFromNewMeasurementSchema() {
   for (const auto &r : rows) {
     if (!partIdLike.isEmpty() &&
         !r.part_id.contains(partIdLike, Qt::CaseInsensitive)) {
+      continue;
+    }
+
+    if (!taskCardLike.isEmpty() &&
+        !r.task_card_no.contains(taskCardLike, Qt::CaseInsensitive)) {
       continue;
     }
 
@@ -192,13 +212,14 @@ void DataWidget::reloadFromNewMeasurementSchema() {
                     new QStandardItem(r.measured_at_utc.toLocalTime().toString(
                         "yyyy-MM-dd HH:mm:ss")));
     model_->setItem(outRow, 2, new QStandardItem(r.part_id));
-    model_->setItem(outRow, 3, new QStandardItem(r.part_type));
-    model_->setItem(outRow, 4, new QStandardItem(r.measure_mode));
-    model_->setItem(outRow, 5,
+    model_->setItem(outRow, 3, new QStandardItem(r.task_card_no));
+    model_->setItem(outRow, 4, new QStandardItem(r.part_type));
+    model_->setItem(outRow, 5, new QStandardItem(r.measure_mode));
+    model_->setItem(outRow, 6,
                     new QStandardItem(QString::number(r.measure_round)));
-    model_->setItem(outRow, 6, new QStandardItem(r.result_judgement));
-    model_->setItem(outRow, 7, new QStandardItem(makeMeasurementSummary(r)));
-    model_->setItem(outRow, 8, new QStandardItem(r.measurement_uuid));
+    model_->setItem(outRow, 7, new QStandardItem(r.result_judgement));
+    model_->setItem(outRow, 8, new QStandardItem(makeMeasurementSummary(r)));
+    model_->setItem(outRow, 9, new QStandardItem(r.measurement_uuid));
 
     ++outRow;
   }
@@ -248,6 +269,7 @@ void DataWidget::showMeasurementDetail(quint64 measurementId) {
   text += QStringLiteral("Item索引: %1\n")
               .arg(d.item_index.isNull() ? QStringLiteral("-")
                                          : d.item_index.toString());
+  text += QStringLiteral("任务卡号: %1\n").arg(d.task_card_no.isEmpty() ? QStringLiteral("-") : d.task_card_no);
   text += QStringLiteral("模式: %1\n").arg(d.measure_mode);
   text += QStringLiteral("轮次: %1\n").arg(d.measure_round);
   text += QStringLiteral("判定: %1\n").arg(d.result_judgement);
@@ -300,7 +322,7 @@ void DataWidget::onOpenRawClicked() {
   if (!cur.isValid()) {
     return;
   }
-  const QString uuid = model_->item(cur.row(), 8)->text();
+  const QString uuid = model_->item(cur.row(), 9)->text();
   emit requestOpenRaw(uuid);
 }
 
@@ -309,6 +331,6 @@ void DataWidget::onQueueMesClicked() {
   if (!cur.isValid()) {
     return;
   }
-  const QString uuid = model_->item(cur.row(), 8)->text();
+  const QString uuid = model_->item(cur.row(), 9)->text();
   emit requestQueueMesUpload(uuid);
 }

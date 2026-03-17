@@ -65,65 +65,44 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
   QVector<MesUploadRow> out;
   QSqlQuery q(db_);
 
-  /*
-  表连接：
-      主表：measure_result（别名 r）- 存储测量结果
-      从表：mes_outbox（别名 o）- 存储MES上传队列
-      使用 LEFT JOIN 连接，确保即使没有对应的MES上传记录也能返回测量结果
-  连接条件：
-      通过 measurement_uuid 字段关联两表
-      只关联 event_type='MEASURE_RESULT_READY' 的MES记录
-  筛选条件：
-      r.status='READY' - 只查询状态为"READY"的测量结果
-      时间范围过滤：measured_at_utc 在指定时间区间内
-  查询字段：
-      测量结果信息：UUID、工件ID、类型、合格状态、测量时间、长度数据
-      MES上传信息：状态、尝试次数、错误信息、更新时间
-  */
-  // SQL
-  // 查询语句用于从两个数据表中联合查询测量结果及其对应的消息状态信息。使用一定的筛选条件（就是上位机界面中数据管理UI中的筛选需要显示的数据），结合两个表，
-  // 筛选出需要的字段数据，然后再动态动态构建SQL查询，根据用户提供的过滤条件（`MesUploadFilter`
-  // 结构体）向基础SQL语句添加额外的筛选条件。
   QString sql =
       "SELECT "
-      " r.measurement_uuid, r.part_id, r.part_type, r.ok, r.measured_at_utc, "
-      "r.total_len_mm, r.bc_len_mm, "
-      " o.status AS mes_status, o.attempt_count, o.last_error, "
-      "o.updated_at_utc "
-      "FROM measure_result r "
+      "  m.measurement_uuid, m.part_id, m.part_type, IFNULL(t.task_card_no, ''), "
+      "  CASE WHEN m.result_judgement='OK' THEN 1 ELSE 0 END AS ok_flag, "
+      "  m.measured_at_utc, "
+      "  r.total_len_mm, r.bc_len_mm, "
+      "  o.status AS mes_status, o.attempt_count, o.last_error, o.updated_at_utc "
+      "FROM measurement m "
+      "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+      "LEFT JOIN mes_task t ON t.id = m.task_id "
       "LEFT JOIN mes_outbox o "
-      "  ON o.measurement_uuid = r.measurement_uuid AND "
-      "o.event_type='MEASURE_RESULT_READY' "
-      "WHERE r.status='READY' "
-      "  AND r.measured_at_utc >= :from_utc AND r.measured_at_utc <= :to_utc ";
+      "  ON o.measurement_uuid = m.measurement_uuid AND o.event_type='MEASURE_RESULT_READY' "
+      "WHERE m.measured_at_utc >= :from_utc AND m.measured_at_utc <= :to_utc ";
 
-  /*
-  动态构建SQL查询语句的部分，根据用户提供的过滤条件（MesUploadFilter
-  结构体）向基础SQL语句添加额外的筛选条件
-  支持多条件组合过滤，用户可以根据需要指定任意组合的过滤条件
-  */
-  if (!f.part_id_like.trimmed()
-           .isEmpty()) // 工件ID模糊匹配（LIKE），如果非空，添加模糊匹配条件，允许用户通过部分工件ID进行搜索，例如：用户输入"ABC"可以匹配"ABC123"、"XYZABC"等
-    sql += " AND r.part_id LIKE :part_id_like ";
-  if (!f.part_type.trimmed().isEmpty()) // 工件类型精确匹配
-    sql += " AND r.part_type = :part_type ";
-  if (f.ok_filter == 0 || f.ok_filter == 1) // 合格性过滤
-    sql += " AND r.ok = :ok ";
-  if (!f.mes_status.trimmed().isEmpty()) // MES状态过滤
-  {
+  if (!f.part_id_like.trimmed().isEmpty())
+    sql += " AND m.part_id LIKE :part_id_like ";
+  if (!f.task_card_no_like.trimmed().isEmpty())
+    sql += " AND IFNULL(t.task_card_no, '') LIKE :task_card_no_like ";
+  if (!f.part_type.trimmed().isEmpty())
+    sql += " AND m.part_type = :part_type ";
+  if (f.ok_filter == 0 || f.ok_filter == 1)
+    sql += " AND CASE WHEN m.result_judgement='OK' THEN 1 ELSE 0 END = :ok ";
+  if (!f.mes_status.trimmed().isEmpty()) {
     if (f.mes_status == "NOT_QUEUED")
       sql += " AND o.id IS NULL ";
     else
       sql += " AND o.status = :mes_status ";
   }
 
-  sql += " ORDER BY r.measured_at_utc DESC LIMIT :limit;";
+  sql += " ORDER BY m.measured_at_utc DESC LIMIT :limit;";
 
-  q.prepare(sql);                       // sql准备
-  q.bindValue(":from_utc", f.from_utc); // 参数绑定
+  q.prepare(sql);
+  q.bindValue(":from_utc", f.from_utc);
   q.bindValue(":to_utc", f.to_utc);
   if (!f.part_id_like.trimmed().isEmpty())
     q.bindValue(":part_id_like", "%" + f.part_id_like + "%");
+  if (!f.task_card_no_like.trimmed().isEmpty())
+    q.bindValue(":task_card_no_like", "%" + f.task_card_no_like + "%");
   if (!f.part_type.trimmed().isEmpty())
     q.bindValue(":part_type", f.part_type);
   if (f.ok_filter == 0 || f.ok_filter == 1)
@@ -138,43 +117,25 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
     return out;
   }
 
-  /*
-  SQL查询结果的结构
-      当执行SQL查询后，数据库返回的结果确实是一个表格形式的数据结构，包含：
-          多行数据（每行代表一条记录）
-          多列数据（每列代表一个字段）
-  遍历查询结果的过程
-      初始状态：执行查询后，结果指针位于第一行之前（没有指向任何行）
-      使用q.next()遍历行：
-          每次调用q.next()会将指针移动到下一行
-          当成功移动到新行时返回true
-          当到达结果集末尾时返回false，循环结束
-      使用q.value(index)访问列：
-          index是列的索引，从0开始
-          索引顺序对应SQL查询中SELECT语句的字段顺序
-  */
-  // 经过sql查询之后，会得到一个查询结果，sql查询的结果是一个表格，其中每一行对应一个测量结果，每一列对应一个字段,这样就可以遍历查询结果。
-  // 处理查询结果的部分，负责将数据库查询结果映射到 MesUploadRow
-  // 结构体。遍历查询结果，将每行数据填充到MesUploadRow对象并添加到输出列表
   while (q.next()) {
     MesUploadRow r;
     r.measurement_uuid = q.value(0).toString();
     r.part_id = q.value(1).toString();
     r.part_type = q.value(2).toString();
-    r.ok = q.value(3).toInt() != 0;
-    r.measured_at_utc = q.value(4).toDateTime();
-    r.total_len_mm = q.value(5).isNull() ? 0.0 : q.value(5).toDouble();
-    r.bc_len_mm = q.value(6).isNull() ? 0.0 : q.value(6).toDouble();
+    r.task_card_no = q.value(3).toString();
+    r.ok = q.value(4).toInt() != 0;
+    r.measured_at_utc = q.value(5).toDateTime();
+    r.total_len_mm = q.value(6).isNull() ? 0.0 : q.value(6).toDouble();
+    r.bc_len_mm = q.value(7).isNull() ? 0.0 : q.value(7).toDouble();
 
-    // outbox may be NULL
-    if (q.value(7).isNull()) {
+    if (q.value(8).isNull()) {
       r.mes_status = "NOT_QUEUED";
       r.attempt_count = 0;
     } else {
-      r.mes_status = q.value(7).toString();
-      r.attempt_count = q.value(8).toInt();
-      r.last_error = q.value(9).toString();
-      r.mes_updated_at_utc = q.value(10).toDateTime();
+      r.mes_status = q.value(8).toString();
+      r.attempt_count = q.value(9).toInt();
+      r.last_error = q.value(10).toString();
+      r.mes_updated_at_utc = q.value(11).toDateTime();
     }
 
     out.push_back(r);
@@ -222,14 +183,18 @@ bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err) {
     return true;
   }
 
-  // 如果不存在：从 DB 读 measure_result + raw_file_index，构建
-  // payload_json，INSERT 到 mes_outbox表中
+  // 如果不存在：从新 measurement + measurement_result + raw_file_index 读取，构建
+  // payload_json，INSERT 到 mes_outbox 表中
   core::MeasureResult mr;
   {
     QSqlQuery r(db_);
-    r.prepare("SELECT measurement_uuid, part_id, part_type, ok, "
-              "measured_at_utc, total_len_mm, bc_len_mm, status "
-              "FROM measure_result WHERE measurement_uuid=:u LIMIT 1;");
+    r.prepare("SELECT "
+              "  m.measurement_uuid, m.part_id, m.part_type, "
+              "  CASE WHEN m.result_judgement='OK' THEN 1 ELSE 0 END AS ok_flag, "
+              "  m.measured_at_utc, r.total_len_mm, r.bc_len_mm, m.status "
+              "FROM measurement m "
+              "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+              "WHERE m.measurement_uuid=:u LIMIT 1;");
     r.bindValue(":u", uuid);
     if (!r.exec()) {
       if (err)
@@ -238,7 +203,7 @@ bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err) {
     }
     if (!r.next()) {
       if (err)
-        *err = "measure_result not found for uuid";
+        *err = "measurement not found for uuid";
       return false;
     }
 

@@ -9,6 +9,14 @@
 
 namespace Ui { class ProductionWidget; }
 
+enum class ProductionMeasureMode : int
+{
+    Normal = 0,
+    Second = 1,
+    Third = 2,
+    Mil = 3
+};
+
 enum class SlotRuntimeState : int
 {
     Empty = 0,
@@ -110,6 +118,8 @@ private:
     void updateSlotEditability();
     void updateSlotCard(int slot);
     QString stepText(quint16 step) const;
+    QString measureModeText() const;
+    quint32 measureModeCommandArg() const;
     QString runtimeStateText(int slot) const;
     int runtimeStateStyleCode(int slot) const;
     bool isPartIdEditableStep() const;
@@ -138,4 +148,6 @@ private:
     quint16 mb_slot1_ = 0xFFFF;
     QString mb_part_id0_;
     QString mb_part_id1_;
+
+    class QComboBox *measureModeCombo_ = nullptr;
 };

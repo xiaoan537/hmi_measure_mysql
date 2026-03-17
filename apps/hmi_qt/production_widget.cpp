@@ -2,12 +2,16 @@
 #include "ui_production_widget.h"
 
 #include <QButtonGroup>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QDir>
+#include <QHBoxLayout>
 #include <QFileInfo>
+#include <QLabel>
 #include <QFont>
 #include <QPushButton>
 #include <QStyle>
+#include <QVBoxLayout>
 #include <QUrl>
 
 namespace {
@@ -45,6 +49,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
 
     // 用代码把文案切到当前项目真实语义
     ui_->lblSelectedTitle->setText(QStringLiteral("槽位详情 / 当前批次"));
+    ui_->groupRun->setTitle(QStringLiteral("生产流程 / 模式"));
     ui_->lblSlotIdCaption->setText(QStringLiteral("工件ID(32)"));
     ui_->editSlotId->setPlaceholderText(QStringLiteral("仅待机/等待上料/等待ID核对阶段可编辑"));
     ui_->lblPart0Caption->setText(QStringLiteral("当前工件ID"));
@@ -79,6 +84,20 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblConnDb->setProperty("connState", 0);
     ui_->lblConnMes->setProperty("connState", 0);
 
+    // 生产业务模式：普通 / 第二次 / 第三次 / 军检（单选，不含复测）
+    measureModeCombo_ = new QComboBox(this);
+    measureModeCombo_->addItem(QStringLiteral("普通测量"), static_cast<int>(ProductionMeasureMode::Normal));
+    measureModeCombo_->addItem(QStringLiteral("第二次测量"), static_cast<int>(ProductionMeasureMode::Second));
+    measureModeCombo_->addItem(QStringLiteral("第三次测量"), static_cast<int>(ProductionMeasureMode::Third));
+    measureModeCombo_->addItem(QStringLiteral("军检"), static_cast<int>(ProductionMeasureMode::Mil));
+    if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
+        auto *modeRow = new QHBoxLayout();
+        auto *lbMode = new QLabel(QStringLiteral("业务模式"), this);
+        modeRow->addWidget(lbMode);
+        modeRow->addWidget(measureModeCombo_, 1);
+        vlRun->insertLayout(1, modeRow);
+    }
+
     // Mode buttons: 互斥
     auto *bg = new QButtonGroup(this);
     bg->setExclusive(true);
@@ -93,7 +112,11 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         emit uiCommandRequested("SET_MODE_MANUAL", {});
     });
     connect(ui_->btnStart, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("START_AUTO", {});
+        QVariantMap args;
+        args.insert(QStringLiteral("measure_mode"), measureModeText());
+        args.insert(QStringLiteral("mode_arg"), static_cast<int>(measureModeCommandArg()));
+        emit uiCommandRequested("START_AUTO", args);
+        ui_->listMessages->addItem(QStringLiteral("开始生产测量：%1").arg(measureModeText()));
     });
     connect(ui_->btnPause, &QPushButton::clicked, this, [this]{
         emit uiCommandRequested("PAUSE", {});
@@ -158,7 +181,8 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     setScannedPartIds(QVector<QString>(16));
     selectSlot(0);
 
-    ui_->listMessages->addItem(QStringLiteral("提示：Production 页已按新流程调整：PLC 提供实时态/扫码ID/测量包，最终 OK/NG 由上位机计算。"));
+    ui_->listMessages->addItem(QStringLiteral("提示：Production 页仅用于生产测量；标定流程已建议拆到独立 Calibration 页面。"));
+    ui_->listMessages->addItem(QStringLiteral("提示：业务模式为 普通/第二次/第三次/军检；复测不在顶部选择，而在 NG 处理时触发。"));
 }
 
 ProductionWidget::~ProductionWidget()
@@ -239,7 +263,7 @@ int ProductionWidget::runtimeStateStyleCode(int slot) const
 
 bool ProductionWidget::isPartIdEditableStep() const
 {
-    return (step_state_ == 0 || step_state_ == 10 || step_state_ == 30 || step_state_ == 220);
+    return (step_state_ == 0 || step_state_ == 10 || step_state_ == 30);
 }
 
 void ProductionWidget::refreshSelectedDetail()
@@ -360,14 +384,37 @@ QString ProductionWidget::stepText(quint16 step) const
     case 100: return QStringLiteral("放回料架");
     case 110: return QStringLiteral("循环完成");
     case 200: return QStringLiteral("标定待上料(15号槽)");
-    case 210: return QStringLiteral("标定扫码");
-    case 220: return QStringLiteral("标定等待核对ID");
-    case 230: return QStringLiteral("标定测量中");
-    case 240: return QStringLiteral("标定等待PC读取");
-    case 250: return QStringLiteral("标定完成");
+    case 210: return QStringLiteral("标定等待PC确认");
+    case 220: return QStringLiteral("标定测量中");
+    case 230: return QStringLiteral("标定等待PC读取");
+    case 240: return QStringLiteral("标定完成");
     case 900: return QStringLiteral("报警");
     case 910: return QStringLiteral("急停");
     default: return QStringLiteral("运行(%1)").arg(step);
+    }
+}
+
+QString ProductionWidget::measureModeText() const
+{
+    if (!measureModeCombo_) return QStringLiteral("NORMAL");
+    switch (static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt())) {
+    case ProductionMeasureMode::Second: return QStringLiteral("SECOND");
+    case ProductionMeasureMode::Third: return QStringLiteral("THIRD");
+    case ProductionMeasureMode::Mil: return QStringLiteral("MIL");
+    case ProductionMeasureMode::Normal:
+    default: return QStringLiteral("NORMAL");
+    }
+}
+
+quint32 ProductionWidget::measureModeCommandArg() const
+{
+    if (!measureModeCombo_) return 0;
+    switch (static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt())) {
+    case ProductionMeasureMode::Second: return 2;
+    case ProductionMeasureMode::Third: return 3;
+    case ProductionMeasureMode::Mil: return 9;
+    case ProductionMeasureMode::Normal:
+    default: return 1;
     }
 }
 

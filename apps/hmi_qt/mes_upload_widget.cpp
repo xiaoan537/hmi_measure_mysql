@@ -1,8 +1,11 @@
 #include "mes_upload_widget.hpp"
 #include "mes_worker.hpp"
 
-#include <QMessageBox>
 #include <QDateTime>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
 
 #include "ui_mes_upload_widget.h"
 
@@ -24,6 +27,12 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
 
     ui_->edPartId->setPlaceholderText("part_id contains...");
 
+    edTaskCard_ = new QLineEdit(this);
+    edTaskCard_->setPlaceholderText(QStringLiteral("卡号 contains..."));
+    if (auto *hl = qobject_cast<QHBoxLayout *>(ui_->horizontalLayoutFilters)) {
+        hl->insertWidget(3, edTaskCard_);
+    }
+
     ui_->cbType->clear();
     ui_->cbType->addItems({"ALL", "A", "B"});
 
@@ -39,11 +48,11 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
 
     // table
     model_ = new QStandardItemModel(this);
-    model_->setHorizontalHeaderLabels({"SEL", "measured_at_utc", "part_id", "type", "ok",
+    model_->setHorizontalHeaderLabels({"SEL", "measured_at_utc", "part_id", "task_card_no", "type", "ok",
                                        "total_len_mm", "bc_len_mm", "mes_status",
                                        "attempts", "last_error", "uuid"});
     ui_->tableView->setModel(model_);
-    ui_->tableView->setColumnHidden(10, true);
+    ui_->tableView->setColumnHidden(11, true);
     ui_->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui_->tableView->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
@@ -64,6 +73,7 @@ void MesUploadWidget::onQuery()
     f.from_utc = ui_->dtFrom->dateTime().toUTC();
     f.to_utc = ui_->dtTo->dateTime().toUTC();
     f.part_id_like = ui_->edPartId->text().trimmed();
+    f.task_card_no_like = edTaskCard_ ? edTaskCard_->text().trimmed() : QString();
     f.part_type = (ui_->cbType->currentText() == "ALL") ? "" : ui_->cbType->currentText();
 
     if (ui_->cbOk->currentText() == "成功")
@@ -97,6 +107,7 @@ void MesUploadWidget::fillTable(const QVector<core::MesUploadRow> &rows)
         items << sel;
         items << new QStandardItem(r.measured_at_utc.toUTC().toString(Qt::ISODateWithMs));
         items << new QStandardItem(r.part_id);
+        items << new QStandardItem(r.task_card_no);
         items << new QStandardItem(r.part_type);
         items << new QStandardItem(r.ok ? "1" : "0");
         items << new QStandardItem(QString::number(r.total_len_mm, 'f', 3));
@@ -118,7 +129,7 @@ QVector<QString> MesUploadWidget::selectedUuids() const
     {
         auto *sel = model_->item(i, 0);
         if (sel && sel->checkState() == Qt::Checked)
-            uuids.push_back(model_->item(i, 10)->text());
+            uuids.push_back(model_->item(i, 11)->text());
     }
     return uuids;
 }

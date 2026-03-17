@@ -32,5 +32,6 @@ private:
     MesWorker *worker_ = nullptr;
     core::Db db_;
 
+    class QLineEdit *edTaskCard_ = nullptr;
     QStandardItemModel *model_ = nullptr;
 };

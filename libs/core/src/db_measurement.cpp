@@ -231,6 +231,7 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
       "SELECT "
       "  m.id, m.measurement_uuid, "
       "  m.part_id, m.part_type, m.slot_id, IFNULL(m.slot_index, -1), "
+      "  IFNULL(t.task_card_no, ''), "
       "  m.measure_mode, m.measure_round, m.result_judgement, m.review_status, "
       "  m.measured_at_utc, "
       "  r.total_len_mm, r.ad_len_mm, r.bc_len_mm, "
@@ -238,6 +239,7 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
       "  r.runout_left_mm, r.runout_right_mm "
       "FROM measurement m "
       "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+      "LEFT JOIN mes_task t ON t.id = m.task_id "
       "ORDER BY m.id DESC "
       "LIMIT %1;").arg(limit);
 
@@ -258,40 +260,41 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
     row.slot_id = q.value(4).toString();
     row.slot_index = q.value(5).toInt();
 
-    row.measure_mode = q.value(6).toString();
-    row.measure_round = q.value(7).toInt();
-    row.result_judgement = q.value(8).toString();
-    row.review_status = q.value(9).toString();
-    row.measured_at_utc = q.value(10).toDateTime();
+    row.task_card_no = q.value(6).toString();
+    row.measure_mode = q.value(7).toString();
+    row.measure_round = q.value(8).toInt();
+    row.result_judgement = q.value(9).toString();
+    row.review_status = q.value(10).toString();
+    row.measured_at_utc = q.value(11).toDateTime();
 
-    row.has_total_len = !q.value(11).isNull();
-    row.has_ad_len = !q.value(12).isNull();
-    row.has_bc_len = !q.value(13).isNull();
-    row.has_id_left = !q.value(14).isNull();
-    row.has_id_right = !q.value(15).isNull();
-    row.has_od_left = !q.value(16).isNull();
-    row.has_od_right = !q.value(17).isNull();
-    row.has_runout_left = !q.value(18).isNull();
-    row.has_runout_right = !q.value(19).isNull();
+    row.has_total_len = !q.value(12).isNull();
+    row.has_ad_len = !q.value(13).isNull();
+    row.has_bc_len = !q.value(14).isNull();
+    row.has_id_left = !q.value(15).isNull();
+    row.has_id_right = !q.value(16).isNull();
+    row.has_od_left = !q.value(17).isNull();
+    row.has_od_right = !q.value(18).isNull();
+    row.has_runout_left = !q.value(19).isNull();
+    row.has_runout_right = !q.value(20).isNull();
 
     if (row.has_total_len)
-      row.total_len_mm = q.value(11).toDouble();
+      row.total_len_mm = q.value(12).toDouble();
     if (row.has_ad_len)
-      row.ad_len_mm = q.value(12).toDouble();
+      row.ad_len_mm = q.value(13).toDouble();
     if (row.has_bc_len)
-      row.bc_len_mm = q.value(13).toDouble();
+      row.bc_len_mm = q.value(14).toDouble();
     if (row.has_id_left)
-      row.id_left_mm = q.value(14).toDouble();
+      row.id_left_mm = q.value(15).toDouble();
     if (row.has_id_right)
-      row.id_right_mm = q.value(15).toDouble();
+      row.id_right_mm = q.value(16).toDouble();
     if (row.has_od_left)
-      row.od_left_mm = q.value(16).toDouble();
+      row.od_left_mm = q.value(17).toDouble();
     if (row.has_od_right)
-      row.od_right_mm = q.value(17).toDouble();
+      row.od_right_mm = q.value(18).toDouble();
     if (row.has_runout_left)
-      row.runout_left_mm = q.value(18).toDouble();
+      row.runout_left_mm = q.value(19).toDouble();
     if (row.has_runout_right)
-      row.runout_right_mm = q.value(19).toDouble();
+      row.runout_right_mm = q.value(20).toDouble();
 
     out.push_back(row);
   }
@@ -314,6 +317,7 @@ bool Db::getMeasurementDetailExById(quint64 measurement_id,
       "  m.id, m.measurement_uuid, "
       "  m.plc_cycle_id, m.plc_cycle_item_id, m.task_id, m.task_item_id, "
       "  m.part_id, m.part_type, m.slot_id, m.slot_index, m.item_index, "
+      "  IFNULL(t.task_card_no, ''), "
       "  m.measure_mode, m.measure_round, m.result_judgement, m.upload_kind, "
       "  m.measured_at_utc, m.operator_id, "
       "  m.review_status, m.reviewer_id, m.reviewed_at_utc, m.review_note, "
@@ -324,6 +328,7 @@ bool Db::getMeasurementDetailExById(quint64 measurement_id,
       "  r.tolerance_json, r.extra_json "
       "FROM measurement m "
       "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
+      "LEFT JOIN mes_task t ON t.id = m.task_id "
       "WHERE m.id = :id "
       "LIMIT 1;");
   q.bindValue(":id", QVariant::fromValue<qulonglong>(measurement_id));
@@ -354,35 +359,36 @@ bool Db::getMeasurementDetailExById(quint64 measurement_id,
   out->slot_index = q.value(9);
   out->item_index = q.value(10);
 
-  out->measure_mode = q.value(11).toString();
-  out->measure_round = q.value(12).toInt();
-  out->result_judgement = q.value(13).toString();
-  out->upload_kind = q.value(14).toString();
+  out->task_card_no = q.value(11).toString();
+  out->measure_mode = q.value(12).toString();
+  out->measure_round = q.value(13).toInt();
+  out->result_judgement = q.value(14).toString();
+  out->upload_kind = q.value(15).toString();
 
-  out->measured_at_utc = q.value(15).toDateTime();
-  out->operator_id = q.value(16).toString();
+  out->measured_at_utc = q.value(16).toDateTime();
+  out->operator_id = q.value(17).toString();
 
-  out->review_status = q.value(17).toString();
-  out->reviewer_id = q.value(18).toString();
-  out->reviewed_at_utc = q.value(19).toDateTime();
-  out->review_note = q.value(20).toString();
+  out->review_status = q.value(18).toString();
+  out->reviewer_id = q.value(19).toString();
+  out->reviewed_at_utc = q.value(20).toDateTime();
+  out->review_note = q.value(21).toString();
 
-  out->fail_reason_code = q.value(21).toString();
-  out->fail_reason_text = q.value(22).toString();
-  out->status = q.value(23).toString();
+  out->fail_reason_code = q.value(22).toString();
+  out->fail_reason_text = q.value(23).toString();
+  out->status = q.value(24).toString();
 
-  out->total_len_mm = q.value(24);
-  out->ad_len_mm = q.value(25);
-  out->bc_len_mm = q.value(26);
-  out->id_left_mm = q.value(27);
-  out->id_right_mm = q.value(28);
-  out->od_left_mm = q.value(29);
-  out->od_right_mm = q.value(30);
-  out->runout_left_mm = q.value(31);
-  out->runout_right_mm = q.value(32);
+  out->total_len_mm = q.value(25);
+  out->ad_len_mm = q.value(26);
+  out->bc_len_mm = q.value(27);
+  out->id_left_mm = q.value(28);
+  out->id_right_mm = q.value(29);
+  out->od_left_mm = q.value(30);
+  out->od_right_mm = q.value(31);
+  out->runout_left_mm = q.value(32);
+  out->runout_right_mm = q.value(33);
 
-  out->tolerance_json = q.value(33).toString();
-  out->extra_json = q.value(34).toString();
+  out->tolerance_json = q.value(34).toString();
+  out->extra_json = q.value(35).toString();
 
   return true;
 }

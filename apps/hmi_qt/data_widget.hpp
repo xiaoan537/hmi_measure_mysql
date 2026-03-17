@@ -37,5 +37,6 @@ private:
   Ui::DataWidget *ui_ = nullptr;
   core::AppConfig cfg_;
 
+  class QLineEdit *editTaskCard_ = nullptr;
   class QStandardItemModel *model_ = nullptr;
 };

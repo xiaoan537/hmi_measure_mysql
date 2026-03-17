@@ -13,6 +13,7 @@ constexpr int kCalibrationSlotIndex = 15;
 // 1) PLC 负责运动控制、扫码、槽位有无、冻结测量包；
 // 2) PC 负责任务卡比对、人工纠错、算法计算、公差判定、落盘/MES；
 // 3) PLC 不再作为最终 OK/NG 的真相源；PC 也不回写计算结果块，只写 pc_ack。
+// 4) 生产业务模式由 PC 在 START_AUTO 时声明：NORMAL/SECOND/THIRD/MIL；复测不属于顶部模式，而是 NG 后即时动作。
 
 enum class PlcRunKind : quint16 {
   None = 0,
@@ -44,14 +45,21 @@ enum class PlcStepStateV2 : quint16 {
   CycleComplete = 110,
 
   CalWaitLoadSlot15 = 200,
-  CalScanSlot15 = 210,
-  CalWaitPcIdCheck = 220,
-  CalMeasure = 230,
-  CalWaitPcRead = 240,
-  CalComplete = 250,
+  CalWaitPcConfirm = 210,
+  CalMeasure = 220,
+  CalWaitPcRead = 230,
+  CalComplete = 240,
 
   Fault = 900,
   EStop = 910,
+};
+
+
+enum class ProductionMeasureModeV2 : quint16 {
+  Normal = 1,
+  Second = 2,
+  Third = 3,
+  Mil = 9,
 };
 
 enum class PlcCommandCodeV2 : quint16 {
@@ -68,6 +76,7 @@ enum class PlcCommandCodeV2 : quint16 {
   ContinueAfterIdCheck = 200,
   RequestRescanIds = 201,
   ContinueAfterNgConfirm = 202,
+  StartRetestCurrent = 203,
 
   GripperOpen = 300,
   GripperClose = 301,

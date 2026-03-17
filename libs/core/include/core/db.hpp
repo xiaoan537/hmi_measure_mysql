@@ -17,6 +17,7 @@ struct MesUploadRow {
   QString measurement_uuid;
   QString part_id;
   QString part_type;
+  QString task_card_no;
   bool ok = false;
   QDateTime measured_at_utc;
   double total_len_mm = 0.0;
@@ -37,7 +38,8 @@ struct MeasurementListRowEx {
   QString slot_id;
   int slot_index = -1;
 
-  QString measure_mode; // NORMAL / RETEST / MANUAL / MIL_CHECK
+  QString task_card_no;
+  QString measure_mode; // NORMAL / SECOND / THIRD / MIL
   int measure_round = 1;
   QString result_judgement; // OK / NG / INVALID / ABORTED
   QString review_status;    // PENDING / APPROVED / ...
@@ -82,6 +84,7 @@ struct MeasurementDetailEx {
   QVariant slot_index;
   QVariant item_index;
 
+  QString task_card_no;
   QString measure_mode;
   int measure_round = 1;
   QString result_judgement;
@@ -118,6 +121,7 @@ struct MesUploadFilter {
   QDateTime from_utc;   // 查询起始时间
   QDateTime to_utc;     // 查询结束时间
   QString part_id_like; // optional，工件ID模糊匹配（可选）
+  QString task_card_no_like; // optional，任务卡号模糊匹配
   QString part_type; // "", "A", "B"，工件类型过滤:""（全部）、"A"、"B"
   int ok_filter =
       -1; // -1=all, 1=ok, 0=ng,合格性过滤：-1（全部）、1（合格）、0（不合格）
