@@ -35,16 +35,21 @@ struct IngestItemInput {
   QString fail_reason_text;
   bool is_valid = true;
 
-  QString measure_mode;     // NORMAL / RETEST / MANUAL / MIL_CHECK
-  int measure_round = 1;    // 1 / 2 / 3 / 9
-  QString result_judgement; // OK / NG / INVALID / ABORTED
-  QString upload_kind;      // FIRST_MEASURE / ...
+  QString run_kind = "PRODUCTION"; // PRODUCTION / CALIBRATION
+  QString measure_mode;              // NORMAL / SECOND / THIRD / MIL；标定时可空
+  QString attempt_kind = "PRIMARY";  // PRIMARY / RETEST
+  int measure_round = 1;             // 兼容字段：1 / 2 / 3 / 9
+  QString result_judgement;          // OK / NG / INVALID / ABORTED
+  QString fail_class;                // LENGTH / GEOMETRY / MIXED
+  QString upload_kind;               // FIRST_MEASURE / ...
 
   QVariant task_id;
   QVariant task_item_id;
   QString operator_id;
 
   QString review_status = "PENDING";
+  bool is_effective = true;
+  QVariant superseded_by;
   QString status = "READY"; // NEW / READY / REPORTED / ARCHIVED
 };
 

@@ -90,23 +90,31 @@ bool Db::insertMeasurementEx(
     const QDateTime &measured_at_utc, const QString &operator_id,
     const QString &review_status, const QString &fail_reason_code,
     const QString &fail_reason_text, const QString &status, quint64 *new_id,
-    QString *err) {
+    QString *err, const QString &run_kind, const QString &attempt_kind,
+    const QString &fail_class, bool is_effective,
+    const QVariant &superseded_by) {
   QSqlQuery q(db_);
   q.prepare("INSERT INTO measurement ("
             " measurement_uuid, "
             " plc_cycle_id, plc_cycle_item_id, task_id, task_item_id, "
+            " run_kind, "
             " part_id, part_type, slot_id, slot_index, item_index, "
-            " measure_mode, measure_round, result_judgement, upload_kind, "
+            " measure_mode, attempt_kind, measure_round, "
+            " result_judgement, fail_class, upload_kind, "
             " measured_at_utc, operator_id, "
             " review_status, fail_reason_code, fail_reason_text, "
+            " is_effective, superseded_by, "
             " status, created_at_utc, updated_at_utc"
             ") VALUES ("
             " :measurement_uuid, "
             " :plc_cycle_id, :plc_cycle_item_id, :task_id, :task_item_id, "
+            " :run_kind, "
             " :part_id, :part_type, :slot_id, :slot_index, :item_index, "
-            " :measure_mode, :measure_round, :result_judgement, :upload_kind, "
+            " :measure_mode, :attempt_kind, :measure_round, "
+            " :result_judgement, :fail_class, :upload_kind, "
             " :measured_at_utc, :operator_id, "
             " :review_status, :fail_reason_code, :fail_reason_text, "
+            " :is_effective, :superseded_by, "
             " :status, NOW(3), NOW(3)"
             ");");
 
@@ -116,27 +124,30 @@ bool Db::insertMeasurementEx(
   q.bindValue(":task_id", task_id);
   q.bindValue(":task_item_id", task_item_id);
 
+  q.bindValue(":run_kind", run_kind);
   q.bindValue(":part_id", part_id);
   q.bindValue(":part_type", part_type);
   q.bindValue(":slot_id", slot_id);
   q.bindValue(":slot_index", slot_index);
   q.bindValue(":item_index", item_index);
 
-  q.bindValue(":measure_mode",
-              measure_mode); // NORMAL / RETEST / MANUAL / MIL_CHECK
-  q.bindValue(":measure_round", measure_round); // 1 / 2 / 3 / 9
-  q.bindValue(":result_judgement",
-              result_judgement); // OK / NG / INVALID / ABORTED
+  q.bindValue(":measure_mode", measure_mode);
+  q.bindValue(":attempt_kind", attempt_kind);
+  q.bindValue(":measure_round", measure_round); // 兼容字段：1 / 2 / 3 / 9
+  q.bindValue(":result_judgement", result_judgement);
+  q.bindValue(":fail_class", fail_class);
   q.bindValue(":upload_kind", upload_kind);
 
   q.bindValue(":measured_at_utc", measured_at_utc);
   q.bindValue(":operator_id", operator_id);
 
-  q.bindValue(":review_status", review_status); // PENDING / APPROVED / ...
+  q.bindValue(":review_status", review_status);
   q.bindValue(":fail_reason_code", fail_reason_code);
   q.bindValue(":fail_reason_text", fail_reason_text);
+  q.bindValue(":is_effective", is_effective ? 1 : 0);
+  q.bindValue(":superseded_by", superseded_by);
 
-  q.bindValue(":status", status); // NEW / READY / REPORTED / ARCHIVED
+  q.bindValue(":status", status);
 
   if (!q.exec()) {
     if (err)
@@ -220,19 +231,35 @@ bool Db::bindCycleItemMeasurement(quint64 plc_cycle_item_id,
   return true;
 }
 
-// 这个接口先做“查最新 N 条”，后面 Data 页面很好接
+// 兼容旧调用：按最新时间倒序查最新 N 条
 QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
                                                             QString *err) {
+  MeasurementQueryFilter f;
+  f.effective_only = -1;
+  return queryMeasurementsEx(f, limit, err);
+}
+
+QVector<MeasurementListRowEx>
+Db::queryMeasurementsEx(const MeasurementQueryFilter &f, int limit,
+                        QString *err) {
   QVector<MeasurementListRowEx> out;
   if (limit <= 0)
     limit = 50;
 
-  const QString sql = QString(
+  QString sql =
       "SELECT "
       "  m.id, m.measurement_uuid, "
       "  m.part_id, m.part_type, m.slot_id, IFNULL(m.slot_index, -1), "
       "  IFNULL(t.task_card_no, ''), "
-      "  m.measure_mode, m.measure_round, m.result_judgement, m.review_status, "
+      "  IFNULL(m.run_kind, 'PRODUCTION'), "
+      "  IFNULL(m.measure_mode, ''), "
+      "  IFNULL(m.attempt_kind, CASE WHEN UPPER(m.measure_mode)='RETEST' THEN 'RETEST' ELSE 'PRIMARY' END), "
+      "  m.measure_round, "
+      "  m.result_judgement, "
+      "  IFNULL(m.fail_class, ''), "
+      "  m.review_status, "
+      "  IFNULL(m.is_effective, 1), "
+      "  m.superseded_by, "
       "  m.measured_at_utc, "
       "  r.total_len_mm, r.ad_len_mm, r.bc_len_mm, "
       "  r.id_left_mm, r.id_right_mm, r.od_left_mm, r.od_right_mm, "
@@ -240,11 +267,56 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
       "FROM measurement m "
       "LEFT JOIN measurement_result r ON r.measurement_id = m.id "
       "LEFT JOIN mes_task t ON t.id = m.task_id "
-      "ORDER BY m.id DESC "
-      "LIMIT %1;").arg(limit);
+      "WHERE 1=1 ";
+
+  if (f.from_utc.isValid())
+    sql += " AND m.measured_at_utc >= :from_utc ";
+  if (f.to_utc.isValid())
+    sql += " AND m.measured_at_utc <= :to_utc ";
+  if (!f.part_id_like.trimmed().isEmpty())
+    sql += " AND m.part_id LIKE :part_id_like ";
+  if (!f.task_card_no_like.trimmed().isEmpty())
+    sql += " AND IFNULL(t.task_card_no, '') LIKE :task_card_no_like ";
+  if (!f.part_type.trimmed().isEmpty())
+    sql += " AND m.part_type = :part_type ";
+  if (!f.run_kind.trimmed().isEmpty())
+    sql += " AND IFNULL(m.run_kind, 'PRODUCTION') = :run_kind ";
+  if (!f.measure_mode.trimmed().isEmpty())
+    sql += " AND IFNULL(m.measure_mode, '') = :measure_mode ";
+  if (!f.attempt_kind.trimmed().isEmpty())
+    sql += " AND IFNULL(m.attempt_kind, CASE WHEN UPPER(m.measure_mode)='RETEST' THEN 'RETEST' ELSE 'PRIMARY' END) = :attempt_kind ";
+  if (!f.result_judgement.trimmed().isEmpty())
+    sql += " AND m.result_judgement = :result_judgement ";
+  if (f.effective_only == 1)
+    sql += " AND IFNULL(m.is_effective, 1) = 1 ";
+  else if (f.effective_only == 0)
+    sql += " AND IFNULL(m.is_effective, 1) = 0 ";
+
+  sql += " ORDER BY m.measured_at_utc DESC, m.id DESC LIMIT :limit;";
 
   QSqlQuery q(db_);
-  if (!q.exec(sql)) {
+  q.prepare(sql);
+  if (f.from_utc.isValid())
+    q.bindValue(":from_utc", f.from_utc);
+  if (f.to_utc.isValid())
+    q.bindValue(":to_utc", f.to_utc);
+  if (!f.part_id_like.trimmed().isEmpty())
+    q.bindValue(":part_id_like", "%" + f.part_id_like + "%");
+  if (!f.task_card_no_like.trimmed().isEmpty())
+    q.bindValue(":task_card_no_like", "%" + f.task_card_no_like + "%");
+  if (!f.part_type.trimmed().isEmpty())
+    q.bindValue(":part_type", f.part_type);
+  if (!f.run_kind.trimmed().isEmpty())
+    q.bindValue(":run_kind", f.run_kind);
+  if (!f.measure_mode.trimmed().isEmpty())
+    q.bindValue(":measure_mode", f.measure_mode);
+  if (!f.attempt_kind.trimmed().isEmpty())
+    q.bindValue(":attempt_kind", f.attempt_kind);
+  if (!f.result_judgement.trimmed().isEmpty())
+    q.bindValue(":result_judgement", f.result_judgement);
+  q.bindValue(":limit", limit);
+
+  if (!q.exec()) {
     if (err)
       *err = q.lastError().text();
     return out;
@@ -261,40 +333,45 @@ QVector<MeasurementListRowEx> Db::queryLatestMeasurementsEx(int limit,
     row.slot_index = q.value(5).toInt();
 
     row.task_card_no = q.value(6).toString();
-    row.measure_mode = q.value(7).toString();
-    row.measure_round = q.value(8).toInt();
-    row.result_judgement = q.value(9).toString();
-    row.review_status = q.value(10).toString();
-    row.measured_at_utc = q.value(11).toDateTime();
+    row.run_kind = q.value(7).toString();
+    row.measure_mode = q.value(8).toString();
+    row.attempt_kind = q.value(9).toString();
+    row.measure_round = q.value(10).toInt();
+    row.result_judgement = q.value(11).toString();
+    row.fail_class = q.value(12).toString();
+    row.review_status = q.value(13).toString();
+    row.is_effective = q.value(14).toInt() != 0;
+    row.superseded_by = q.value(15);
+    row.measured_at_utc = q.value(16).toDateTime();
 
-    row.has_total_len = !q.value(12).isNull();
-    row.has_ad_len = !q.value(13).isNull();
-    row.has_bc_len = !q.value(14).isNull();
-    row.has_id_left = !q.value(15).isNull();
-    row.has_id_right = !q.value(16).isNull();
-    row.has_od_left = !q.value(17).isNull();
-    row.has_od_right = !q.value(18).isNull();
-    row.has_runout_left = !q.value(19).isNull();
-    row.has_runout_right = !q.value(20).isNull();
+    row.has_total_len = !q.value(17).isNull();
+    row.has_ad_len = !q.value(18).isNull();
+    row.has_bc_len = !q.value(19).isNull();
+    row.has_id_left = !q.value(20).isNull();
+    row.has_id_right = !q.value(21).isNull();
+    row.has_od_left = !q.value(22).isNull();
+    row.has_od_right = !q.value(23).isNull();
+    row.has_runout_left = !q.value(24).isNull();
+    row.has_runout_right = !q.value(25).isNull();
 
     if (row.has_total_len)
-      row.total_len_mm = q.value(12).toDouble();
+      row.total_len_mm = q.value(17).toDouble();
     if (row.has_ad_len)
-      row.ad_len_mm = q.value(13).toDouble();
+      row.ad_len_mm = q.value(18).toDouble();
     if (row.has_bc_len)
-      row.bc_len_mm = q.value(14).toDouble();
+      row.bc_len_mm = q.value(19).toDouble();
     if (row.has_id_left)
-      row.id_left_mm = q.value(15).toDouble();
+      row.id_left_mm = q.value(20).toDouble();
     if (row.has_id_right)
-      row.id_right_mm = q.value(16).toDouble();
+      row.id_right_mm = q.value(21).toDouble();
     if (row.has_od_left)
-      row.od_left_mm = q.value(17).toDouble();
+      row.od_left_mm = q.value(22).toDouble();
     if (row.has_od_right)
-      row.od_right_mm = q.value(18).toDouble();
+      row.od_right_mm = q.value(23).toDouble();
     if (row.has_runout_left)
-      row.runout_left_mm = q.value(19).toDouble();
+      row.runout_left_mm = q.value(24).toDouble();
     if (row.has_runout_right)
-      row.runout_right_mm = q.value(20).toDouble();
+      row.runout_right_mm = q.value(25).toDouble();
 
     out.push_back(row);
   }
@@ -318,7 +395,11 @@ bool Db::getMeasurementDetailExById(quint64 measurement_id,
       "  m.plc_cycle_id, m.plc_cycle_item_id, m.task_id, m.task_item_id, "
       "  m.part_id, m.part_type, m.slot_id, m.slot_index, m.item_index, "
       "  IFNULL(t.task_card_no, ''), "
-      "  m.measure_mode, m.measure_round, m.result_judgement, m.upload_kind, "
+      "  IFNULL(m.run_kind, 'PRODUCTION'), "
+      "  IFNULL(m.measure_mode, ''), "
+      "  IFNULL(m.attempt_kind, CASE WHEN UPPER(m.measure_mode)='RETEST' THEN 'RETEST' ELSE 'PRIMARY' END), "
+      "  m.measure_round, m.result_judgement, IFNULL(m.fail_class, ''), "
+      "  IFNULL(m.is_effective, 1), m.superseded_by, m.upload_kind, "
       "  m.measured_at_utc, m.operator_id, "
       "  m.review_status, m.reviewer_id, m.reviewed_at_utc, m.review_note, "
       "  m.fail_reason_code, m.fail_reason_text, m.status, "
@@ -360,35 +441,40 @@ bool Db::getMeasurementDetailExById(quint64 measurement_id,
   out->item_index = q.value(10);
 
   out->task_card_no = q.value(11).toString();
-  out->measure_mode = q.value(12).toString();
-  out->measure_round = q.value(13).toInt();
-  out->result_judgement = q.value(14).toString();
-  out->upload_kind = q.value(15).toString();
+  out->run_kind = q.value(12).toString();
+  out->measure_mode = q.value(13).toString();
+  out->attempt_kind = q.value(14).toString();
+  out->measure_round = q.value(15).toInt();
+  out->result_judgement = q.value(16).toString();
+  out->fail_class = q.value(17).toString();
+  out->is_effective = q.value(18).toInt() != 0;
+  out->superseded_by = q.value(19);
+  out->upload_kind = q.value(20).toString();
 
-  out->measured_at_utc = q.value(16).toDateTime();
-  out->operator_id = q.value(17).toString();
+  out->measured_at_utc = q.value(21).toDateTime();
+  out->operator_id = q.value(22).toString();
 
-  out->review_status = q.value(18).toString();
-  out->reviewer_id = q.value(19).toString();
-  out->reviewed_at_utc = q.value(20).toDateTime();
-  out->review_note = q.value(21).toString();
+  out->review_status = q.value(23).toString();
+  out->reviewer_id = q.value(24).toString();
+  out->reviewed_at_utc = q.value(25).toDateTime();
+  out->review_note = q.value(26).toString();
 
-  out->fail_reason_code = q.value(22).toString();
-  out->fail_reason_text = q.value(23).toString();
-  out->status = q.value(24).toString();
+  out->fail_reason_code = q.value(27).toString();
+  out->fail_reason_text = q.value(28).toString();
+  out->status = q.value(29).toString();
 
-  out->total_len_mm = q.value(25);
-  out->ad_len_mm = q.value(26);
-  out->bc_len_mm = q.value(27);
-  out->id_left_mm = q.value(28);
-  out->id_right_mm = q.value(29);
-  out->od_left_mm = q.value(30);
-  out->od_right_mm = q.value(31);
-  out->runout_left_mm = q.value(32);
-  out->runout_right_mm = q.value(33);
+  out->total_len_mm = q.value(30);
+  out->ad_len_mm = q.value(31);
+  out->bc_len_mm = q.value(32);
+  out->id_left_mm = q.value(33);
+  out->id_right_mm = q.value(34);
+  out->od_left_mm = q.value(35);
+  out->od_right_mm = q.value(36);
+  out->runout_left_mm = q.value(37);
+  out->runout_right_mm = q.value(38);
 
-  out->tolerance_json = q.value(34).toString();
-  out->extra_json = q.value(35).toString();
+  out->tolerance_json = q.value(39).toString();
+  out->extra_json = q.value(40).toString();
 
   return true;
 }

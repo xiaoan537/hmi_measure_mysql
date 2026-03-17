@@ -645,6 +645,96 @@ bool Db::ensureSchema(QString *err) {
     cur = 7;
   }
 
+
+  // v8: measurement business-model fields + card query indexes
+  if (cur < 8) {
+    if (!db_.transaction())
+      return fail(db_.lastError().text());
+
+    if (!columnExists("measurement", "run_kind")) {
+      if (!q.exec("ALTER TABLE measurement ADD COLUMN run_kind VARCHAR(16) NOT NULL DEFAULT 'PRODUCTION' AFTER task_item_id;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!columnExists("measurement", "attempt_kind")) {
+      if (!q.exec("ALTER TABLE measurement ADD COLUMN attempt_kind VARCHAR(16) NOT NULL DEFAULT 'PRIMARY' AFTER measure_mode;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!columnExists("measurement", "fail_class")) {
+      if (!q.exec("ALTER TABLE measurement ADD COLUMN fail_class VARCHAR(16) NULL AFTER result_judgement;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!columnExists("measurement", "is_effective")) {
+      if (!q.exec("ALTER TABLE measurement ADD COLUMN is_effective TINYINT(1) NOT NULL DEFAULT 1 AFTER fail_reason_text;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!columnExists("measurement", "superseded_by")) {
+      if (!q.exec("ALTER TABLE measurement ADD COLUMN superseded_by BIGINT UNSIGNED NULL AFTER is_effective;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+
+    if (!q.exec("ALTER TABLE measurement MODIFY COLUMN measure_mode VARCHAR(16) NULL;")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+
+    if (!q.exec("UPDATE measurement SET run_kind='PRODUCTION' WHERE run_kind IS NULL OR run_kind='';")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+    if (!q.exec("UPDATE measurement "
+                "SET attempt_kind = CASE "
+                "  WHEN UPPER(measure_mode)='RETEST' THEN 'RETEST' "
+                "  ELSE 'PRIMARY' "
+                "END "
+                "WHERE attempt_kind IS NULL OR attempt_kind='';")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+    if (!q.exec("UPDATE measurement SET is_effective=1 WHERE is_effective IS NULL;")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+
+    if (!indexExists("measurement", "idx_measurement_task_time")) {
+      if (!q.exec("CREATE INDEX idx_measurement_task_time ON measurement(task_id, measured_at_utc, id);")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!indexExists("measurement", "idx_measurement_chain")) {
+      if (!q.exec("CREATE INDEX idx_measurement_chain ON measurement(part_id, run_kind, measure_mode, is_effective, measured_at_utc);")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!indexExists("measurement", "idx_measurement_superseded_by")) {
+      if (!q.exec("CREATE INDEX idx_measurement_superseded_by ON measurement(superseded_by);")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+
+    if (!applyVersion(8)) {
+      db_.rollback();
+      return fail("Failed to write schema_migrations v8");
+    }
+
+    if (!db_.commit())
+      return fail(db_.lastError().text());
+
+    cur = 8;
+  }
+
   return true;
 }
 

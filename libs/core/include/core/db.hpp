@@ -18,6 +18,10 @@ struct MesUploadRow {
   QString part_id;
   QString part_type;
   QString task_card_no;
+  QString run_kind;      // PRODUCTION / CALIBRATION
+  QString measure_mode;  // NORMAL / SECOND / THIRD / MIL
+  QString attempt_kind;  // PRIMARY / RETEST
+  bool is_effective = true;
   bool ok = false;
   QDateTime measured_at_utc;
   double total_len_mm = 0.0;
@@ -39,10 +43,15 @@ struct MeasurementListRowEx {
   int slot_index = -1;
 
   QString task_card_no;
-  QString measure_mode; // NORMAL / SECOND / THIRD / MIL
-  int measure_round = 1;
+  QString run_kind;         // PRODUCTION / CALIBRATION
+  QString measure_mode;     // NORMAL / SECOND / THIRD / MIL
+  QString attempt_kind;     // PRIMARY / RETEST
+  int measure_round = 1;    // 兼容字段
   QString result_judgement; // OK / NG / INVALID / ABORTED
+  QString fail_class;       // LENGTH / GEOMETRY / MIXED
   QString review_status;    // PENDING / APPROVED / ...
+  bool is_effective = true;
+  QVariant superseded_by;
 
   QDateTime measured_at_utc;
 
@@ -85,9 +94,14 @@ struct MeasurementDetailEx {
   QVariant item_index;
 
   QString task_card_no;
+  QString run_kind;
   QString measure_mode;
-  int measure_round = 1;
+  QString attempt_kind;
+  int measure_round = 1; // 兼容字段
   QString result_judgement;
+  QString fail_class;
+  bool is_effective = true;
+  QVariant superseded_by;
   QString upload_kind;
 
   QDateTime measured_at_utc;
@@ -114,6 +128,22 @@ struct MeasurementDetailEx {
 
   QString tolerance_json;
   QString extra_json;
+};
+
+struct MeasurementQueryFilter {
+  QDateTime from_utc;
+  QDateTime to_utc;
+
+  QString part_id_like;
+  QString task_card_no_like;
+
+  QString part_type;        // "", "A", "B"
+  QString run_kind;         // "", "PRODUCTION", "CALIBRATION"
+  QString measure_mode;     // "", "NORMAL", "SECOND", "THIRD", "MIL"
+  QString attempt_kind;     // "", "PRIMARY", "RETEST"
+  QString result_judgement; // "", "OK", "NG", ...
+
+  int effective_only = -1;  // -1=all, 1=only effective, 0=only superseded
 };
 
 // 定义查询测量结果时的过滤条件。用户可以通过这个结构体指定时间范围、工件类型、合格性和MES状态等条件来筛选需要查看的测量结果。
@@ -202,7 +232,11 @@ public:
       const QDateTime &measured_at_utc, const QString &operator_id,
       const QString &review_status, const QString &fail_reason_code,
       const QString &fail_reason_text, const QString &status, quint64 *new_id,
-      QString *err);
+      QString *err, const QString &run_kind = QStringLiteral("PRODUCTION"),
+      const QString &attempt_kind = QStringLiteral("PRIMARY"),
+      const QString &fail_class = QString(),
+      bool is_effective = true,
+      const QVariant &superseded_by = QVariant());
 
   bool insertMeasurementResultEx(
       quint64 measurement_id, const QVariant &total_len_mm,
@@ -231,6 +265,8 @@ public:
 
   QVector<MeasurementListRowEx> queryLatestMeasurementsEx(int limit,
                                                           QString *err);
+  QVector<MeasurementListRowEx> queryMeasurementsEx(
+      const MeasurementQueryFilter &f, int limit, QString *err);
 
   bool getMeasurementDetailExById(quint64 measurement_id,
                                   MeasurementDetailEx *out, QString *err);

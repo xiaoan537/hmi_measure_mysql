@@ -68,6 +68,10 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
   QString sql =
       "SELECT "
       "  m.measurement_uuid, m.part_id, m.part_type, IFNULL(t.task_card_no, ''), "
+      "  IFNULL(m.run_kind, 'PRODUCTION'), "
+      "  IFNULL(m.measure_mode, ''), "
+      "  IFNULL(m.attempt_kind, CASE WHEN UPPER(m.measure_mode)='RETEST' THEN 'RETEST' ELSE 'PRIMARY' END), "
+      "  IFNULL(m.is_effective, 1), "
       "  CASE WHEN m.result_judgement='OK' THEN 1 ELSE 0 END AS ok_flag, "
       "  m.measured_at_utc, "
       "  r.total_len_mm, r.bc_len_mm, "
@@ -77,7 +81,9 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
       "LEFT JOIN mes_task t ON t.id = m.task_id "
       "LEFT JOIN mes_outbox o "
       "  ON o.measurement_uuid = m.measurement_uuid AND o.event_type='MEASURE_RESULT_READY' "
-      "WHERE m.measured_at_utc >= :from_utc AND m.measured_at_utc <= :to_utc ";
+      "WHERE m.measured_at_utc >= :from_utc AND m.measured_at_utc <= :to_utc "
+      "  AND IFNULL(m.run_kind, 'PRODUCTION') = 'PRODUCTION' "
+      "  AND IFNULL(m.is_effective, 1) = 1 ";
 
   if (!f.part_id_like.trimmed().isEmpty())
     sql += " AND m.part_id LIKE :part_id_like ";
@@ -123,19 +129,23 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
     r.part_id = q.value(1).toString();
     r.part_type = q.value(2).toString();
     r.task_card_no = q.value(3).toString();
-    r.ok = q.value(4).toInt() != 0;
-    r.measured_at_utc = q.value(5).toDateTime();
-    r.total_len_mm = q.value(6).isNull() ? 0.0 : q.value(6).toDouble();
-    r.bc_len_mm = q.value(7).isNull() ? 0.0 : q.value(7).toDouble();
+    r.run_kind = q.value(4).toString();
+    r.measure_mode = q.value(5).toString();
+    r.attempt_kind = q.value(6).toString();
+    r.is_effective = q.value(7).toInt() != 0;
+    r.ok = q.value(8).toInt() != 0;
+    r.measured_at_utc = q.value(9).toDateTime();
+    r.total_len_mm = q.value(10).isNull() ? 0.0 : q.value(10).toDouble();
+    r.bc_len_mm = q.value(11).isNull() ? 0.0 : q.value(11).toDouble();
 
-    if (q.value(8).isNull()) {
+    if (q.value(12).isNull()) {
       r.mes_status = "NOT_QUEUED";
       r.attempt_count = 0;
     } else {
-      r.mes_status = q.value(8).toString();
-      r.attempt_count = q.value(9).toInt();
-      r.last_error = q.value(10).toString();
-      r.mes_updated_at_utc = q.value(11).toDateTime();
+      r.mes_status = q.value(12).toString();
+      r.attempt_count = q.value(13).toInt();
+      r.last_error = q.value(14).toString();
+      r.mes_updated_at_utc = q.value(15).toDateTime();
     }
 
     out.push_back(r);
@@ -147,6 +157,35 @@ core::Db::queryMesUploadRows(const MesUploadFilter &f, int limit,
 // 入队：若mes_outbox中已存在：状态为SENT -> 则拒绝，避免重复上传；状态为其他 ->
 // 则重置为 PENDING；不存在 -> 生成 payload + INSERT
 bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err) {
+  {
+    QSqlQuery pre(db_);
+    pre.prepare("SELECT IFNULL(run_kind, 'PRODUCTION'), IFNULL(is_effective, 1) "
+                "FROM measurement WHERE measurement_uuid=:u LIMIT 1;");
+    pre.bindValue(":u", uuid);
+    if (!pre.exec()) {
+      if (err)
+        *err = pre.lastError().text();
+      return false;
+    }
+    if (!pre.next()) {
+      if (err)
+        *err = "measurement not found for uuid";
+      return false;
+    }
+    const QString runKind = pre.value(0).toString();
+    const bool effective = pre.value(1).toInt() != 0;
+    if (runKind != "PRODUCTION") {
+      if (err)
+        *err = "CALIBRATION measurement is not allowed to upload MES";
+      return false;
+    }
+    if (!effective) {
+      if (err)
+        *err = "measurement already superseded by a newer effective record";
+      return false;
+    }
+  }
+
   // 检查是否已经存在待上传记录， 即mes_outbox表 检查是否已经存在该 UUID
   // 的待上传记录
   QSqlQuery q(db_);

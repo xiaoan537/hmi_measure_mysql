@@ -5,9 +5,9 @@
 
 namespace core {
 
-enum class TaskType { Normal, Retest, MilCheck, Manual };
+enum class TaskType { Normal, Second, Third, MilCheck, Calibration };
 
-enum class MeasureMode { Normal, Retest, Manual, MilCheck };
+enum class MeasureMode { Normal, Second, Third, MilCheck };
 
 enum class ResultJudgement { Ok, Ng, Invalid, Aborted };
 
@@ -69,9 +69,14 @@ struct MeasurementEx {
   std::optional<int> slot_index;
   std::optional<int> item_index;
 
-  QString measure_mode; // NORMAL / RETEST / MANUAL / MIL_CHECK
-  int measure_round = 1;
+  QString run_kind;     // PRODUCTION / CALIBRATION
+  QString measure_mode;  // NORMAL / SECOND / THIRD / MIL；标定时可空
+  QString attempt_kind;  // PRIMARY / RETEST
+  int measure_round = 1; // 兼容字段：1 / 2 / 3 / 9
   QString result_judgement; // OK / NG / INVALID / ABORTED
+  QString fail_class;       // LENGTH / GEOMETRY / MIXED
+  bool is_effective = true;
+  std::optional<quint64> superseded_by;
   QString upload_kind;
 
   QDateTime measured_at_utc;

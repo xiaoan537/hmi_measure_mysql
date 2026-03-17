@@ -59,7 +59,10 @@ bool MeasurementIngestService::validateRequest(
     if (it.part_id.trimmed().isEmpty()) {
       return fail(QStringLiteral("items[%1].part_id 不能为空").arg(i));
     }
-    if (it.measure_mode.trimmed().isEmpty()) {
+    if (it.run_kind != "PRODUCTION" && it.run_kind != "CALIBRATION") {
+      return fail(QStringLiteral("items[%1].run_kind 必须是 PRODUCTION 或 CALIBRATION").arg(i));
+    }
+    if (it.run_kind == "PRODUCTION" && it.measure_mode.trimmed().isEmpty()) {
       return fail(QStringLiteral("items[%1].measure_mode 不能为空").arg(i));
     }
     if (it.result_judgement.trimmed().isEmpty()) {
@@ -146,7 +149,8 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
             item.measure_round, item.result_judgement, item.upload_kind,
             measuredAtUtc, item.operator_id, item.review_status,
             item.fail_reason_code, item.fail_reason_text, item.status,
-            &measurementId, &txErr)) {
+            &measurementId, &txErr, item.run_kind, item.attempt_kind,
+            item.fail_class, item.is_effective, item.superseded_by)) {
       db_.rollbackTx(nullptr);
       return fail(QStringLiteral("insertMeasurementEx[%1] failed: %2")
                       .arg(i)

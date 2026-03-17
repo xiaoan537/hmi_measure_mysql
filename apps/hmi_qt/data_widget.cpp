@@ -99,8 +99,10 @@ void DataWidget::setupModel() {
   model_->setHorizontalHeaderLabels(
       {QStringLiteral("测量ID"), QStringLiteral("测量时间"),
        QStringLiteral("工件号"), QStringLiteral("卡号"), QStringLiteral("型号"),
-       QStringLiteral("模式"), QStringLiteral("轮次"), QStringLiteral("判定"),
-       QStringLiteral("结果摘要"), QStringLiteral("UUID")});
+       QStringLiteral("流程"), QStringLiteral("模式"),
+       QStringLiteral("尝试"), QStringLiteral("判定"),
+       QStringLiteral("有效"), QStringLiteral("结果摘要"),
+       QStringLiteral("UUID")});
 
   ui_->tableView->setModel(model_);
   ui_->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -108,7 +110,7 @@ void DataWidget::setupModel() {
   ui_->tableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
   ui_->tableView->horizontalHeader()->setStretchLastSection(true);
   ui_->tableView->setColumnHidden(0, true);
-  ui_->tableView->setColumnHidden(9, true);
+  ui_->tableView->setColumnHidden(11, true);
 }
 
 void DataWidget::onFilterChanged() { refresh(); }
@@ -150,17 +152,29 @@ void DataWidget::reloadFromNewMeasurementSchema() {
     return;
   }
 
-  const QString partIdLike = ui_->editPartId->text().trimmed();
+  core::MeasurementQueryFilter f;
+  f.part_id_like = ui_->editPartId->text().trimmed();
+  f.task_card_no_like =
+      editTaskCard_ ? editTaskCard_->text().trimmed() : QString();
+
   const int typeFilterIndex = ui_->comboType->currentIndex();
+  if (typeFilterIndex == 1)
+    f.part_type = "A";
+  else if (typeFilterIndex == 2)
+    f.part_type = "B";
+
   const int okFilterIndex = ui_->comboOk->currentIndex();
-  const QDateTime fromUtc = ui_->dateFrom->dateTime().toUTC();
-  const QDateTime toUtc = ui_->dateTo->dateTime().toUTC();
+  if (okFilterIndex == 1)
+    f.result_judgement = "OK";
+
+  f.from_utc = ui_->dateFrom->dateTime().toUTC();
+  f.to_utc = ui_->dateTo->dateTime().toUTC();
+  f.effective_only = -1;
+
   const int limit = qMax(1, ui_->spinLimit->value());
-  const QString taskCardLike = editTaskCard_ ? editTaskCard_->text().trimmed() : QString();
 
   QString qerr;
-  const int fetchLimit = qMax(limit, 500);
-  const auto rows = db.queryLatestMeasurementsEx(fetchLimit, &qerr);
+  const auto rows = db.queryMeasurementsEx(f, limit, &qerr);
   qDebug() << "[DATA] query err =" << qerr << ", rows =" << rows.size();
   if (!qerr.isEmpty()) {
     QMessageBox::warning(this, QStringLiteral("查询"), qerr);
@@ -171,40 +185,8 @@ void DataWidget::reloadFromNewMeasurementSchema() {
 
   int outRow = 0;
   for (const auto &r : rows) {
-    if (!partIdLike.isEmpty() &&
-        !r.part_id.contains(partIdLike, Qt::CaseInsensitive)) {
+    if (okFilterIndex == 2 && r.result_judgement == "OK")
       continue;
-    }
-
-    if (!taskCardLike.isEmpty() &&
-        !r.task_card_no.contains(taskCardLike, Qt::CaseInsensitive)) {
-      continue;
-    }
-
-    if (typeFilterIndex == 1 && r.part_type != "A") {
-      continue;
-    }
-    if (typeFilterIndex == 2 && r.part_type != "B") {
-      continue;
-    }
-
-    if (r.measured_at_utc.isValid()) {
-      const QDateTime measuredUtc = r.measured_at_utc.toUTC();
-      if (measuredUtc < fromUtc || measuredUtc > toUtc) {
-        continue;
-      }
-    }
-
-    if (okFilterIndex == 1 && r.result_judgement != "OK") {
-      continue;
-    }
-    if (okFilterIndex == 2 && r.result_judgement == "OK") {
-      continue;
-    }
-
-    if (outRow >= limit) {
-      break;
-    }
 
     model_->setItem(outRow, 0,
                     new QStandardItem(QString::number(r.measurement_id)));
@@ -214,12 +196,15 @@ void DataWidget::reloadFromNewMeasurementSchema() {
     model_->setItem(outRow, 2, new QStandardItem(r.part_id));
     model_->setItem(outRow, 3, new QStandardItem(r.task_card_no));
     model_->setItem(outRow, 4, new QStandardItem(r.part_type));
-    model_->setItem(outRow, 5, new QStandardItem(r.measure_mode));
-    model_->setItem(outRow, 6,
-                    new QStandardItem(QString::number(r.measure_round)));
-    model_->setItem(outRow, 7, new QStandardItem(r.result_judgement));
-    model_->setItem(outRow, 8, new QStandardItem(makeMeasurementSummary(r)));
-    model_->setItem(outRow, 9, new QStandardItem(r.measurement_uuid));
+    model_->setItem(outRow, 5, new QStandardItem(r.run_kind));
+    model_->setItem(outRow, 6, new QStandardItem(r.measure_mode));
+    model_->setItem(outRow, 7, new QStandardItem(r.attempt_kind));
+    model_->setItem(outRow, 8, new QStandardItem(r.result_judgement));
+    model_->setItem(outRow, 9,
+                    new QStandardItem(r.is_effective ? QStringLiteral("Y")
+                                                     : QStringLiteral("N")));
+    model_->setItem(outRow, 10, new QStandardItem(makeMeasurementSummary(r)));
+    model_->setItem(outRow, 11, new QStandardItem(r.measurement_uuid));
 
     ++outRow;
   }
@@ -269,10 +254,24 @@ void DataWidget::showMeasurementDetail(quint64 measurementId) {
   text += QStringLiteral("Item索引: %1\n")
               .arg(d.item_index.isNull() ? QStringLiteral("-")
                                          : d.item_index.toString());
-  text += QStringLiteral("任务卡号: %1\n").arg(d.task_card_no.isEmpty() ? QStringLiteral("-") : d.task_card_no);
-  text += QStringLiteral("模式: %1\n").arg(d.measure_mode);
-  text += QStringLiteral("轮次: %1\n").arg(d.measure_round);
+  text += QStringLiteral("任务卡号: %1\n")
+              .arg(d.task_card_no.isEmpty() ? QStringLiteral("-")
+                                            : d.task_card_no);
+  text += QStringLiteral("流程类型: %1\n").arg(d.run_kind);
+  text += QStringLiteral("业务模式: %1\n")
+              .arg(d.measure_mode.isEmpty() ? QStringLiteral("-")
+                                            : d.measure_mode);
+  text += QStringLiteral("尝试类型: %1\n").arg(d.attempt_kind);
+  text += QStringLiteral("轮次(兼容): %1\n").arg(d.measure_round);
   text += QStringLiteral("判定: %1\n").arg(d.result_judgement);
+  text += QStringLiteral("NG分类: %1\n")
+              .arg(d.fail_class.isEmpty() ? QStringLiteral("-")
+                                          : d.fail_class);
+  text += QStringLiteral("是否有效: %1\n")
+              .arg(d.is_effective ? QStringLiteral("Y") : QStringLiteral("N"));
+  text += QStringLiteral("覆盖到: %1\n")
+              .arg(d.superseded_by.isNull() ? QStringLiteral("-")
+                                            : d.superseded_by.toString());
   text += QStringLiteral("复核状态: %1\n").arg(d.review_status);
   text += QStringLiteral("失败码: %1\n").arg(d.fail_reason_code);
   text += QStringLiteral("失败原因: %1\n").arg(d.fail_reason_text);
@@ -322,7 +321,7 @@ void DataWidget::onOpenRawClicked() {
   if (!cur.isValid()) {
     return;
   }
-  const QString uuid = model_->item(cur.row(), 9)->text();
+  const QString uuid = model_->item(cur.row(), 11)->text();
   emit requestOpenRaw(uuid);
 }
 
@@ -331,6 +330,6 @@ void DataWidget::onQueueMesClicked() {
   if (!cur.isValid()) {
     return;
   }
-  const QString uuid = model_->item(cur.row(), 9)->text();
+  const QString uuid = model_->item(cur.row(), 11)->text();
   emit requestQueueMesUpload(uuid);
 }
