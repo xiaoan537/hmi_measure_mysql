@@ -2,6 +2,8 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
+#include <QUrlQuery>
+#include <QDateTime>
 
 /*
 初始化基类 QObject，将父对象设为 parent，将 cfg_ 设为 cfg;member_name(initial_value)是初始化成员变量的标准语法。
@@ -18,6 +20,10 @@ MesWorker::MesWorker(const core::AppConfig &cfg, QObject *parent)
     connect(&timeoutTimer_, &QTimer::timeout, this, [this]()
             {
     if (reply_) reply_->abort(); }); // 使用 C++11 lambda 作为槽函数，捕获 this 指针，检查 reply_ 是否存在（当前正在进行的网络请求），调用 abort() 强制中断正在进行的 HTTP 请求
+
+    heartbeatTimer_.setSingleShot(false);
+    heartbeatTimer_.setInterval(cfg_.mes.heartbeat_interval_ms);
+    connect(&heartbeatTimer_, &QTimer::timeout, this, &MesWorker::onHeartbeatTick);
 }
 
 // 启动 MES 工作线程，初始化数据库连接和定时器
@@ -45,6 +51,12 @@ bool MesWorker::start(QString *err)
     {
         timer_.setInterval(cfg_.mes.auto_interval_ms);
         timer_.start();
+    }
+    if (cfg_.mes.enabled && cfg_.mes.heartbeat_enabled)
+    {
+        heartbeatTimer_.setInterval(cfg_.mes.heartbeat_interval_ms);
+        heartbeatTimer_.start();
+        QTimer::singleShot(1500, this, &MesWorker::onHeartbeatTick);
     }
     return true;
 }
@@ -143,6 +155,84 @@ void MesWorker::onTick()
 
     connect(reply_, &QNetworkReply::finished, this, &MesWorker::onReplyFinished); // 连接 finished 信号，当 HTTP 请求完成时（无论成功或失败），会触发 onReplyFinished 槽函数，用于处理响应结果。
     timeoutTimer_.start(cfg_.mes.timeout_ms);                                     // 启动超时定时器，设置超时时间为配置文件中指定的 timeout_ms（毫秒），如果在这个时间内网络请求没有完成，就会触发 timeoutTimer_ 的 timeout 信号，从而调用 lambda 函数强制中断网络请求，防止请求卡死。
+}
+
+
+void MesWorker::onHeartbeatTick()
+{
+    if (!cfg_.mes.enabled || !cfg_.mes.heartbeat_enabled)
+        return;
+    if (heartbeat_busy_)
+        return;
+
+    const QString sysid = cfg_.mes.sysid.trimmed();
+    const QString resolvedUrl = core::resolveMesInterfaceUrl(cfg_.mes, QStringLiteral("MES_SYS_HEARTBEAT")).trimmed();
+    const QUrl baseUrl(resolvedUrl);
+    if (sysid.isEmpty() || resolvedUrl.isEmpty() || !baseUrl.isValid() || baseUrl.scheme().trimmed().isEmpty())
+    {
+        if (heartbeat_last_ok_)
+        {
+            heartbeat_last_ok_ = false;
+            emit logMessage(QStringLiteral("SYS Heartbeat 未发送：SYSID 或接口地址未配置。"));
+        }
+        return;
+    }
+
+    QUrl url(baseUrl);
+    QUrlQuery query(url);
+    query.addQueryItem(QStringLiteral("SYSID"), sysid);
+    url.setQuery(query);
+
+    QByteArray body;
+    body += "SYSID=" + QUrl::toPercentEncoding(sysid);
+
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded; charset=utf-8"));
+    req.setRawHeader("Accept", "application/json");
+    if (!cfg_.mes.auth_token.trimmed().isEmpty())
+    {
+        req.setRawHeader("Authorization", QByteArray("Bearer ") + cfg_.mes.auth_token.toUtf8());
+    }
+    req.setRawHeader("X-Interface-Code", "MES_SYS_HEARTBEAT");
+
+    heartbeat_busy_ = true;
+    QNetworkReply *hbReply = nam_.post(req, body);
+    auto *hbTimeout = new QTimer(this);
+    hbTimeout->setSingleShot(true);
+    connect(hbTimeout, &QTimer::timeout, this, [this, hbReply]() {
+        if (hbReply)
+            hbReply->abort();
+    });
+    hbTimeout->start(cfg_.mes.timeout_ms);
+
+    connect(hbReply, &QNetworkReply::finished, this, [this, hbReply, hbTimeout]() {
+        hbTimeout->stop();
+        hbTimeout->deleteLater();
+
+        const int httpCode = hbReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QString respBody = QString::fromUtf8(hbReply->readAll());
+        const QString netErr = hbReply->error() == QNetworkReply::NoError ? QString() : hbReply->errorString();
+        hbReply->deleteLater();
+        heartbeat_busy_ = false;
+
+        const bool ok = netErr.isEmpty() && httpCode >= 200 && httpCode < 300;
+        if (ok)
+        {
+            if (!heartbeat_last_ok_)
+                emit logMessage(QStringLiteral("SYS Heartbeat 成功。"));
+            heartbeat_last_ok_ = true;
+        }
+        else
+        {
+            const QString errMsg = netErr.isEmpty() ? QStringLiteral("HTTP %1").arg(httpCode) : netErr;
+            if (heartbeat_last_ok_)
+                emit logMessage(QStringLiteral("SYS Heartbeat 失败：%1").arg(errMsg));
+            else
+                emit logMessage(QStringLiteral("SYS Heartbeat 仍失败：%1").arg(errMsg));
+            Q_UNUSED(respBody);
+            heartbeat_last_ok_ = false;
+        }
+    });
 }
 
 // 处理 HTTP 请求完成信号，检查响应状态码、错误信息、响应体等，根据结果更新数据库状态（成功或失败），并触发 outboxChanged 信号通知界面刷新。

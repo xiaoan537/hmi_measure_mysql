@@ -2,6 +2,9 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QSettings>
+
+#include "login_dialog.hpp"
 
 #include "core/config.hpp"
 #include "core/db.hpp"
@@ -39,7 +42,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  const auto cfg = core::loadConfigIni(iniPath);
+  auto cfg = core::loadConfigIni(iniPath);
 
   QString err;
   core::Db db;
@@ -54,6 +57,20 @@ int main(int argc, char *argv[]) {
 
   if (QCoreApplication::arguments().contains("--dev-ab")) {
     return runDevAbWindow(a, cfg);
+  }
+
+  {
+    QSettings s(iniPath, QSettings::IniFormat);
+    s.beginGroup(QStringLiteral("login"));
+    const bool loginEnabled = (s.value(QStringLiteral("enabled"), 1).toInt() != 0);
+    s.endGroup();
+    if (loginEnabled) {
+      LoginDialog dlg(cfg, iniPath);
+      if (dlg.exec() != QDialog::Accepted) {
+        return 0;
+      }
+      cfg.mes.sysid = dlg.sysid();
+    }
   }
 
   MesWorker worker(cfg);

@@ -49,6 +49,10 @@ struct MesConfig
     QString prod_mil_url;          // 军检
 
     QString auth_token;            // Bearer token（可选）
+
+    bool heartbeat_enabled = true; // 是否启用 SYS Heartbeat
+    int heartbeat_interval_ms = 60000; // Heartbeat 周期（ms）
+
     int timeout_ms = 5000;         // HTTP 超时（ms）
     int retry_base_seconds = 30;   // 重试基准间隔（秒）
     int retry_max_seconds = 21600; // 最大重试间隔（秒）
