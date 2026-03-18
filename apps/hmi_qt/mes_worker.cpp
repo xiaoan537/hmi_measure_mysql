@@ -3,14 +3,6 @@
 #include <QNetworkReply>
 #include <QUrl>
 
-static QUrl resolveMesUrl(const core::AppConfig &cfg, const QString &interfaceCode)
-{
-    QString url = cfg.mes.url.trimmed();
-    if (url.contains(QStringLiteral("{interface_code}")))
-        url.replace(QStringLiteral("{interface_code}"), interfaceCode);
-    return QUrl(url);
-}
-
 /*
 初始化基类 QObject，将父对象设为 parent，将 cfg_ 设为 cfg;member_name(initial_value)是初始化成员变量的标准语法。
 cfg_ 是成员变量名，(cfg) 是用来初始化的值（构造函数参数）。说白了，就是将构造函数中的参数 cfg 赋值给成员变量 cfg_，
@@ -102,6 +94,24 @@ void MesWorker::onTick()
         return;
     }
 
+    const QString resolvedUrl = core::resolveMesInterfaceUrl(cfg_.mes, task.interface_code).trimmed();
+    const QUrl targetUrl(resolvedUrl);
+    if (resolvedUrl.isEmpty() || !targetUrl.isValid() || targetUrl.scheme().trimmed().isEmpty())
+    {
+        const int backoff = computeBackoffSeconds(task.attempt_count);
+        const QString msg = resolvedUrl.isEmpty()
+                                ? QString("未配置 MES 接口地址：%1").arg(task.interface_code)
+                                : QString("MES 接口地址非法：%1 -> %2").arg(task.interface_code, resolvedUrl);
+        if (!db_.markOutboxFailed(task.id, 0, QString(), msg, backoff, &e))
+            emit logMessage("markOutboxFailed failed: " + e);
+        else
+            emit logMessage(msg);
+        emit outboxChanged();
+        if (force_drain_)
+            onTick();
+        return;
+    }
+
     if (!db_.markOutboxSending(task.id, &e))
     {
         emit logMessage("markOutboxSending failed: " + e);
@@ -112,7 +122,6 @@ void MesWorker::onTick()
     current_ = task;
     busy_ = true;
 
-    const QUrl targetUrl = resolveMesUrl(cfg_, task.interface_code);
     QNetworkRequest req(targetUrl);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json; charset=utf-8");
     const QString idemKey = !task.business_key.trimmed().isEmpty()

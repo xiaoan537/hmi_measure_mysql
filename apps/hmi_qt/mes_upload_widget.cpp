@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QSet>
 
 #include "ui_mes_upload_widget.h"
 
@@ -139,9 +140,9 @@ QVector<QString> MesUploadWidget::selectedUuids() const
 
 void MesUploadWidget::onUploadSelected()
 {
-    if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled || cfg_.mes.url.trimmed().isEmpty())
+    if (!cfg_.mes.enabled || !cfg_.mes.manual_enabled)
     {
-        QMessageBox::warning(this, "MES", "MES 手动上传被禁用，或 app.ini 中 URL 为空");
+        QMessageBox::warning(this, "MES", "MES 手动上传已被禁用");
         return;
     }
 
@@ -154,11 +155,33 @@ void MesUploadWidget::onUploadSelected()
 
     int queued = 0, skipped = 0;
     QString lastErr;
+    QSet<QString> missingInterfaces;
 
-    for (const auto &u : uuids)
+    const int n = model_->rowCount();
+    for (int i = 0; i < n; i++)
     {
+        auto *sel = model_->item(i, 0);
+        if (!(sel && sel->checkState() == Qt::Checked))
+            continue;
+
+        const QString interfaceCode = model_->item(i, 7) ? model_->item(i, 7)->text().trimmed() : QString();
+        const QString uuid = model_->item(i, 14) ? model_->item(i, 14)->text().trimmed() : QString();
+        if (uuid.isEmpty())
+        {
+            skipped++;
+            lastErr = QStringLiteral("存在缺少 measurement_uuid 的行，已跳过");
+            continue;
+        }
+        if (!core::hasMesInterfaceUrl(cfg_.mes, interfaceCode))
+        {
+            skipped++;
+            missingInterfaces.insert(interfaceCode.isEmpty() ? QStringLiteral("<EMPTY_INTERFACE_CODE>") : interfaceCode);
+            lastErr = QStringLiteral("存在未配置接口地址的记录，已跳过");
+            continue;
+        }
+
         QString e;
-        const bool ok = db_.queueMesUploadByUuid(u, &e);
+        const bool ok = db_.queueMesUploadByUuid(uuid, &e);
         if (ok)
             queued++;
         else
@@ -172,9 +195,11 @@ void MesUploadWidget::onUploadSelected()
         worker_->kick();
     onQuery();
 
-    QMessageBox::information(
-        this, "MES",
-        QString("Queued: %1, Skipped: %2\nLast note: %3").arg(queued).arg(skipped).arg(lastErr));
+    QString summary = QString("Queued: %1, Skipped: %2\nLast note: %3").arg(queued).arg(skipped).arg(lastErr);
+    if (!missingInterfaces.isEmpty())
+        summary += QString("\n未配置地址的接口: %1").arg(QStringList(missingInterfaces.values()).join(", "));
+
+    QMessageBox::information(this, "MES", summary);
 }
 
 void MesUploadWidget::onRetrySelectedFailed()

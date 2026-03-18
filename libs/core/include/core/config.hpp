@@ -33,7 +33,21 @@ struct MesConfig
     bool auto_enabled = true;      // 是否允许自动上传（后台定时器）
     int auto_interval_ms = 1000;   // 自动上传定时器周期（ms）
 
-    QString url;                   // MES 接口地址（单条上传）
+    QString url;                   // 兼容旧配置：默认/普通报工地址
+
+    // SYS 类接口配置
+    QString sysid;                 // SYSID（系统编号）
+    QString sys_base_url;          // 例如 http://ip:8080/msService/public/DeviceIf/SYS
+    QString sys_heartbeat_url;     // /Heartbeat
+    QString sys_op_check_user_url; // /OpCheckUser
+    QString sys_op_check_tech_state_url; // /OpCheckTechState
+
+    // 生产测量报工接口地址（不同模式走不同地址）
+    QString prod_normal_url;       // 普通测量
+    QString prod_second_url;       // 第二次测量
+    QString prod_third_url;        // 第三次测量
+    QString prod_mil_url;          // 军检
+
     QString auth_token;            // Bearer token（可选）
     int timeout_ms = 5000;         // HTTP 超时（ms）
     int retry_base_seconds = 30;   // 重试基准间隔（秒）
@@ -69,6 +83,8 @@ struct MesConfig
 
     // 函数声明
     AppConfig loadConfigIni(const QString &iniPath);
+    QString resolveMesInterfaceUrl(const MesConfig &cfg, const QString &interfaceCode);
+    bool hasMesInterfaceUrl(const MesConfig &cfg, const QString &interfaceCode);
 
     /*
     函数名：loadConfigIni

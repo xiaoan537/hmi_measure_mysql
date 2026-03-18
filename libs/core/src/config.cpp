@@ -1,6 +1,38 @@
 #include "core/config.hpp"  // 包含配置头文件，配置数据结构定义
 #include <QSettings>        // 包含 QSettings 类，QT 的配置文件读取类，用于读取 INI 配置文件
 
+namespace
+{
+    QString trimUrl(const QString &v)
+    {
+        return v.trimmed();
+    }
+
+    QString trimRightSlash(const QString &v)
+    {
+        QString s = trimUrl(v);
+        while (s.endsWith('/'))
+            s.chop(1);
+        return s;
+    }
+
+    QString joinUrl(const QString &base, const QString &leaf)
+    {
+        const QString b = trimRightSlash(base);
+        const QString l = leaf.trimmed();
+        if (b.isEmpty())
+            return QString();
+        if (l.isEmpty())
+            return b;
+        return l.startsWith('/') ? (b + l) : (b + "/" + l);
+    }
+
+    QString normalizedInterfaceCode(const QString &v)
+    {
+        return v.trimmed().toUpper();
+    }
+}
+
 namespace core
 {
 
@@ -12,14 +44,14 @@ namespace core
 
         // 数据库配置解析
         // 进入 "db" 配置组，开始读取数据库相关配置
-        s.beginGroup("db");                                     
+        s.beginGroup("db");
         c.db.driver = s.value("driver", "QMYSQL").toString();   // 读取数据库驱动，默认值为 "QMYSQL"
         c.db.host = s.value("host", "localhost").toString();
         c.db.port = s.value("port", 3306).toInt();
         c.db.name = s.value("name").toString();                 // 数据库名称，必须配置
         c.db.user = s.value("user").toString();
         c.db.pass = s.value("pass").toString();
-        c.db.options = s.value("options", "MYSQL_OPT_RECONNECT=1").toString();  
+        c.db.options = s.value("options", "MYSQL_OPT_RECONNECT=1").toString();
         s.endGroup();                                           // 结束 "db" 配置组
 
         // 路径配置解析
@@ -36,7 +68,26 @@ namespace core
         c.mes.manual_enabled = (s.value("manual_enabled", 1).toInt() != 0);
         c.mes.auto_enabled = (s.value("auto_enabled", 1).toInt() != 0);
         c.mes.auto_interval_ms = s.value("auto_interval_ms", 1000).toInt();
-        c.mes.url = s.value("url", "").toString();
+        c.mes.url = trimUrl(s.value("url", "").toString());
+
+        c.mes.sysid = trimUrl(s.value("sysid", "").toString());
+        c.mes.sys_base_url = trimRightSlash(s.value("sys_base_url", "").toString());
+        c.mes.sys_heartbeat_url = trimUrl(s.value("sys_heartbeat_url", "").toString());
+        c.mes.sys_op_check_user_url = trimUrl(s.value("sys_op_check_user_url", "").toString());
+        c.mes.sys_op_check_tech_state_url = trimUrl(s.value("sys_op_check_tech_state_url", "").toString());
+
+        if (c.mes.sys_heartbeat_url.isEmpty())
+            c.mes.sys_heartbeat_url = joinUrl(c.mes.sys_base_url, "Heartbeat");
+        if (c.mes.sys_op_check_user_url.isEmpty())
+            c.mes.sys_op_check_user_url = joinUrl(c.mes.sys_base_url, "OpCheckUser");
+        if (c.mes.sys_op_check_tech_state_url.isEmpty())
+            c.mes.sys_op_check_tech_state_url = joinUrl(c.mes.sys_base_url, "OpCheckTechState");
+
+        c.mes.prod_normal_url = trimUrl(s.value("prod_normal_url", c.mes.url).toString());
+        c.mes.prod_second_url = trimUrl(s.value("prod_second_url", "").toString());
+        c.mes.prod_third_url = trimUrl(s.value("prod_third_url", "").toString());
+        c.mes.prod_mil_url = trimUrl(s.value("prod_mil_url", "").toString());
+
         c.mes.auth_token = s.value("auth_token", "").toString();
         c.mes.timeout_ms = s.value("timeout_ms", 5000).toInt();
         c.mes.retry_base_seconds = s.value("retry_base_seconds", 30).toInt();
@@ -61,6 +112,33 @@ namespace core
         s.endGroup();
 
         return c;
+    }
+
+    QString resolveMesInterfaceUrl(const MesConfig &cfg, const QString &interfaceCode)
+    {
+        const QString code = normalizedInterfaceCode(interfaceCode);
+        if (code == QStringLiteral("MES_PROD_NORMAL_RESULT"))
+            return trimUrl(cfg.prod_normal_url.isEmpty() ? cfg.url : cfg.prod_normal_url);
+        if (code == QStringLiteral("MES_PROD_SECOND_RESULT"))
+            return trimUrl(cfg.prod_second_url);
+        if (code == QStringLiteral("MES_PROD_THIRD_RESULT"))
+            return trimUrl(cfg.prod_third_url);
+        if (code == QStringLiteral("MES_PROD_MIL_RESULT"))
+            return trimUrl(cfg.prod_mil_url);
+
+        if (code == QStringLiteral("MES_SYS_HEARTBEAT") || code == QStringLiteral("SYS_HEARTBEAT"))
+            return trimUrl(cfg.sys_heartbeat_url);
+        if (code == QStringLiteral("MES_SYS_OP_CHECK_USER") || code == QStringLiteral("SYS_OP_CHECK_USER"))
+            return trimUrl(cfg.sys_op_check_user_url);
+        if (code == QStringLiteral("MES_SYS_OP_CHECK_TECH_STATE") || code == QStringLiteral("SYS_OP_CHECK_TECH_STATE"))
+            return trimUrl(cfg.sys_op_check_tech_state_url);
+
+        return QString();
+    }
+
+    bool hasMesInterfaceUrl(const MesConfig &cfg, const QString &interfaceCode)
+    {
+        return !resolveMesInterfaceUrl(cfg, interfaceCode).trimmed().isEmpty();
     }
 
 } // namespace core
