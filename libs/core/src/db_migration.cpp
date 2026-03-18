@@ -735,6 +735,64 @@ bool Db::ensureSchema(QString *err) {
     cur = 8;
   }
 
+  // v9: MES route backfill and report/outbox indexes
+  if (cur < 9) {
+    if (!db_.transaction())
+      return fail(db_.lastError().text());
+
+    if (!indexExists("mes_outbox", "idx_mes_outbox_report")) {
+      if (!q.exec("CREATE INDEX idx_mes_outbox_report ON mes_outbox(mes_report_id, status, next_retry_at_utc);")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (!indexExists("mes_report", "idx_mes_report_measure_iface")) {
+      if (!q.exec("CREATE INDEX idx_mes_report_measure_iface ON mes_report(measurement_id, interface_code);")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+
+    if (!q.exec(
+            "UPDATE mes_report mr "
+            "JOIN measurement m ON m.id = mr.measurement_id "
+            "SET mr.interface_code = CASE UPPER(IFNULL(m.measure_mode, '')) "
+            "  WHEN 'NORMAL' THEN 'MES_PROD_NORMAL_RESULT' "
+            "  WHEN 'SECOND' THEN 'MES_PROD_SECOND_RESULT' "
+            "  WHEN 'THIRD' THEN 'MES_PROD_THIRD_RESULT' "
+            "  WHEN 'MIL' THEN 'MES_PROD_MIL_RESULT' "
+            "  ELSE mr.interface_code END, "
+            "mr.updated_at_utc = NOW(3) "
+            "WHERE IFNULL(m.run_kind, 'PRODUCTION')='PRODUCTION' "
+            "  AND (mr.interface_code IS NULL OR mr.interface_code='');")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+
+    if (!q.exec(
+            "UPDATE mes_outbox o "
+            "JOIN measurement m ON m.measurement_uuid = o.measurement_uuid "
+            "JOIN mes_report mr ON mr.id = ("
+            "  SELECT mr2.id FROM mes_report mr2 WHERE mr2.measurement_id = m.id ORDER BY mr2.id DESC LIMIT 1"
+            ") "
+            "SET o.mes_report_id = mr.id "
+            "WHERE o.mes_report_id IS NULL;")) {
+      db_.rollback();
+      return fail(q.lastError().text());
+    }
+
+    if (!applyVersion(9)) {
+      db_.rollback();
+      return fail("Failed to write schema_migrations v9");
+    }
+
+    if (!db_.commit())
+      return fail(db_.lastError().text());
+
+    cur = 9;
+  }
+
+
   return true;
 }
 

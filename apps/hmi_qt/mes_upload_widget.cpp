@@ -48,11 +48,11 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
 
     // table
     model_ = new QStandardItemModel(this);
-    model_->setHorizontalHeaderLabels({"SEL", "measured_at_utc", "part_id", "task_card_no", "type", "ok",
+    model_->setHorizontalHeaderLabels({"SEL", "measured_at_utc", "part_id", "task_card_no", "type", "mode", "attempt", "interface_code", "ok",
                                        "total_len_mm", "bc_len_mm", "mes_status",
                                        "attempts", "last_error", "uuid"});
     ui_->tableView->setModel(model_);
-    ui_->tableView->setColumnHidden(11, true);
+    ui_->tableView->setColumnHidden(14, true);
     ui_->tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui_->tableView->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
@@ -109,6 +109,9 @@ void MesUploadWidget::fillTable(const QVector<core::MesUploadRow> &rows)
         items << new QStandardItem(r.part_id);
         items << new QStandardItem(r.task_card_no);
         items << new QStandardItem(r.part_type);
+        items << new QStandardItem(r.measure_mode);
+        items << new QStandardItem(r.attempt_kind);
+        items << new QStandardItem(r.interface_code);
         items << new QStandardItem(r.ok ? "1" : "0");
         items << new QStandardItem(QString::number(r.total_len_mm, 'f', 3));
         items << new QStandardItem(QString::number(r.bc_len_mm, 'f', 3));
@@ -129,7 +132,7 @@ QVector<QString> MesUploadWidget::selectedUuids() const
     {
         auto *sel = model_->item(i, 0);
         if (sel && sel->checkState() == Qt::Checked)
-            uuids.push_back(model_->item(i, 11)->text());
+            uuids.push_back(model_->item(i, 14)->text());
     }
     return uuids;
 }

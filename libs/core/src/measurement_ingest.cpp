@@ -15,6 +15,19 @@ QString ensureUuid(const QString &v) {
   return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
+QString interfaceCodeForMeasureMode(const QString &measureMode) {
+  const QString mode = measureMode.trimmed().toUpper();
+  if (mode == QStringLiteral("NORMAL"))
+    return QStringLiteral("MES_PROD_NORMAL_RESULT");
+  if (mode == QStringLiteral("SECOND"))
+    return QStringLiteral("MES_PROD_SECOND_RESULT");
+  if (mode == QStringLiteral("THIRD"))
+    return QStringLiteral("MES_PROD_THIRD_RESULT");
+  if (mode == QStringLiteral("MIL"))
+    return QStringLiteral("MES_PROD_MIL_RESULT");
+  return QString();
+}
+
 } // namespace
 
 MeasurementIngestService::MeasurementIngestService(Db &db) : db_(db) {}
@@ -67,6 +80,15 @@ bool MeasurementIngestService::validateRequest(
     }
     if (it.result_judgement.trimmed().isEmpty()) {
       return fail(QStringLiteral("items[%1].result_judgement 不能为空").arg(i));
+    }
+    if (!req.reports.isEmpty()) {
+      const auto &rp = req.reports[i];
+      if (rp.create_mes_report && it.run_kind != QStringLiteral("PRODUCTION")) {
+        return fail(QStringLiteral("items[%1] 是 CALIBRATION，不允许创建 MES report").arg(i));
+      }
+      if (rp.create_mes_report && interfaceCodeForMeasureMode(it.measure_mode).isEmpty()) {
+        return fail(QStringLiteral("items[%1].measure_mode 无法映射到 MES 接口").arg(i));
+      }
     }
   }
 
@@ -197,9 +219,15 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
     bool reportCreated = false;
     if (report.create_mes_report) {
       const QString reportUuid = ensureUuid(report.report_uuid);
+      const QString interfaceCode = report.interface_code.trimmed().isEmpty()
+                                        ? interfaceCodeForMeasureMode(item.measure_mode)
+                                        : report.interface_code.trimmed();
+      const QString reportType = report.report_type.trimmed().isEmpty()
+                                     ? QStringLiteral("MEASURE_RESULT")
+                                     : report.report_type.trimmed();
       if (!db_.createMesReport(measurementId, item.task_id, item.task_item_id,
-                               reportUuid, report.report_type,
-                               report.interface_code, report.business_key,
+                               reportUuid, reportType,
+                               interfaceCode, report.business_key,
                                report.need_upload, report.report_status,
                                report.payload_json, &mesReportId, &txErr)) {
         db_.rollbackTx(nullptr);

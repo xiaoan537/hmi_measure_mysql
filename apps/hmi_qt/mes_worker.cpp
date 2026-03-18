@@ -3,6 +3,14 @@
 #include <QNetworkReply>
 #include <QUrl>
 
+static QUrl resolveMesUrl(const core::AppConfig &cfg, const QString &interfaceCode)
+{
+    QString url = cfg.mes.url.trimmed();
+    if (url.contains(QStringLiteral("{interface_code}")))
+        url.replace(QStringLiteral("{interface_code}"), interfaceCode);
+    return QUrl(url);
+}
+
 /*
 初始化基类 QObject，将父对象设为 parent，将 cfg_ 设为 cfg;member_name(initial_value)是初始化成员变量的标准语法。
 cfg_ 是成员变量名，(cfg) 是用来初始化的值（构造函数参数）。说白了，就是将构造函数中的参数 cfg 赋值给成员变量 cfg_，
@@ -104,10 +112,18 @@ void MesWorker::onTick()
     current_ = task;
     busy_ = true;
 
-    // 创建一个网络请求对象并设置其关键头部信息，以确保与服务器进行正确、安全的通信。
-    QNetworkRequest req(QUrl(cfg_.mes.url));                                              // 创建 QNetworkRequest 对象，用于设置 HTTP 请求的 URL;QUrl:Qt 中用于处理和解析 URL 的类。它能将字符串转换为结构化的 URL 对象，并自动处理编码、解析协议、主机、端口、路径等部分。
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json; charset=utf-8"); // 通过 setHeader方法设置了一个预定义头部，设置请求头的 Content-Type 为 application/json; charset=utf-8，确保服务器能正确解析请求体中的 JSON 数据。ContentTypeHeader是 Qt 提供的枚举值，对应 HTTP 标准中的 Content-Type头
-    req.setRawHeader("Idempotency-Key", task.measurement_uuid.toUtf8());                  // 通过 setRawHeader方法设置了一个自定义头部，setRawHeader用于设置那些不在 Qt 预定义枚举范围内的头部，设置请求头的 Idempotency-Key 为任务的 measurement_uuid，用于实现幂等性，防止重复上传相同数据。
+    const QUrl targetUrl = resolveMesUrl(cfg_, task.interface_code);
+    QNetworkRequest req(targetUrl);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json; charset=utf-8");
+    const QString idemKey = !task.business_key.trimmed().isEmpty()
+                                ? task.business_key
+                                : (!task.report_uuid.trimmed().isEmpty() ? task.report_uuid
+                                                                        : task.measurement_uuid);
+    req.setRawHeader("Idempotency-Key", idemKey.toUtf8());
+    if (!task.interface_code.trimmed().isEmpty())
+        req.setRawHeader("X-Interface-Code", task.interface_code.toUtf8());
+    if (!task.report_uuid.trimmed().isEmpty())
+        req.setRawHeader("X-Report-UUID", task.report_uuid.toUtf8());
     if (!cfg_.mes.auth_token.trimmed().isEmpty())
     {
         req.setRawHeader("Authorization", QByteArray("Bearer ") + cfg_.mes.auth_token.toUtf8()); // 通过 setRawHeader方法设置了一个自定义头部，设置请求头的 Authorization 为 Bearer 加上配置文件中的 auth_token，用于进行 HTTP 基本认证，确保与 MES 服务器的安全通信。

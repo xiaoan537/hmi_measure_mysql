@@ -14,10 +14,13 @@
 namespace core {
 // 表示一个测量结果及其MES上传状态的综合信息。这个结构体用于在UI层显示测量结果列表，包括其上传状态和相关信息。
 struct MesUploadRow {
+  quint64 mes_report_id = 0;
+  QString report_uuid;
   QString measurement_uuid;
   QString part_id;
   QString part_type;
   QString task_card_no;
+  QString interface_code;
   QString run_kind;      // PRODUCTION / CALIBRATION
   QString measure_mode;  // NORMAL / SECOND / THIRD / MIL
   QString attempt_kind;  // PRIMARY / RETEST
@@ -27,6 +30,7 @@ struct MesUploadRow {
   double total_len_mm = 0.0;
   double bc_len_mm = 0.0;
 
+  QString report_status;
   QString mes_status; // NOT_QUEUED/PENDING/SENDING/SENT/FAILED
   int attempt_count = 0;
   QString last_error;
@@ -161,10 +165,14 @@ struct MesUploadFilter {
 
 // 表示一个待上传的MES任务。这个结构体主要用于上传工作线程（Worker）获取和处理上传任务。payload_json字段包含了要发送给MES系统的完整数据。
 struct MesOutboxTask {
-  quint64 id = 0;           // 任务ID，数据库主键
-  QString measurement_uuid; // 关联的测量UUID，外键引用 MesUploadRow
-  QString payload_json;     // 任务负载，JSON 格式字符串
-  int attempt_count = 0;    // 重试次数，初始为 0
+  quint64 id = 0;             // 任务ID，数据库主键
+  quint64 mes_report_id = 0;  // 关联的上报对象ID
+  QString report_uuid;        // 上报对象UUID
+  QString measurement_uuid;   // 关联的测量UUID
+  QString interface_code;     // 路由到哪个 MES 接口
+  QString business_key;       // 幂等业务键
+  QString payload_json;       // 任务负载，JSON 格式字符串
+  int attempt_count = 0;      // 重试次数，初始为 0
 };
 
 class Db {
