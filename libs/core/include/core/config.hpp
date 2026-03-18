@@ -51,7 +51,8 @@ struct MesConfig
     QString auth_token;            // Bearer token（可选）
 
     bool heartbeat_enabled = true; // 是否启用 SYS Heartbeat
-    int heartbeat_interval_ms = 60000; // Heartbeat 周期（ms）
+    int heartbeat_interval_ms = 10000; // Heartbeat 周期（ms）
+    int max_time_diff_seconds = 60; // 本机与 MES 允许的最大时间差（秒）
 
     int timeout_ms = 5000;         // HTTP 超时（ms）
     int retry_base_seconds = 30;   // 重试基准间隔（秒）

@@ -90,7 +90,8 @@ namespace core
 
         c.mes.auth_token = s.value("auth_token", "").toString();
         c.mes.heartbeat_enabled = (s.value("heartbeat_enabled", 1).toInt() != 0);
-        c.mes.heartbeat_interval_ms = s.value("heartbeat_interval_ms", 60000).toInt();
+        c.mes.heartbeat_interval_ms = s.value("heartbeat_interval_ms", 10000).toInt();
+        c.mes.max_time_diff_seconds = s.value("max_time_diff_seconds", 60).toInt();
         c.mes.timeout_ms = s.value("timeout_ms", 5000).toInt();
         c.mes.retry_base_seconds = s.value("retry_base_seconds", 30).toInt();
         c.mes.retry_max_seconds = s.value("retry_max_seconds", 21600).toInt();
