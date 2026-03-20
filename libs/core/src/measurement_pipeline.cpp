@@ -113,17 +113,6 @@ bool PlcMailboxSnapshot::isValid(QString *err) const {
     }
   }
 
-  if (run_kind == PlcRunKind::Calibration) {
-    if (item_count != 1) {
-      failWith(err, QStringLiteral("标定 snapshot.item_count 必须为 1"));
-      return false;
-    }
-    if (items.at(0).slot_index != kCalibrationSlotIndex) {
-      failWith(err, QStringLiteral("标定 snapshot.slot_index[0] 必须为 15"));
-      return false;
-    }
-  }
-
   return true;
 }
 
@@ -161,15 +150,20 @@ bool MeasurementComputeInput::isValid(QString *err) const {
   if (!snapshot.isValid(err)) return false;
   if (!context.isValid(err)) return false;
 
-  if (context.run_kind == BusinessRunKind::Calibration &&
-      snapshot.run_kind != PlcRunKind::Calibration) {
-    failWith(err, QStringLiteral("context.run_kind 与 snapshot.run_kind 不一致"));
-    return false;
-  }
-  if (context.run_kind == BusinessRunKind::Production &&
-      snapshot.run_kind != PlcRunKind::Auto) {
-    failWith(err, QStringLiteral("生产测量要求 snapshot.run_kind = AUTO"));
-    return false;
+  if (context.run_kind == BusinessRunKind::Calibration) {
+    if (snapshot.item_count != 1) {
+      failWith(err, QStringLiteral("标定测量要求 snapshot.item_count = 1"));
+      return false;
+    }
+    const auto *item0 = snapshot.findItem(0);
+    if (!item0) {
+      failWith(err, QStringLiteral("标定测量必须存在 item0"));
+      return false;
+    }
+    if (item0->slot_index != context.calibration_slot_index) {
+      failWith(err, QStringLiteral("标定测量要求 snapshot.slot_index[0] 与 context.calibration_slot_index 一致"));
+      return false;
+    }
   }
   return true;
 }
@@ -422,7 +416,6 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
 QJsonObject toJson(const PlcMailboxSnapshot &snapshot) {
   QJsonObject obj;
   obj.insert(QStringLiteral("meas_seq"), static_cast<qint64>(snapshot.meas_seq));
-  obj.insert(QStringLiteral("run_kind"), static_cast<int>(snapshot.run_kind));
   obj.insert(QStringLiteral("part_type"), QString(snapshot.part_type));
   obj.insert(QStringLiteral("item_count"), snapshot.item_count);
   obj.insert(QStringLiteral("raw_layout_ver"), static_cast<int>(snapshot.raw_layout_ver));

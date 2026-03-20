@@ -63,9 +63,9 @@ struct PlcMailboxItemSnapshot {
   QVector<float> raw_points_um;
 };
 
+// 仅表达 PLC 冻结出来的原始测量包，不携带业务上下文。
 struct PlcMailboxSnapshot {
   quint32 meas_seq = 0;
-  PlcRunKind run_kind = PlcRunKind::None;
   QChar part_type = QChar('A');
   int item_count = 0;
 
@@ -86,6 +86,7 @@ struct PlcMailboxSnapshot {
   const PlcMailboxItemSnapshot *findItem(int itemIndex) const;
 };
 
+// 仅表达 PC 在发起测量前就已知的业务上下文。
 struct MeasurementContext {
   BusinessRunKind run_kind = BusinessRunKind::Production;
   BusinessMeasureMode measure_mode = BusinessMeasureMode::Unknown;
@@ -104,6 +105,7 @@ struct MeasurementContext {
   bool isValid(QString *err = nullptr) const;
 };
 
+// 计算层统一输入：PLC 原始测量事实 + PC 已知业务事实。
 struct MeasurementComputeInput {
   PlcMailboxSnapshot snapshot;
   MeasurementContext context;
