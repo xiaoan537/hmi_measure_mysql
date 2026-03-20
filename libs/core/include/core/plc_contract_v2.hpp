@@ -8,6 +8,13 @@ namespace core {
 constexpr int kLogicalSlotCount = 16;
 constexpr int kAutoSlotCount = 15;
 constexpr int kCalibrationSlotIndex = 15;
+constexpr int kTrayPartIdAsciiChars = 32;
+constexpr int kTrayPartIdRegsPerSlot = 16;
+
+constexpr int kMailboxHeaderRegsV2 = 58;
+constexpr int kMailboxArrayRegsReservedV2 = 2304;
+constexpr int kMailboxArrayFloatCountReservedV2 = kMailboxArrayRegsReservedV2 / 2;
+
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
 
 // 当前协议的核心原则：

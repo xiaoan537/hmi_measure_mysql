@@ -106,6 +106,16 @@ struct MeasurementContext {
 };
 
 // 计算层统一输入：PLC 原始测量事实 + PC 已知业务事实。
+
+
+// 对应 PLC Mailbox 的“逻辑原始块”：header + 线性展开 arrays。
+// arrays_um 的顺序约定：item0 完整块，再 item1 完整块，不交织；
+// item 内顺序：ring -> channel -> point。
+struct PlcMailboxRawFrame {
+  PlcMailboxHeaderV2 header;
+  QVector<float> arrays_um;
+};
+
 struct MeasurementComputeInput {
   PlcMailboxSnapshot snapshot;
   MeasurementContext context;
@@ -206,6 +216,18 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
                       const QString &measurementUuid,
                       RawLoopItemBuildResult *out,
                       QString *err = nullptr);
+
+QChar mailboxPartTypeFromHeader(quint16 plcPartType);
+int expectedMailboxPointCountPerItem(const PlcMailboxHeaderV2 &header);
+int expectedMailboxUsedPointCount(const PlcMailboxHeaderV2 &header);
+
+bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
+                             const QVector<float> &arrays_um,
+                             PlcMailboxSnapshot *out,
+                             QString *err = nullptr);
+bool buildPlcMailboxSnapshot(const PlcMailboxRawFrame &frame,
+                             PlcMailboxSnapshot *out,
+                             QString *err = nullptr);
 
 QJsonObject toJson(const PlcMailboxSnapshot &snapshot);
 QJsonObject toJson(const MeasurementContext &context);

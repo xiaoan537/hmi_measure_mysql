@@ -17,6 +17,12 @@ QString normalizedPartType(QChar partType) {
   return QString();
 }
 
+QString normalizedAsciiField(QString text) {
+  int nul = text.indexOf(QChar('\0'));
+  if (nul >= 0) text = text.left(nul);
+  return text.trimmed();
+}
+
 QJsonArray toJsonFloatArray(const QVector<float> &values) {
   QJsonArray arr;
   for (float v : values) {
@@ -166,6 +172,121 @@ bool MeasurementComputeInput::isValid(QString *err) const {
     }
   }
   return true;
+}
+
+QChar mailboxPartTypeFromHeader(quint16 plcPartType) {
+  switch (plcPartType) {
+  case 1:
+    return QChar('A');
+  case 2:
+    return QChar('B');
+  default:
+    return QChar();
+  }
+}
+
+int expectedMailboxPointCountPerItem(const PlcMailboxHeaderV2 &header) {
+  if (header.ring_count == 0 || header.point_count == 0 || header.channel_count == 0) {
+    return 0;
+  }
+  return static_cast<int>(header.ring_count) *
+         static_cast<int>(header.point_count) *
+         static_cast<int>(header.channel_count);
+}
+
+int expectedMailboxUsedPointCount(const PlcMailboxHeaderV2 &header) {
+  const int perItem = expectedMailboxPointCountPerItem(header);
+  if (perItem <= 0 || header.item_count == 0) return 0;
+  return perItem * static_cast<int>(header.item_count);
+}
+
+bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
+                             const QVector<float> &arrays_um,
+                             PlcMailboxSnapshot *out,
+                             QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("out 不能为空"));
+    return false;
+  }
+
+  const QChar partType = mailboxPartTypeFromHeader(header.part_type);
+  if (partType.isNull()) {
+    failWith(err, QStringLiteral("header.part_type 非法，仅支持 1=A, 2=B"));
+    return false;
+  }
+  if (header.item_count != 1 && header.item_count != 2) {
+    failWith(err, QStringLiteral("header.item_count 仅支持 1 或 2"));
+    return false;
+  }
+  if (header.ring_count == 0 || header.point_count == 0 || header.channel_count == 0) {
+    failWith(err, QStringLiteral("header.ring_count / point_count / channel_count 必须大于 0"));
+    return false;
+  }
+
+  const int expectChannels = (partType == QChar('A')) ? 4 : 2;
+  if (header.channel_count != expectChannels) {
+    failWith(err, QStringLiteral("header.channel_count 与 part_type 不匹配，期望 %1，实际 %2")
+                      .arg(expectChannels)
+                      .arg(header.channel_count));
+    return false;
+  }
+
+  const int perItemPoints = expectedMailboxPointCountPerItem(header);
+  const int usedPoints = expectedMailboxUsedPointCount(header);
+  if (perItemPoints <= 0 || usedPoints <= 0) {
+    failWith(err, QStringLiteral("根据 header 计算出的 arrays 点数非法"));
+    return false;
+  }
+  if (arrays_um.size() < usedPoints) {
+    failWith(err, QStringLiteral("arrays_um 长度不足，期望至少 %1，实际 %2")
+                      .arg(usedPoints)
+                      .arg(arrays_um.size()));
+    return false;
+  }
+
+  PlcMailboxSnapshot snapshot;
+  snapshot.meas_seq = header.meas_seq;
+  snapshot.part_type = partType;
+  snapshot.item_count = static_cast<int>(header.item_count);
+  snapshot.raw_layout_ver = header.raw_layout_ver;
+  snapshot.ring_count = static_cast<int>(header.ring_count);
+  snapshot.point_count = static_cast<int>(header.point_count);
+  snapshot.channel_count = static_cast<int>(header.channel_count);
+  snapshot.items.reserve(snapshot.item_count);
+
+  for (int i = 0; i < snapshot.item_count; ++i) {
+    const quint16 slotIndex = header.slot_index[i];
+    if (slotIndex == kInvalidSlotIndex || slotIndex >= kLogicalSlotCount) {
+      failWith(err, QStringLiteral("header.slot_index[%1] 非法").arg(i));
+      return false;
+    }
+
+    PlcMailboxItemSnapshot item;
+    item.present = true;
+    item.item_index = i;
+    item.slot_index = static_cast<int>(slotIndex);
+    item.part_id = normalizedAsciiField(header.part_id_ascii[i]);
+    item.total_len_mm = header.total_len_mm[i];
+    item.ad_len_mm = header.ad_len_mm[i];
+    item.bc_len_mm = header.bc_len_mm[i];
+    item.raw_points_um = arrays_um.mid(i * perItemPoints, perItemPoints);
+    snapshot.items.push_back(item);
+  }
+
+  QString validErr;
+  if (!snapshot.isValid(&validErr)) {
+    failWith(err, validErr);
+    return false;
+  }
+
+  *out = snapshot;
+  return true;
+}
+
+bool buildPlcMailboxSnapshot(const PlcMailboxRawFrame &frame,
+                             PlcMailboxSnapshot *out,
+                             QString *err) {
+  return buildPlcMailboxSnapshot(frame.header, frame.arrays_um, out, err);
 }
 
 QString toString(BusinessRunKind v) {
