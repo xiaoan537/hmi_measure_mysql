@@ -109,6 +109,7 @@ struct MeasurementContext {
 
 
 struct PlcMailboxRegisterBlock {
+  // header_regs 按物理头块保留完整 58 regs（54 有效 + 4 预留）。
   QVector<quint16> header_regs;
   QVector<quint16> array_regs;
 };

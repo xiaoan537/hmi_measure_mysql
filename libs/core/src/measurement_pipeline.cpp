@@ -305,8 +305,8 @@ bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
   }
 
   PlcMailboxRegisterBlock block;
-  block.header_regs = mailboxRegs.mid(0, kMailboxHeaderRegsV2);
-  block.array_regs = mailboxRegs.mid(kMailboxHeaderRegsV2, kMailboxArrayRegsReservedV2);
+  block.header_regs = mailboxRegs.mid(0, kMailboxHeaderBlockRegsV2);
+  block.array_regs = mailboxRegs.mid(kMailboxHeaderBlockRegsV2, kMailboxArrayRegsReservedV2);
   *out = block;
   return true;
 }
@@ -318,13 +318,14 @@ bool buildPlcMailboxHeaderV2(const QVector<quint16> &headerRegs,
     failWith(err, QStringLiteral("buildPlcMailboxHeaderV2.out 不能为空"));
     return false;
   }
-  if (headerRegs.size() < kMailboxHeaderRegsV2) {
-    failWith(err, QStringLiteral("headerRegs 长度不足，期望至少 %1，实际 %2")
-                      .arg(kMailboxHeaderRegsV2)
+  if (headerRegs.size() < kMailboxHeaderUsedRegsV2) {
+    failWith(err, QStringLiteral("headerRegs 长度不足，期望至少 %1（有效字段区），实际 %2")
+                      .arg(kMailboxHeaderUsedRegsV2)
                       .arg(headerRegs.size()));
     return false;
   }
 
+  // 仅解析前 54 regs 的有效字段；若 headerRegs 实际为 58 regs，则尾部 4 regs 作为 reserved，当前忽略。
   PlcMailboxHeaderV2 header;
   if (!plcReadUint32AbcdAt(headerRegs, kMailboxOffsetMeasSeq, &header.meas_seq, err)) return false;
   if (!plcReadUint16At(headerRegs, kMailboxOffsetPartType, &header.part_type, err)) return false;

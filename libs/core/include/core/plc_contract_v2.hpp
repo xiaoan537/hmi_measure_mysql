@@ -11,12 +11,13 @@ constexpr int kCalibrationSlotIndex = 15;
 constexpr int kTrayPartIdAsciiChars = 32;
 constexpr int kTrayPartIdRegsPerSlot = 16;
 
-constexpr int kMailboxHeaderRegsV2 = 58;
-constexpr int kMailboxHeaderFixedUsedRegsV2 = 54;
-constexpr int kMailboxHeaderReservedTailRegsV2 = kMailboxHeaderRegsV2 - kMailboxHeaderFixedUsedRegsV2;
+constexpr int kMailboxHeaderUsedRegsV2 = 54;          // 当前有效字段长度
+constexpr int kMailboxHeaderReservedTailRegsV2 = 4;   // 物理头块尾部预留
+constexpr int kMailboxHeaderBlockRegsV2 =
+    kMailboxHeaderUsedRegsV2 + kMailboxHeaderReservedTailRegsV2; // 54 + 4 = 58
 constexpr int kMailboxArrayRegsReservedV2 = 2304;
 constexpr int kMailboxArrayFloatCountReservedV2 = kMailboxArrayRegsReservedV2 / 2;
-constexpr int kMailboxTotalRegsV2 = kMailboxHeaderRegsV2 + kMailboxArrayRegsReservedV2;
+constexpr int kMailboxTotalRegsV2 = kMailboxHeaderBlockRegsV2 + kMailboxArrayRegsReservedV2;
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
 
@@ -37,6 +38,10 @@ constexpr int kMailboxOffsetRawLayoutVer = 50;    // uint16
 constexpr int kMailboxOffsetRingCount = 51;       // uint16
 constexpr int kMailboxOffsetPointCount = 52;      // uint16
 constexpr int kMailboxOffsetChannelCount = 53;    // uint16
+constexpr int kMailboxOffsetReservedTail0 = 54;    // uint16 reserved
+constexpr int kMailboxOffsetReservedTail1 = 55;    // uint16 reserved
+constexpr int kMailboxOffsetReservedTail2 = 56;    // uint16 reserved
+constexpr int kMailboxOffsetReservedTail3 = 57;    // uint16 reserved
 
 // 当前协议的核心原则：
 // 1) PLC 负责运动控制、扫码、槽位有无、冻结测量包；
@@ -45,6 +50,8 @@ constexpr int kMailboxOffsetChannelCount = 53;    // uint16
 // 4) 生产业务模式由 PC 在 START_AUTO 时声明：NORMAL/SECOND/THIRD/MIL；复测不属于顶部模式，而是 NG 后即时动作。
 // 5) 当前正在处理哪一个/哪两个槽位，属于 PLC 实时状态，应放在 Status Block；
 //    Mailbox 里的 slot_index[0/1] 仅表示最终冻结测量包对应的槽位。
+// 6) Mailbox Header 当前有效字段长度为 54 regs，但物理头块固定预留 58 regs；
+//    尾部 4 regs 作为 reserved，Arrays 起始偏移保持在 58，便于后续扩展且不打乱数组区。
 
 enum class PlcMachineState : quint16 {
   Idle = 0,
