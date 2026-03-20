@@ -114,6 +114,25 @@ namespace core
         c.scan_b.order_code = (quint16)s.value("order_code", 1).toInt();
         s.endGroup();
 
+        // PLC 通讯配置解析
+        s.beginGroup("plc");
+        c.plc.enabled = (s.value("enabled", 0).toInt() != 0);
+        c.plc.host = s.value("host", "127.0.0.1").toString().trimmed();
+        c.plc.port = s.value("port", 502).toInt();
+        c.plc.server_address = s.value("server_address", 1).toInt();
+        c.plc.connect_timeout_ms = s.value("connect_timeout_ms", 3000).toInt();
+        c.plc.response_timeout_ms = s.value("response_timeout_ms", 1000).toInt();
+        c.plc.number_of_retries = s.value("number_of_retries", 1).toInt();
+        c.plc.poll_interval_ms = s.value("poll_interval_ms", 100).toInt();
+        c.plc.auto_reconnect = (s.value("auto_reconnect", 1).toInt() != 0);
+        c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();
+        c.plc.status_start_address = s.value("status_start_address", 0).toULongLong();
+        c.plc.tray_start_address = s.value("tray_start_address", 0).toULongLong();
+        c.plc.command_start_address = s.value("command_start_address", 0).toULongLong();
+        c.plc.mailbox_start_address = s.value("mailbox_start_address", 0).toULongLong();
+        c.plc.pc_ack_start_address = s.value("pc_ack_start_address", 0).toULongLong();
+        s.endGroup();
+
         return c;
     }
 

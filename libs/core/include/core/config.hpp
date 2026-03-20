@@ -73,6 +73,31 @@ struct MesConfig
         quint16 order_code = 1;
     };
 
+    // PLC 运行配置：
+    // 1) 连接参数；
+    // 2) 轮询节拍；
+    // 3) 各寄存器区块的起始地址（reg_count 由协议常量给出，不在 ini 中反复填写）。
+    struct PlcConfig
+    {
+        bool enabled = false;
+        QString host = QStringLiteral("127.0.0.1");
+        int port = 502;
+        int server_address = 1;
+
+        int connect_timeout_ms = 3000;
+        int response_timeout_ms = 1000;
+        int number_of_retries = 1;
+        int poll_interval_ms = 100;
+        bool auto_reconnect = true;
+        int reconnect_interval_ms = 2000;
+
+        quint32 status_start_address = 0;
+        quint32 tray_start_address = 0;
+        quint32 command_start_address = 0;
+        quint32 mailbox_start_address = 0;
+        quint32 pc_ack_start_address = 0;
+    };
+
     // 应用程序配置结构体，整合所有配置为一个单一配置对象，便于统一管理
     struct AppConfig
     {
@@ -84,6 +109,9 @@ struct MesConfig
         ScanConfig scan_a;
         // B 型：RUNO 2ch
         ScanConfig scan_b;
+
+        // PLC 通讯配置
+        PlcConfig plc;
     };
 
     // 函数声明

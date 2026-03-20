@@ -1,7 +1,7 @@
 project(core LANGUAGES CXX) # 项目定义：定义了一个名为 core 的子项目，使用 C++ 语言
 
 # 依赖查找：查找 Qt5 库，并明确要求 Core 和 Sql 组件。如果找不到这些组件，CMake 会报错
-find_package(Qt5 REQUIRED COMPONENTS Core Sql)
+find_package(Qt5 REQUIRED COMPONENTS Core Sql SerialBus)
 
 # 将当前目录下的 src 目录中的所有 .cpp 文件添加到 CORE_SRC 变量中
 file(GLOB CORE_SRC CONFIGURE_DEPENDS
@@ -23,4 +23,5 @@ target_include_directories(core PUBLIC
 target_link_libraries(core PUBLIC 
   Qt5::Core 
   Qt5::Sql
+  Qt5::SerialBus
 )
