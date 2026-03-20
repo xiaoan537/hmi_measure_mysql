@@ -108,6 +108,11 @@ struct MeasurementContext {
 // 计算层统一输入：PLC 原始测量事实 + PC 已知业务事实。
 
 
+struct PlcMailboxRegisterBlock {
+  QVector<quint16> header_regs;
+  QVector<quint16> array_regs;
+};
+
 // 对应 PLC Mailbox 的“逻辑原始块”：header + 线性展开 arrays。
 // arrays_um 的顺序约定：item0 完整块，再 item1 完整块，不交织；
 // item 内顺序：ring -> channel -> point。
@@ -220,6 +225,32 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
 QChar mailboxPartTypeFromHeader(quint16 plcPartType);
 int expectedMailboxPointCountPerItem(const PlcMailboxHeaderV2 &header);
 int expectedMailboxUsedPointCount(const PlcMailboxHeaderV2 &header);
+
+bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
+                     quint16 *out, QString *err = nullptr);
+bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                         quint32 *out, QString *err = nullptr);
+bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                          float *out, QString *err = nullptr);
+bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
+                    QString *out, QString *err = nullptr);
+bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
+                             int floatCount, QVector<float> *out,
+                             QString *err = nullptr);
+
+bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
+                              PlcMailboxRegisterBlock *out,
+                              QString *err = nullptr);
+bool buildPlcMailboxHeaderV2(const QVector<quint16> &headerRegs,
+                             PlcMailboxHeaderV2 *out,
+                             QString *err = nullptr);
+bool buildPlcMailboxRawFrame(const QVector<quint16> &headerRegs,
+                             const QVector<quint16> &arrayRegs,
+                             PlcMailboxRawFrame *out,
+                             QString *err = nullptr);
+bool buildPlcMailboxRawFrame(const PlcMailboxRegisterBlock &regBlock,
+                             PlcMailboxRawFrame *out,
+                             QString *err = nullptr);
 
 bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
                              const QVector<float> &arrays_um,

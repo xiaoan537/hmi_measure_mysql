@@ -12,10 +12,31 @@ constexpr int kTrayPartIdAsciiChars = 32;
 constexpr int kTrayPartIdRegsPerSlot = 16;
 
 constexpr int kMailboxHeaderRegsV2 = 58;
+constexpr int kMailboxHeaderFixedUsedRegsV2 = 54;
+constexpr int kMailboxHeaderReservedTailRegsV2 = kMailboxHeaderRegsV2 - kMailboxHeaderFixedUsedRegsV2;
 constexpr int kMailboxArrayRegsReservedV2 = 2304;
 constexpr int kMailboxArrayFloatCountReservedV2 = kMailboxArrayRegsReservedV2 / 2;
+constexpr int kMailboxTotalRegsV2 = kMailboxHeaderRegsV2 + kMailboxArrayRegsReservedV2;
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
+
+constexpr int kMailboxOffsetMeasSeq = 0;          // uint32, 2 regs
+constexpr int kMailboxOffsetPartType = 2;         // uint16
+constexpr int kMailboxOffsetItemCount = 3;        // uint16
+constexpr int kMailboxOffsetSlotIndex0 = 4;       // uint16
+constexpr int kMailboxOffsetSlotIndex1 = 5;       // uint16
+constexpr int kMailboxOffsetPartIdAscii0 = 6;     // ASCII32, 16 regs
+constexpr int kMailboxOffsetPartIdAscii1 = 22;    // ASCII32, 16 regs
+constexpr int kMailboxOffsetTotalLen0 = 38;       // float32, 2 regs
+constexpr int kMailboxOffsetTotalLen1 = 40;       // float32, 2 regs
+constexpr int kMailboxOffsetAdLen0 = 42;          // float32, 2 regs
+constexpr int kMailboxOffsetAdLen1 = 44;          // float32, 2 regs
+constexpr int kMailboxOffsetBcLen0 = 46;          // float32, 2 regs
+constexpr int kMailboxOffsetBcLen1 = 48;          // float32, 2 regs
+constexpr int kMailboxOffsetRawLayoutVer = 50;    // uint16
+constexpr int kMailboxOffsetRingCount = 51;       // uint16
+constexpr int kMailboxOffsetPointCount = 52;      // uint16
+constexpr int kMailboxOffsetChannelCount = 53;    // uint16
 
 // 当前协议的核心原则：
 // 1) PLC 负责运动控制、扫码、槽位有无、冻结测量包；

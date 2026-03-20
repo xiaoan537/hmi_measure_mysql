@@ -3,6 +3,8 @@
 #include <QJsonValue>
 #include <QUuid>
 
+#include <cstring>
+
 namespace core {
 namespace {
 
@@ -68,6 +70,30 @@ int measureRoundFrom(const MeasurementContext &context) {
 
 QString resultTextFrom(const MeasurementComputeResult &result) {
   return toString(result.judgement);
+}
+
+bool checkRegSpan(const QVector<quint16> &regs, int offsetRegs, int regCount,
+                  QString *err, const QString &label) {
+  if (offsetRegs < 0 || regCount < 0) {
+    failWith(err, QStringLiteral("%1 offset/regCount 非法").arg(label));
+    return false;
+  }
+  if (offsetRegs + regCount > regs.size()) {
+    failWith(err, QStringLiteral("%1 越界：offset=%2, regs=%3, size=%4")
+                      .arg(label)
+                      .arg(offsetRegs)
+                      .arg(regCount)
+                      .arg(regs.size()));
+    return false;
+  }
+  return true;
+}
+
+float floatFromBits(quint32 bits) {
+  float value = 0.0f;
+  static_assert(sizeof(value) == sizeof(bits), "float32 size mismatch");
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
 }
 
 } // namespace
@@ -172,6 +198,185 @@ bool MeasurementComputeInput::isValid(QString *err) const {
     }
   }
   return true;
+}
+
+bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
+                     quint16 *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadUint16At.out 不能为空"));
+    return false;
+  }
+  if (!checkRegSpan(regs, offsetRegs, 1, err, QStringLiteral("uint16"))) {
+    return false;
+  }
+  *out = regs.at(offsetRegs);
+  return true;
+}
+
+bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                         quint32 *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadUint32AbcdAt.out 不能为空"));
+    return false;
+  }
+  if (!checkRegSpan(regs, offsetRegs, 2, err, QStringLiteral("uint32 ABCD"))) {
+    return false;
+  }
+  const quint32 hi = static_cast<quint32>(regs.at(offsetRegs));
+  const quint32 lo = static_cast<quint32>(regs.at(offsetRegs + 1));
+  *out = (hi << 16) | lo;
+  return true;
+}
+
+bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                          float *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadFloat32AbcdAt.out 不能为空"));
+    return false;
+  }
+  quint32 bits = 0;
+  if (!plcReadUint32AbcdAt(regs, offsetRegs, &bits, err)) {
+    return false;
+  }
+  *out = floatFromBits(bits);
+  return true;
+}
+
+bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
+                    QString *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadAsciiAt.out 不能为空"));
+    return false;
+  }
+  if (!checkRegSpan(regs, offsetRegs, regCount, err, QStringLiteral("ASCII"))) {
+    return false;
+  }
+  QString text;
+  text.reserve(regCount * 2);
+  for (int i = 0; i < regCount; ++i) {
+    const quint16 reg = regs.at(offsetRegs + i);
+    text.append(QChar(static_cast<ushort>((reg >> 8) & 0x00FFu)));
+    text.append(QChar(static_cast<ushort>(reg & 0x00FFu)));
+  }
+  *out = normalizedAsciiField(text);
+  return true;
+}
+
+bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
+                             int floatCount, QVector<float> *out,
+                             QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadFloat32ArrayAbcd.out 不能为空"));
+    return false;
+  }
+  if (floatCount < 0) {
+    failWith(err, QStringLiteral("floatCount 不能小于 0"));
+    return false;
+  }
+  const int regCount = floatCount * 2;
+  if (!checkRegSpan(regs, offsetRegs, regCount, err, QStringLiteral("float32 array ABCD"))) {
+    return false;
+  }
+  QVector<float> values;
+  values.reserve(floatCount);
+  for (int i = 0; i < floatCount; ++i) {
+    float value = 0.0f;
+    if (!plcReadFloat32AbcdAt(regs, offsetRegs + i * 2, &value, err)) {
+      return false;
+    }
+    values.push_back(value);
+  }
+  *out = values;
+  return true;
+}
+
+bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
+                              PlcMailboxRegisterBlock *out,
+                              QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("splitPlcMailboxRegisters.out 不能为空"));
+    return false;
+  }
+  if (mailboxRegs.size() < kMailboxTotalRegsV2) {
+    failWith(err, QStringLiteral("mailboxRegs 长度不足，期望至少 %1，实际 %2")
+                      .arg(kMailboxTotalRegsV2)
+                      .arg(mailboxRegs.size()));
+    return false;
+  }
+
+  PlcMailboxRegisterBlock block;
+  block.header_regs = mailboxRegs.mid(0, kMailboxHeaderRegsV2);
+  block.array_regs = mailboxRegs.mid(kMailboxHeaderRegsV2, kMailboxArrayRegsReservedV2);
+  *out = block;
+  return true;
+}
+
+bool buildPlcMailboxHeaderV2(const QVector<quint16> &headerRegs,
+                             PlcMailboxHeaderV2 *out,
+                             QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildPlcMailboxHeaderV2.out 不能为空"));
+    return false;
+  }
+  if (headerRegs.size() < kMailboxHeaderRegsV2) {
+    failWith(err, QStringLiteral("headerRegs 长度不足，期望至少 %1，实际 %2")
+                      .arg(kMailboxHeaderRegsV2)
+                      .arg(headerRegs.size()));
+    return false;
+  }
+
+  PlcMailboxHeaderV2 header;
+  if (!plcReadUint32AbcdAt(headerRegs, kMailboxOffsetMeasSeq, &header.meas_seq, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetPartType, &header.part_type, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetItemCount, &header.item_count, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetSlotIndex0, &header.slot_index[0], err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetSlotIndex1, &header.slot_index[1], err)) return false;
+  if (!plcReadAsciiAt(headerRegs, kMailboxOffsetPartIdAscii0, kTrayPartIdRegsPerSlot, &header.part_id_ascii[0], err)) return false;
+  if (!plcReadAsciiAt(headerRegs, kMailboxOffsetPartIdAscii1, kTrayPartIdRegsPerSlot, &header.part_id_ascii[1], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetTotalLen0, &header.total_len_mm[0], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetTotalLen1, &header.total_len_mm[1], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetAdLen0, &header.ad_len_mm[0], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetAdLen1, &header.ad_len_mm[1], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetBcLen0, &header.bc_len_mm[0], err)) return false;
+  if (!plcReadFloat32AbcdAt(headerRegs, kMailboxOffsetBcLen1, &header.bc_len_mm[1], err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetRawLayoutVer, &header.raw_layout_ver, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetRingCount, &header.ring_count, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetPointCount, &header.point_count, err)) return false;
+  if (!plcReadUint16At(headerRegs, kMailboxOffsetChannelCount, &header.channel_count, err)) return false;
+
+  *out = header;
+  return true;
+}
+
+bool buildPlcMailboxRawFrame(const QVector<quint16> &headerRegs,
+                             const QVector<quint16> &arrayRegs,
+                             PlcMailboxRawFrame *out,
+                             QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildPlcMailboxRawFrame.out 不能为空"));
+    return false;
+  }
+  if (arrayRegs.size() % 2 != 0) {
+    failWith(err, QStringLiteral("arrayRegs 长度必须为偶数，实际 %1").arg(arrayRegs.size()));
+    return false;
+  }
+
+  PlcMailboxRawFrame frame;
+  if (!buildPlcMailboxHeaderV2(headerRegs, &frame.header, err)) {
+    return false;
+  }
+  if (!plcReadFloat32ArrayAbcd(arrayRegs, 0, arrayRegs.size() / 2, &frame.arrays_um, err)) {
+    return false;
+  }
+
+  *out = frame;
+  return true;
+}
+
+bool buildPlcMailboxRawFrame(const PlcMailboxRegisterBlock &regBlock,
+                             PlcMailboxRawFrame *out,
+                             QString *err) {
+  return buildPlcMailboxRawFrame(regBlock.header_regs, regBlock.array_regs, out, err);
 }
 
 QChar mailboxPartTypeFromHeader(quint16 plcPartType) {
