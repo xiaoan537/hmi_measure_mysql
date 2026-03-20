@@ -290,6 +290,152 @@ bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
+bool plcWriteAsciiRegs(const QString &text, int regCount,
+                       QVector<quint16> *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcWriteAsciiRegs.out 不能为空"));
+    return false;
+  }
+  if (regCount < 0) {
+    failWith(err, QStringLiteral("regCount 不能小于 0"));
+    return false;
+  }
+
+  QString normalized = text;
+  if (normalized.size() > regCount * 2) {
+    normalized = normalized.left(regCount * 2);
+  }
+  while (normalized.size() < regCount * 2) {
+    normalized.append(QChar('\0'));
+  }
+
+  QVector<quint16> regs;
+  regs.reserve(regCount);
+  for (int i = 0; i < regCount; ++i) {
+    const ushort hi = static_cast<ushort>(normalized.at(i * 2).unicode() & 0x00FFu);
+    const ushort lo = static_cast<ushort>(normalized.at(i * 2 + 1).unicode() & 0x00FFu);
+    regs.push_back(static_cast<quint16>((hi << 8) | lo));
+  }
+  *out = regs;
+  return true;
+}
+
+bool buildPlcStatusBlockV2(const QVector<quint16> &statusRegs,
+                           PlcStatusBlockV2 *out,
+                           QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildPlcStatusBlockV2.out 不能为空"));
+    return false;
+  }
+  if (statusRegs.size() < kStatusBlockRegsV2) {
+    failWith(err, QStringLiteral("statusRegs 长度不足，期望至少 %1，实际 %2")
+                      .arg(kStatusBlockRegsV2)
+                      .arg(statusRegs.size()));
+    return false;
+  }
+
+  PlcStatusBlockV2 status;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetMachineState, &status.machine_state, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetStepState, &status.step_state, err)) return false;
+  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetStateSeq, &status.state_seq, err)) return false;
+  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetInterlockMask, &status.interlock_mask, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmCode, &status.alarm_code, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmLevel, &status.alarm_level, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetTrayPresentMask, &status.tray_present_mask, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetScanDone, &status.scan_done, err)) return false;
+  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetScanSeq, &status.scan_seq, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveItemCount, &status.active_item_count, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex0, &status.active_slot_index[0], err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex1, &status.active_slot_index[1], err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetMailboxReady, &status.mailbox_ready, err)) return false;
+  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetMeasSeq, &status.meas_seq, err)) return false;
+
+  *out = status;
+  return true;
+}
+
+bool buildPlcTrayPartIdBlockV2(const QVector<quint16> &trayRegs,
+                               PlcTrayPartIdBlockV2 *out,
+                               QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildPlcTrayPartIdBlockV2.out 不能为空"));
+    return false;
+  }
+  if (trayRegs.size() < kTrayPartIdBlockRegsV2) {
+    failWith(err, QStringLiteral("trayRegs 长度不足，期望至少 %1，实际 %2")
+                      .arg(kTrayPartIdBlockRegsV2)
+                      .arg(trayRegs.size()));
+    return false;
+  }
+
+  PlcTrayPartIdBlockV2 block;
+  for (int slot = 0; slot < kLogicalSlotCount; ++slot) {
+    QString partId;
+    if (!plcReadAsciiAt(trayRegs, slot * kTrayPartIdRegsPerSlot,
+                        kTrayPartIdRegsPerSlot, &partId, err)) {
+      return false;
+    }
+    block.part_ids[slot] = normalizedAsciiField(partId);
+  }
+
+  *out = block;
+  return true;
+}
+
+bool buildPlcCommandBlockV2(const QVector<quint16> &commandRegs,
+                            PlcCommandBlockV2 *out,
+                            QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildPlcCommandBlockV2.out 不能为空"));
+    return false;
+  }
+  if (commandRegs.size() < kCommandBlockRegsV2) {
+    failWith(err, QStringLiteral("commandRegs 长度不足，期望至少 %1，实际 %2")
+                      .arg(kCommandBlockRegsV2)
+                      .arg(commandRegs.size()));
+    return false;
+  }
+
+  PlcCommandBlockV2 command;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdCode, &command.cmd_code, err)) return false;
+  if (!plcReadUint32AbcdAt(commandRegs, kCommandOffsetCmdSeq, &command.cmd_seq, err)) return false;
+  if (!plcReadUint32AbcdAt(commandRegs, kCommandOffsetCmdArg0, &command.cmd_arg0, err)) return false;
+  if (!plcReadUint32AbcdAt(commandRegs, kCommandOffsetCmdArg1, &command.cmd_arg1, err)) return false;
+  if (!plcReadUint32AbcdAt(commandRegs, kCommandOffsetCmdAckSeq, &command.cmd_ack_seq, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdResult, &command.cmd_result, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdErrorCode, &command.cmd_error_code, err)) return false;
+
+  *out = command;
+  return true;
+}
+
+bool encodePlcTrayPartIdBlockV2(const PlcTrayPartIdBlockV2 &block,
+                                QVector<quint16> *out,
+                                QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("encodePlcTrayPartIdBlockV2.out 不能为空"));
+    return false;
+  }
+
+  QVector<quint16> regs;
+  regs.reserve(kTrayPartIdBlockRegsV2);
+  for (int slot = 0; slot < kLogicalSlotCount; ++slot) {
+    QVector<quint16> slotRegs;
+    if (!plcWriteAsciiRegs(block.part_ids[slot], kTrayPartIdRegsPerSlot, &slotRegs, err)) {
+      return false;
+    }
+    regs += slotRegs;
+  }
+  *out = regs;
+  return true;
+}
+
+bool encodePlcTrayPartIdSlotRegs(const QString &partId,
+                                 QVector<quint16> *out,
+                                 QString *err) {
+  return plcWriteAsciiRegs(partId, kTrayPartIdRegsPerSlot, out, err);
+}
+
 bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
                               PlcMailboxRegisterBlock *out,
                               QString *err) {
@@ -738,6 +884,49 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
   out->ingest_item = ingestItem;
   out->ingest_result = ingestResult;
   return true;
+}
+
+QJsonObject toJson(const PlcStatusBlockV2 &status) {
+  QJsonObject obj;
+  obj.insert(QStringLiteral("machine_state"), static_cast<int>(status.machine_state));
+  obj.insert(QStringLiteral("step_state"), static_cast<int>(status.step_state));
+  obj.insert(QStringLiteral("state_seq"), static_cast<qint64>(status.state_seq));
+  obj.insert(QStringLiteral("interlock_mask"), static_cast<qint64>(status.interlock_mask));
+  obj.insert(QStringLiteral("alarm_code"), static_cast<int>(status.alarm_code));
+  obj.insert(QStringLiteral("alarm_level"), static_cast<int>(status.alarm_level));
+  obj.insert(QStringLiteral("tray_present_mask"), static_cast<int>(status.tray_present_mask));
+  obj.insert(QStringLiteral("scan_done"), static_cast<int>(status.scan_done));
+  obj.insert(QStringLiteral("scan_seq"), static_cast<qint64>(status.scan_seq));
+  obj.insert(QStringLiteral("active_item_count"), static_cast<int>(status.active_item_count));
+  QJsonArray active;
+  active.push_back(static_cast<int>(status.active_slot_index[0]));
+  active.push_back(static_cast<int>(status.active_slot_index[1]));
+  obj.insert(QStringLiteral("active_slot_index"), active);
+  obj.insert(QStringLiteral("mailbox_ready"), static_cast<int>(status.mailbox_ready));
+  obj.insert(QStringLiteral("meas_seq"), static_cast<qint64>(status.meas_seq));
+  return obj;
+}
+
+QJsonObject toJson(const PlcTrayPartIdBlockV2 &tray) {
+  QJsonObject obj;
+  QJsonArray ids;
+  for (int slot = 0; slot < kLogicalSlotCount; ++slot) {
+    ids.push_back(tray.part_ids[slot]);
+  }
+  obj.insert(QStringLiteral("part_ids"), ids);
+  return obj;
+}
+
+QJsonObject toJson(const PlcCommandBlockV2 &command) {
+  QJsonObject obj;
+  obj.insert(QStringLiteral("cmd_code"), static_cast<int>(command.cmd_code));
+  obj.insert(QStringLiteral("cmd_seq"), static_cast<qint64>(command.cmd_seq));
+  obj.insert(QStringLiteral("cmd_arg0"), static_cast<qint64>(command.cmd_arg0));
+  obj.insert(QStringLiteral("cmd_arg1"), static_cast<qint64>(command.cmd_arg1));
+  obj.insert(QStringLiteral("cmd_ack_seq"), static_cast<qint64>(command.cmd_ack_seq));
+  obj.insert(QStringLiteral("cmd_result"), static_cast<int>(command.cmd_result));
+  obj.insert(QStringLiteral("cmd_error_code"), static_cast<int>(command.cmd_error_code));
+  return obj;
 }
 
 QJsonObject toJson(const PlcMailboxSnapshot &snapshot) {

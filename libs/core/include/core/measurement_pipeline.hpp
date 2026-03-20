@@ -238,6 +238,24 @@ bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
 bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
                              int floatCount, QVector<float> *out,
                              QString *err = nullptr);
+bool plcWriteAsciiRegs(const QString &text, int regCount,
+                       QVector<quint16> *out, QString *err = nullptr);
+
+bool buildPlcStatusBlockV2(const QVector<quint16> &statusRegs,
+                           PlcStatusBlockV2 *out,
+                           QString *err = nullptr);
+bool buildPlcTrayPartIdBlockV2(const QVector<quint16> &trayRegs,
+                               PlcTrayPartIdBlockV2 *out,
+                               QString *err = nullptr);
+bool buildPlcCommandBlockV2(const QVector<quint16> &commandRegs,
+                            PlcCommandBlockV2 *out,
+                            QString *err = nullptr);
+bool encodePlcTrayPartIdBlockV2(const PlcTrayPartIdBlockV2 &block,
+                                QVector<quint16> *out,
+                                QString *err = nullptr);
+bool encodePlcTrayPartIdSlotRegs(const QString &partId,
+                                 QVector<quint16> *out,
+                                 QString *err = nullptr);
 
 bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
                               PlcMailboxRegisterBlock *out,
@@ -261,6 +279,9 @@ bool buildPlcMailboxSnapshot(const PlcMailboxRawFrame &frame,
                              PlcMailboxSnapshot *out,
                              QString *err = nullptr);
 
+QJsonObject toJson(const PlcStatusBlockV2 &status);
+QJsonObject toJson(const PlcTrayPartIdBlockV2 &tray);
+QJsonObject toJson(const PlcCommandBlockV2 &command);
 QJsonObject toJson(const PlcMailboxSnapshot &snapshot);
 QJsonObject toJson(const MeasurementContext &context);
 QJsonObject toJson(const MeasurementComputeResult &result);

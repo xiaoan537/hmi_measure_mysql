@@ -21,6 +21,33 @@ constexpr int kMailboxTotalRegsV2 = kMailboxHeaderBlockRegsV2 + kMailboxArrayReg
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
 
+constexpr int kStatusBlockRegsV2 = 18;
+constexpr int kStatusOffsetMachineState = 0;      // uint16
+constexpr int kStatusOffsetStepState = 1;         // uint16
+constexpr int kStatusOffsetStateSeq = 2;          // uint32, 2 regs
+constexpr int kStatusOffsetInterlockMask = 4;     // uint32, 2 regs
+constexpr int kStatusOffsetAlarmCode = 6;         // uint16
+constexpr int kStatusOffsetAlarmLevel = 7;        // uint16
+constexpr int kStatusOffsetTrayPresentMask = 8;   // uint16
+constexpr int kStatusOffsetScanDone = 9;          // uint16/bit
+constexpr int kStatusOffsetScanSeq = 10;          // uint32, 2 regs
+constexpr int kStatusOffsetActiveItemCount = 12;  // uint16
+constexpr int kStatusOffsetActiveSlotIndex0 = 13; // uint16
+constexpr int kStatusOffsetActiveSlotIndex1 = 14; // uint16
+constexpr int kStatusOffsetMailboxReady = 15;     // uint16/bit
+constexpr int kStatusOffsetMeasSeq = 16;          // uint32, 2 regs
+
+constexpr int kTrayPartIdBlockRegsV2 = kLogicalSlotCount * kTrayPartIdRegsPerSlot; // 16 * 16 = 256
+
+constexpr int kCommandBlockRegsV2 = 11;
+constexpr int kCommandOffsetCmdCode = 0;       // uint16
+constexpr int kCommandOffsetCmdSeq = 1;        // uint32, 2 regs
+constexpr int kCommandOffsetCmdArg0 = 3;       // uint32, 2 regs
+constexpr int kCommandOffsetCmdArg1 = 5;       // uint32, 2 regs
+constexpr int kCommandOffsetCmdAckSeq = 7;     // uint32, 2 regs
+constexpr int kCommandOffsetCmdResult = 9;     // uint16
+constexpr int kCommandOffsetCmdErrorCode = 10; // uint16
+
 constexpr int kMailboxOffsetMeasSeq = 0;          // uint32, 2 regs
 constexpr int kMailboxOffsetPartType = 2;         // uint16
 constexpr int kMailboxOffsetItemCount = 3;        // uint16
@@ -140,6 +167,16 @@ struct PlcStatusBlockV2 {
 
 struct PlcTrayPartIdBlockV2 {
   QString part_ids[kLogicalSlotCount];
+};
+
+struct PlcCommandBlockV2 {
+  quint16 cmd_code = 0;
+  quint32 cmd_seq = 0;
+  quint32 cmd_arg0 = 0;
+  quint32 cmd_arg1 = 0;
+  quint32 cmd_ack_seq = 0;
+  quint16 cmd_result = 0;
+  quint16 cmd_error_code = 0;
 };
 
 struct PlcMailboxHeaderV2 {
