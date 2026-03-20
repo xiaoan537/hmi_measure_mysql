@@ -6,6 +6,7 @@
 #include <QVariantMap>
 
 #include "core/config.hpp"
+#include "core/measurement_pipeline.hpp"
 
 namespace Ui { class ProductionWidget; }
 
@@ -73,6 +74,8 @@ public:
     void setScannedPartIds(const QVector<QString> &part_ids);
     void setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note = {});
     void setSlotComputedResult(int slot, const SlotMeasureSummary &s);
+    void setSlotSummary(int slot, const core::ProductionSlotSummary &s);
+    void setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries);
     void clearCurrentBatch();
     void setReservedCalibrationSlot(int slot = 15);
     void setCalibrationMode(bool enabled);

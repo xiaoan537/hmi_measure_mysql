@@ -1,5 +1,6 @@
 #include "calibration_widget.hpp"
 
+#include <QFont>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -44,9 +45,12 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     lblMasterA_ = new QLabel(QStringLiteral("A 型标定件: CAL-A-001"), this);
     lblMasterB_ = new QLabel(QStringLiteral("B 型标定件: CAL-B-001"), this);
     lblSlot15_ = new QLabel(QStringLiteral("15 号槽位: 空"), this);
+    lblSummary_ = new QLabel(QStringLiteral("结果摘要: --"), this);
+    lblSummary_->setWordWrap(true);
     modeLay->addWidget(lblMasterA_);
     modeLay->addWidget(lblMasterB_);
     modeLay->addWidget(lblSlot15_);
+    modeLay->addWidget(lblSummary_);
 
     auto *tip = new QLabel(QStringLiteral("说明：标定流程不扫码，标定件身份由 PC 本地配置管理；结果仅本地保存，不上传 MES。"), this);
     tip->setWordWrap(true);
@@ -124,6 +128,43 @@ void CalibrationWidget::setMasterPartIds(const QString &aPartId, const QString &
 {
     lblMasterA_->setText(QStringLiteral("A 型标定件: %1").arg(aPartId));
     lblMasterB_->setText(QStringLiteral("B 型标定件: %1").arg(bPartId));
+}
+
+void CalibrationWidget::setSlotSummary(const core::CalibrationSlotSummary &s)
+{
+    const QString who = s.calibration_master_part_id.isEmpty()
+                            ? QStringLiteral("未配置标定件")
+                            : s.calibration_master_part_id;
+    const QString measured = s.measured_part_id.isEmpty() ? QStringLiteral("--")
+                                                          : s.measured_part_id;
+    QString summary = QStringLiteral("结果摘要: 类型=%1, 主数据=%2, MailboxID=%3")
+                          .arg(s.calibration_type.isEmpty() ? QStringLiteral("--") : s.calibration_type)
+                          .arg(who)
+                          .arg(measured);
+    if (s.valid) {
+        if (s.compute.judgement == core::MeasurementJudgement::Ok) {
+            summary += QStringLiteral("，判定=OK");
+        } else if (s.compute.judgement == core::MeasurementJudgement::Ng) {
+            summary += QStringLiteral("，判定=NG");
+        } else {
+            summary += QStringLiteral("，判定=待算法");
+        }
+        if (!s.fail_reason_text.isEmpty()) {
+            summary += QStringLiteral("，原因=%1").arg(s.fail_reason_text);
+        }
+    }
+    if (lblSummary_) lblSummary_->setText(summary);
+    if (s.valid) listMessages_->addItem(summary);
+}
+
+void CalibrationWidget::setSlotSummaries(const QVector<core::CalibrationSlotSummary> &summaries)
+{
+    for (const auto &s : summaries) {
+        if (s.slot_index == 15) {
+            setSlotSummary(s);
+            return;
+        }
+    }
 }
 
 QString CalibrationWidget::selectedMasterTypeText() const

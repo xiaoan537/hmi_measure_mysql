@@ -29,6 +29,29 @@ inline QString shortId(const QString &id32)
     return id32.left(6) + QStringLiteral("…") + id32.right(3);
 }
 
+SlotMeasureSummary toWidgetSummary(const core::ProductionSlotSummary &src)
+{
+    SlotMeasureSummary out;
+    out.part_type = src.part_type;
+    out.valid = src.valid || src.compute.valid;
+    out.judgement_known = src.judgement_known;
+    out.judgement_ok = src.judgement_ok;
+    out.fail_reason_text = !src.fail_reason_text.isEmpty() ? src.fail_reason_text
+                                                           : src.compute.fail_reason_text;
+
+    out.a_total_len_mm = src.compute.values.total_len_mm;
+    out.a_id_left_mm = src.compute.values.id_left_mm;
+    out.a_od_left_mm = src.compute.values.od_left_mm;
+    out.a_id_right_mm = src.compute.values.id_right_mm;
+    out.a_od_right_mm = src.compute.values.od_right_mm;
+
+    out.b_ad_len_mm = src.compute.values.ad_len_mm;
+    out.b_bc_len_mm = src.compute.values.bc_len_mm;
+    out.b_runout_left_mm = src.compute.values.runout_left_mm;
+    out.b_runout_right_mm = src.compute.values.runout_right_mm;
+    return out;
+}
+
 } // namespace
 
 ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
@@ -525,6 +548,25 @@ void ProductionWidget::setSlotComputedResult(int slot, const SlotMeasureSummary 
         slot_notes_[slot] = s.fail_reason_text;
     }
     updateSlotCard(slot);
+}
+
+void ProductionWidget::setSlotSummary(int slot, const core::ProductionSlotSummary &s)
+{
+    if (slot < 0) slot = s.slot_index;
+    if (slot < 0 || slot >= 16) return;
+
+    if (!s.part_id.isEmpty()) {
+        if (slot_part_ids_.size() != 16) slot_part_ids_.resize(16);
+        slot_part_ids_[slot] = s.part_id;
+    }
+    setSlotComputedResult(slot, toWidgetSummary(s));
+}
+
+void ProductionWidget::setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries)
+{
+    for (const auto &s : summaries) {
+        setSlotSummary(s.slot_index, s);
+    }
 }
 
 void ProductionWidget::clearCurrentBatch()
