@@ -56,14 +56,13 @@ bool isCalibrationStep(quint16 stepState) {
   return stepState >= 200 && stepState < 300;
 }
 
-bool isActiveProductionStep(quint16 stepState) {
+bool isProcessingProductionStep(quint16 stepState) {
   switch (static_cast<core::PlcStepStateV2>(stepState)) {
   case core::PlcStepStateV2::PickFromTray:
   case core::PlcStepStateV2::MoveToStations:
   case core::PlcStepStateV2::PlaceToStations:
   case core::PlcStepStateV2::MeasureActive:
   case core::PlcStepStateV2::GenerateMailbox:
-  case core::PlcStepStateV2::WaitPcRead:
   case core::PlcStepStateV2::ReturnToTray:
     return true;
   default:
@@ -446,9 +445,14 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
 
       const bool isActive = (status.active_item_count >= 1 && status.active_slot_index[0] == static_cast<quint16>(slot)) ||
                             (status.active_item_count >= 2 && status.active_slot_index[1] == static_cast<quint16>(slot));
-      if (isActive && isActiveProductionStep(status.step_state)) {
-        state = SlotRuntimeState::Measuring;
-        note = QStringLiteral("当前活跃槽位");
+      if (isActive) {
+        if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcRead)) {
+          state = SlotRuntimeState::WaitingPcRead;
+          note = QStringLiteral("已测完成，等待 PC 读取并 ACK");
+        } else if (isProcessingProductionStep(status.step_state)) {
+          state = SlotRuntimeState::Measuring;
+          note = QStringLiteral("当前活跃槽位");
+        }
       }
 
       productionWidget_->setSlotRuntimeState(slot, state, note);

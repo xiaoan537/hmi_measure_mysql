@@ -25,6 +25,7 @@ enum class SlotRuntimeState : int
     WaitingIdCheck,
     ScanMismatch,
     Measuring,
+    WaitingPcRead,
     Ok,
     Ng,
     Calibration,
@@ -146,6 +147,7 @@ private:
 
     // mailbox preview cache（仅用于展示）
     quint32 mb_meas_seq_ = 0;
+    QString last_machine_state_text_;
     QChar mb_part_type_ = QChar('A');
     quint16 mb_slot0_ = 0;
     quint16 mb_slot1_ = 0xFFFF;

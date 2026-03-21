@@ -99,6 +99,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         QPushButton[slotState="2"] { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 10px; }
         QPushButton[slotState="3"] { background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 10px; }
         QPushButton[slotState="4"] { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px; }
+        QPushButton[slotState="5"] { background: #ffedd5; border: 1px solid #fdba74; border-radius: 10px; }
 
         QPushButton[slotSelected="1"] { border: 2px solid #111827; }
     )");
@@ -259,6 +260,7 @@ QString ProductionWidget::runtimeStateText(int slot) const
     case SlotRuntimeState::WaitingIdCheck: return QStringLiteral("待核对ID");
     case SlotRuntimeState::ScanMismatch: return QStringLiteral("ID不一致");
     case SlotRuntimeState::Measuring: return QStringLiteral("测量中");
+    case SlotRuntimeState::WaitingPcRead: return QStringLiteral("待读取");
     case SlotRuntimeState::Ok: return QStringLiteral("OK");
     case SlotRuntimeState::Ng: return QStringLiteral("NG");
     case SlotRuntimeState::Calibration: return QStringLiteral("标定槽");
@@ -279,6 +281,7 @@ int ProductionWidget::runtimeStateStyleCode(int slot) const
     case SlotRuntimeState::Measuring:
     case SlotRuntimeState::Unknown: return 3;
     case SlotRuntimeState::Calibration: return 4;
+    case SlotRuntimeState::WaitingPcRead: return 5;
     case SlotRuntimeState::Empty:
     default: return 0;
     }
@@ -451,9 +454,10 @@ void ProductionWidget::setPlcConnected(bool ok)
 
 void ProductionWidget::setMachineState(quint16 /*machine_state*/, const QString &text)
 {
-    if (!text.isEmpty()) {
-        ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(text));
-    }
+    if (text.isEmpty()) return;
+    if (text == last_machine_state_text_) return;
+    last_machine_state_text_ = text;
+    ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(text));
 }
 
 void ProductionWidget::setStepState(quint16 step_state)
