@@ -1,9 +1,15 @@
 #include "dev_tools_widget.hpp"
 #include "dev_tools.hpp"
 
+#include <QComboBox>
 #include <QDateTime>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QVBoxLayout>
 
 #include "core/db.hpp"
 #include "core/measurement_ingest.hpp"
@@ -22,12 +28,97 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
           &DevToolsWidget::onQueryLatest);
   connect(ui_->btnClearLog, &QPushButton::clicked, this,
           &DevToolsWidget::onClearLog);
+
+  auto *plcBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), this);
+  auto *plcLay = new QVBoxLayout(plcBox);
+
+  auto *modeLay = new QHBoxLayout();
+  modeLay->addWidget(new QLabel(QStringLiteral("流程模式："), plcBox));
+  plcFlowCombo_ = new QComboBox(plcBox);
+  plcFlowCombo_->addItem(QStringLiteral("手动（只监听，不自动推进）"), static_cast<int>(PlcFlowModeUi::Manual));
+  plcFlowCombo_->addItem(QStringLiteral("半自动（扫码后自动继续，不自动ACK）"), static_cast<int>(PlcFlowModeUi::SemiAuto));
+  plcFlowCombo_->addItem(QStringLiteral("全自动（扫码后自动继续，读包后自动ACK）"), static_cast<int>(PlcFlowModeUi::FullAuto));
+  modeLay->addWidget(plcFlowCombo_, 1);
+  plcLay->addLayout(modeLay);
+
+  auto *summaryLay = new QHBoxLayout();
+  lbPlcConn_ = new QLabel(QStringLiteral("连接：-"), plcBox);
+  lbPlcMachine_ = new QLabel(QStringLiteral("机器：-"), plcBox);
+  lbPlcStep_ = new QLabel(QStringLiteral("步骤：-"), plcBox);
+  lbPlcSeq_ = new QLabel(QStringLiteral("seq(scan/meas)：-/-"), plcBox);
+  summaryLay->addWidget(lbPlcConn_);
+  summaryLay->addWidget(lbPlcMachine_);
+  summaryLay->addWidget(lbPlcStep_);
+  summaryLay->addWidget(lbPlcSeq_, 1);
+  plcLay->addLayout(summaryLay);
+
+  auto *btnLay = new QHBoxLayout();
+  auto *btnPoll = new QPushButton(QStringLiteral("轮询一拍"), plcBox);
+  auto *btnContinue = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), plcBox);
+  auto *btnRescan = new QPushButton(QStringLiteral("请求重扫ID"), plcBox);
+  auto *btnAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), plcBox);
+  btnLay->addWidget(btnPoll);
+  btnLay->addWidget(btnContinue);
+  btnLay->addWidget(btnRescan);
+  btnLay->addWidget(btnAck);
+  plcLay->addLayout(btnLay);
+
+  ui_->verticalLayout->insertWidget(0, plcBox);
+
+  connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index){
+    const int mode = plcFlowCombo_->itemData(index).toInt();
+    emit plcFlowModeChanged(mode);
+    appendPlcLog(QStringLiteral("PLC流程模式切换为：%1").arg(plcFlowModeText(mode)));
+  });
+  connect(btnPoll, &QPushButton::clicked, this, &DevToolsWidget::requestPlcPollOnce);
+  connect(btnContinue, &QPushButton::clicked, this, &DevToolsWidget::requestPlcContinueAfterIdCheck);
+  connect(btnRescan, &QPushButton::clicked, this, &DevToolsWidget::requestPlcRequestRescanIds);
+  connect(btnAck, &QPushButton::clicked, this, &DevToolsWidget::requestPlcAckMailbox);
+
+  setPlcFlowMode(static_cast<int>(PlcFlowModeUi::Manual));
 }
 
 DevToolsWidget::~DevToolsWidget() { delete ui_; }
 
 void DevToolsWidget::appendLog(const QString &text) {
   ui_->textLog->appendPlainText(text);
+}
+
+QString DevToolsWidget::plcFlowModeText(int mode) const {
+  switch (static_cast<PlcFlowModeUi>(mode)) {
+  case PlcFlowModeUi::Manual:
+    return QStringLiteral("手动");
+  case PlcFlowModeUi::SemiAuto:
+    return QStringLiteral("半自动");
+  case PlcFlowModeUi::FullAuto:
+    return QStringLiteral("全自动");
+  default:
+    return QStringLiteral("未知");
+  }
+}
+
+void DevToolsWidget::setPlcFlowMode(int mode) {
+  if (!plcFlowCombo_) return;
+  for (int i = 0; i < plcFlowCombo_->count(); ++i) {
+    if (plcFlowCombo_->itemData(i).toInt() == mode) {
+      const QSignalBlocker blocker(plcFlowCombo_);
+      plcFlowCombo_->setCurrentIndex(i);
+      break;
+    }
+  }
+}
+
+void DevToolsWidget::setPlcRuntimeSummary(bool connected, const QString &machineText,
+                                         const QString &stepText, quint32 scanSeq,
+                                         quint32 measSeq) {
+  if (lbPlcConn_) lbPlcConn_->setText(QStringLiteral("连接：%1").arg(connected ? QStringLiteral("已连接") : QStringLiteral("未连接")));
+  if (lbPlcMachine_) lbPlcMachine_->setText(QStringLiteral("机器：%1").arg(machineText.isEmpty() ? QStringLiteral("-") : machineText));
+  if (lbPlcStep_) lbPlcStep_->setText(QStringLiteral("步骤：%1").arg(stepText.isEmpty() ? QStringLiteral("-") : stepText));
+  if (lbPlcSeq_) lbPlcSeq_->setText(QStringLiteral("seq(scan/meas)：%1/%2").arg(scanSeq).arg(measSeq));
+}
+
+void DevToolsWidget::appendPlcLog(const QString &text) {
+  appendLog(QStringLiteral("[PLC] %1").arg(text));
 }
 
 bool DevToolsWidget::insertViaIngest(const QString &partType,

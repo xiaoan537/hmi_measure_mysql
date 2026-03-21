@@ -7,12 +7,15 @@
 #include <memory>
 
 #include "core/config.hpp"
+#include "core/plc_contract_v2.hpp"
+#include "core/plc_polling_v2.hpp"
 
 class QLabel;
 class DiagnosticsWidget;
 class MesWorker;
 class ProductionWidget;
 class CalibrationWidget;
+class DevToolsWidget;
 
 namespace core {
 class PlcRuntimeServiceV2;
@@ -43,6 +46,8 @@ private:
     void onPlcStatusUpdated(const core::PlcStatusBlockV2 &status);
     void onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray);
     void onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot);
+    void onPlcEventsRaised(const core::PlcPollEventsV2 &events);
+    void onPlcFlowModeChanged(int mode);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
     void handleAckMailboxRequested();
@@ -51,6 +56,7 @@ private:
     Ui::MainWindow *ui_ = nullptr;
     QString iniPath_;
     DiagnosticsWidget *diagnosticsWidget_ = nullptr;
+    DevToolsWidget *devToolsWidget_ = nullptr;
     ProductionWidget *productionWidget_ = nullptr;
     CalibrationWidget *calibrationWidget_ = nullptr;
     QLabel *lbDb_ = nullptr;
@@ -61,4 +67,9 @@ private:
     quint32 plcCommandSeq_ = 1;
     quint16 lastMailboxReady_ = 0;
     quint32 lastMailboxSeq_ = 0;
+    int plcFlowMode_ = 0;
+    quint32 lastAutoContinueScanSeq_ = 0;
+    quint32 lastAutoAckMeasSeq_ = 0;
+    core::PlcStatusBlockV2 lastStatus_{};
+    bool hasLastStatus_ = false;
 };

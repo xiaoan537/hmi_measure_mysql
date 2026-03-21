@@ -40,6 +40,31 @@ QString mailboxPartTypeText(const core::PlcMailboxSnapshot &snapshot) {
   return QStringLiteral("-");
 }
 
+QString stepStateText(quint16 stepState) {
+  switch (static_cast<core::PlcStepStateV2>(stepState)) {
+  case core::PlcStepStateV2::WaitStart: return QStringLiteral("等待启动");
+  case core::PlcStepStateV2::WaitTrayReady: return QStringLiteral("等待上料就绪");
+  case core::PlcStepStateV2::ScanTrayIds: return QStringLiteral("扫码中");
+  case core::PlcStepStateV2::WaitPcIdCheck: return QStringLiteral("等待PC核对ID");
+  case core::PlcStepStateV2::PickFromTray: return QStringLiteral("取料中");
+  case core::PlcStepStateV2::MoveToStations: return QStringLiteral("移动到工位");
+  case core::PlcStepStateV2::PlaceToStations: return QStringLiteral("放置到工位");
+  case core::PlcStepStateV2::MeasureActive: return QStringLiteral("测量中");
+  case core::PlcStepStateV2::GenerateMailbox: return QStringLiteral("生成测量包");
+  case core::PlcStepStateV2::WaitPcRead: return QStringLiteral("等待PC读取");
+  case core::PlcStepStateV2::ReturnToTray: return QStringLiteral("回盘中");
+  case core::PlcStepStateV2::CycleComplete: return QStringLiteral("循环完成");
+  case core::PlcStepStateV2::CalWaitLoadSlot15: return QStringLiteral("标定等待15号槽上料");
+  case core::PlcStepStateV2::CalWaitPcConfirm: return QStringLiteral("标定等待PC确认");
+  case core::PlcStepStateV2::CalMeasure: return QStringLiteral("标定测量中");
+  case core::PlcStepStateV2::CalWaitPcRead: return QStringLiteral("标定等待PC读取");
+  case core::PlcStepStateV2::CalComplete: return QStringLiteral("标定完成");
+  case core::PlcStepStateV2::Fault: return QStringLiteral("故障");
+  case core::PlcStepStateV2::EStop: return QStringLiteral("急停");
+  default: return QStringLiteral("STEP(%1)").arg(stepState);
+  }
+}
+
 QString machineStateText(quint16 machineState) {
   switch (static_cast<core::PlcMachineState>(machineState)) {
   case core::PlcMachineState::Idle: return QStringLiteral("IDLE");
@@ -167,7 +192,8 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   diagnosticsWidget_ = new DiagnosticsWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(diagnosticsWidget_);
   ui_->stackedWidget->addWidget(new RawViewerWidget(cfg, ui_->stackedWidget));
-  ui_->stackedWidget->addWidget(new DevToolsWidget(cfg, ui_->stackedWidget));
+  devToolsWidget_ = new DevToolsWidget(cfg, ui_->stackedWidget);
+  ui_->stackedWidget->addWidget(devToolsWidget_);
 
   ui_->stackedWidget->addWidget(new TodoWidget(
       QStringLiteral("手动/维护（TODO）"),
@@ -246,6 +272,8 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
           this, &MainWindow::onPlcTrayUpdated);
   connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::mailboxSnapshotUpdated,
           this, &MainWindow::onPlcMailboxSnapshotUpdated);
+  connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::plcEventsRaised,
+          this, &MainWindow::onPlcEventsRaised);
 
   if (!cfg.plc.enabled) {
     return;
@@ -273,16 +301,32 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
 }
 
 void MainWindow::setupDiagnosticsBindings() {
-  if (!diagnosticsWidget_ || !plcRuntime_) {
+  if (!plcRuntime_) {
     return;
   }
 
-  connect(diagnosticsWidget_, &DiagnosticsWidget::requestRefresh,
-          plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
-  connect(diagnosticsWidget_, &DiagnosticsWidget::requestReadMailbox,
-          plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
-  connect(diagnosticsWidget_, &DiagnosticsWidget::requestAckMailbox,
-          this, &MainWindow::handleAckMailboxRequested);
+  if (diagnosticsWidget_) {
+    connect(diagnosticsWidget_, &DiagnosticsWidget::requestRefresh,
+            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+    connect(diagnosticsWidget_, &DiagnosticsWidget::requestReadMailbox,
+            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+    connect(diagnosticsWidget_, &DiagnosticsWidget::requestAckMailbox,
+            this, &MainWindow::handleAckMailboxRequested);
+  }
+
+  if (devToolsWidget_) {
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcPollOnce,
+            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcAckMailbox,
+            this, &MainWindow::handleAckMailboxRequested);
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcContinueAfterIdCheck,
+            this, [this] { handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), QVariantMap{}); });
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcRequestRescanIds,
+            this, [this] { handleUiCommandRequested(QStringLiteral("REQUEST_RESCAN_IDS"), QVariantMap{}); });
+    connect(devToolsWidget_, &DevToolsWidget::plcFlowModeChanged,
+            this, &MainWindow::onPlcFlowModeChanged);
+    devToolsWidget_->setPlcFlowMode(plcFlowMode_);
+  }
 }
 
 void MainWindow::setupBusinessPageBindings() {
@@ -402,9 +446,25 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
     diagnosticsWidget_->setCommStats(pollHz, stats.last_poll_ms,
                                      stats.poll_ok_count, stats.poll_error_count);
   }
+  if (devToolsWidget_ && hasLastStatus_) {
+    devToolsWidget_->setPlcRuntimeSummary(stats.connected,
+                                          machineStateText(lastStatus_.machine_state),
+                                          stepStateText(lastStatus_.step_state),
+                                          lastStatus_.scan_seq,
+                                          lastStatus_.meas_seq);
+  }
 }
 
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
+  lastStatus_ = status;
+  hasLastStatus_ = true;
+  if (devToolsWidget_) {
+    devToolsWidget_->setPlcRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
+                                          machineStateText(status.machine_state),
+                                          stepStateText(status.step_state),
+                                          status.scan_seq,
+                                          status.meas_seq);
+  }
   if (diagnosticsWidget_) {
     diagnosticsWidget_->setStatusFields(static_cast<int>(status.step_state),
                                         static_cast<int>(status.machine_state),
@@ -535,6 +595,55 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
       }
     }
   }
+
+  if (devToolsWidget_) {
+    devToolsWidget_->appendPlcLog(QStringLiteral("Mailbox 已解析：part=%1 slot0=%2 slot1=%3")
+                                      .arg(mailboxPartTypeText(snapshot), slot0, slot1));
+  }
+
+  if (plcFlowMode_ >= static_cast<int>(PlcFlowModeUi::FullAuto) &&
+      hasLastStatus_ &&
+      lastStatus_.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcRead) &&
+      snapshot.meas_seq != 0 && snapshot.meas_seq != lastAutoAckMeasSeq_) {
+    handleAckMailboxRequested();
+    lastAutoAckMeasSeq_ = snapshot.meas_seq;
+    if (devToolsWidget_) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("自动写入 pc_ack：meas_seq=%1").arg(snapshot.meas_seq));
+    }
+  }
+}
+
+void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
+  if (devToolsWidget_) {
+    if (events.scan_ready) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("检测到新扫码结果：scan_seq=%1")
+                                        .arg(hasLastStatus_ ? lastStatus_.scan_seq : 0));
+    }
+    if (events.new_mailbox) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("检测到新测量包：meas_seq=%1，等待业务处理/ACK")
+                                        .arg(hasLastStatus_ ? lastStatus_.meas_seq : 0));
+    }
+  }
+
+  if (!hasLastStatus_ || !plcRuntime_) {
+    return;
+  }
+
+  if (plcFlowMode_ >= static_cast<int>(PlcFlowModeUi::SemiAuto) &&
+      events.scan_ready &&
+      lastStatus_.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcIdCheck) &&
+      lastStatus_.scan_seq != 0 && lastStatus_.scan_seq != lastAutoContinueScanSeq_) {
+    handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), QVariantMap{});
+    lastAutoContinueScanSeq_ = lastStatus_.scan_seq;
+    if (devToolsWidget_) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("自动继续流程：scan_seq=%1")
+                                        .arg(lastStatus_.scan_seq));
+    }
+  }
+}
+
+void MainWindow::onPlcFlowModeChanged(int mode) {
+  plcFlowMode_ = mode;
 }
 
 void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap &args) {
@@ -557,6 +666,14 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   QString err;
   if (!plcRuntime_->sendCommand(command, &err)) {
     handlePlcRuntimeError(err);
+    return;
+  }
+  if (devToolsWidget_) {
+    devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 命令：%1 seq=%2 arg0=%3 arg1=%4")
+                                      .arg(cmd)
+                                      .arg(command.cmd_seq)
+                                      .arg(command.cmd_arg0)
+                                      .arg(command.cmd_arg1));
   }
 }
 
@@ -581,5 +698,9 @@ void MainWindow::handleAckMailboxRequested() {
   QString err;
   if (!plcRuntime_->sendPcAck(1, &err)) {
     handlePlcRuntimeError(err);
+    return;
+  }
+  if (devToolsWidget_) {
+    devToolsWidget_->appendPlcLog(QStringLiteral("手动写入 pc_ack=1"));
   }
 }
