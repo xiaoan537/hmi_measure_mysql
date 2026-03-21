@@ -91,6 +91,8 @@ struct MesConfig
         bool auto_reconnect = true;
         int reconnect_interval_ms = 2000;
 
+        bool use_fake_client = false; // 1=使用本地 Fake PLC，而非真实 Modbus/TCP
+
         quint32 status_start_address = 0;
         quint32 tray_start_address = 0;
         quint32 command_start_address = 0;
