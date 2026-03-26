@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
@@ -52,28 +53,38 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   summaryLay->addWidget(lbPlcSeq_, 1);
   plcLay->addLayout(summaryLay);
 
-  auto *btnLay = new QHBoxLayout();
-  auto *btnPoll = new QPushButton(QStringLiteral("轮询一拍"), plcBox);
-  auto *btnContinue = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), plcBox);
-  auto *btnRescan = new QPushButton(QStringLiteral("请求重扫ID"), plcBox);
-  auto *btnAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), plcBox);
-  btnLay->addWidget(btnPoll);
-  btnLay->addWidget(btnContinue);
-  btnLay->addWidget(btnRescan);
-  btnLay->addWidget(btnAck);
-  plcLay->addLayout(btnLay);
+  auto *btnLay1 = new QHBoxLayout();
+  btnPlcPoll_ = new QPushButton(QStringLiteral("轮询一拍"), plcBox);
+  btnPlcReloadIds_ = new QPushButton(QStringLiteral("读取扫码ID"), plcBox);
+  btnPlcContinue_ = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), plcBox);
+  btnLay1->addWidget(btnPlcPoll_);
+  btnLay1->addWidget(btnPlcReloadIds_);
+  btnLay1->addWidget(btnPlcContinue_);
+  plcLay->addLayout(btnLay1);
+
+  auto *btnLay2 = new QHBoxLayout();
+  btnPlcRescan_ = new QPushButton(QStringLiteral("请求重扫ID"), plcBox);
+  btnPlcReadMailbox_ = new QPushButton(QStringLiteral("读取测量包"), plcBox);
+  btnPlcAck_ = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), plcBox);
+  btnLay2->addWidget(btnPlcRescan_);
+  btnLay2->addWidget(btnPlcReadMailbox_);
+  btnLay2->addWidget(btnPlcAck_);
+  plcLay->addLayout(btnLay2);
 
   ui_->verticalLayout->insertWidget(0, plcBox);
 
   connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index){
     const int mode = plcFlowCombo_->itemData(index).toInt();
+    refreshPlcActionEnableStates();
     emit plcFlowModeChanged(mode);
     appendPlcLog(QStringLiteral("PLC流程模式切换为：%1").arg(plcFlowModeText(mode)));
   });
-  connect(btnPoll, &QPushButton::clicked, this, &DevToolsWidget::requestPlcPollOnce);
-  connect(btnContinue, &QPushButton::clicked, this, &DevToolsWidget::requestPlcContinueAfterIdCheck);
-  connect(btnRescan, &QPushButton::clicked, this, &DevToolsWidget::requestPlcRequestRescanIds);
-  connect(btnAck, &QPushButton::clicked, this, &DevToolsWidget::requestPlcAckMailbox);
+  connect(btnPlcPoll_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcPollOnce);
+  connect(btnPlcReloadIds_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReloadSlotIds);
+  connect(btnPlcContinue_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcContinueAfterIdCheck);
+  connect(btnPlcRescan_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcRequestRescanIds);
+  connect(btnPlcReadMailbox_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReadMailbox);
+  connect(btnPlcAck_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcAckMailbox);
 
   setPlcFlowMode(static_cast<int>(PlcFlowModeUi::Manual));
 }
@@ -106,6 +117,21 @@ void DevToolsWidget::setPlcFlowMode(int mode) {
       break;
     }
   }
+  refreshPlcActionEnableStates();
+}
+
+void DevToolsWidget::refreshPlcActionEnableStates() {
+  const int mode = plcFlowCombo_ ? plcFlowCombo_->currentData().toInt() : static_cast<int>(PlcFlowModeUi::Manual);
+  const bool isManual = (mode == static_cast<int>(PlcFlowModeUi::Manual));
+  const bool isSemi = (mode == static_cast<int>(PlcFlowModeUi::SemiAuto));
+  const bool isFull = (mode == static_cast<int>(PlcFlowModeUi::FullAuto));
+
+  if (btnPlcPoll_) btnPlcPoll_->setEnabled(!isFull);
+  if (btnPlcReloadIds_) btnPlcReloadIds_->setEnabled(isManual || isSemi);
+  if (btnPlcContinue_) btnPlcContinue_->setEnabled(isManual || isSemi);
+  if (btnPlcRescan_) btnPlcRescan_->setEnabled(isManual || isSemi);
+  if (btnPlcReadMailbox_) btnPlcReadMailbox_->setEnabled(isManual || isSemi);
+  if (btnPlcAck_) btnPlcAck_->setEnabled(isManual || isSemi);
 }
 
 void DevToolsWidget::setPlcRuntimeSummary(bool connected, const QString &machineText,

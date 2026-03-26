@@ -317,6 +317,10 @@ void MainWindow::setupDiagnosticsBindings() {
   if (devToolsWidget_) {
     connect(devToolsWidget_, &DevToolsWidget::requestPlcPollOnce,
             plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcReloadSlotIds,
+            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcReadMailbox,
+            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(devToolsWidget_, &DevToolsWidget::requestPlcAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
     connect(devToolsWidget_, &DevToolsWidget::requestPlcContinueAfterIdCheck,

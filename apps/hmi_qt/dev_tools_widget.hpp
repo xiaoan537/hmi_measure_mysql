@@ -24,6 +24,8 @@ public:
 
 signals:
   void requestPlcPollOnce();
+  void requestPlcReloadSlotIds();
+  void requestPlcReadMailbox();
   void requestPlcAckMailbox();
   void requestPlcContinueAfterIdCheck();
   void requestPlcRequestRescanIds();
@@ -57,4 +59,12 @@ private:
   class QLabel *lbPlcMachine_ = nullptr;
   class QLabel *lbPlcStep_ = nullptr;
   class QLabel *lbPlcSeq_ = nullptr;
+  class QPushButton *btnPlcPoll_ = nullptr;
+  class QPushButton *btnPlcReloadIds_ = nullptr;
+  class QPushButton *btnPlcContinue_ = nullptr;
+  class QPushButton *btnPlcRescan_ = nullptr;
+  class QPushButton *btnPlcReadMailbox_ = nullptr;
+  class QPushButton *btnPlcAck_ = nullptr;
+
+  void refreshPlcActionEnableStates();
 };

@@ -77,11 +77,11 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->editSlotId->setPlaceholderText(QStringLiteral("仅待机/等待上料/等待ID核对阶段可编辑"));
     ui_->lblPart0Caption->setText(QStringLiteral("当前工件ID"));
     ui_->lblPart1Caption->setText(QStringLiteral("测量包预览"));
-    ui_->groupSlotOps->setTitle(QStringLiteral("扫码/工件ID"));
+    ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
     ui_->btnWriteSlotIds->setText(QStringLiteral("写回工件ID"));
-    ui_->btnReloadSlotIds->setText(QStringLiteral("读取扫码ID"));
-    ui_->btnReadMailbox->setText(QStringLiteral("读取测量包"));
-    ui_->btnAckMailbox->setText(QStringLiteral("写入 pc_ack"));
+    ui_->btnReloadSlotIds->hide();
+    ui_->btnReadMailbox->hide();
+    ui_->btnAckMailbox->hide();
 
     // 连接状态灯（用样式表）
     setStyleSheet(R"(
