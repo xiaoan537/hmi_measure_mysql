@@ -1,20 +1,55 @@
 #include "dev_tools_widget.hpp"
 #include "dev_tools.hpp"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
+#include <QDoubleSpinBox>
+#include <QFile>
+#include <QFileDialog>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QLabel>
 #include <QMessageBox>
-#include <QPushButton>
+#include <QPlainTextEdit>
 #include <QPointer>
+#include <QPushButton>
 #include <QSignalBlocker>
+#include <QStringList>
 #include <QVBoxLayout>
+#include <QtMath>
 
 #include "core/db.hpp"
+#include "core/measurement_geometry_algorithms.hpp"
 #include "core/measurement_ingest.hpp"
 #include "ui_dev_tools_widget.h"
+
+namespace {
+
+QString joinBoolMask(const QVector<bool> &mask) {
+  QStringList parts;
+  parts.reserve(mask.size());
+  for (bool v : mask) {
+    parts.push_back(v ? QStringLiteral("1") : QStringLiteral("0"));
+  }
+  return parts.join(',');
+}
+
+QString joinDoubleList(const QVector<double> &values) {
+  QStringList parts;
+  parts.reserve(values.size());
+  for (double v : values) {
+    parts.push_back(QString::number(v, 'f', 6));
+  }
+  return parts.join(',');
+}
+
+} // namespace
 
 DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
     : QWidget(parent), ui_(new Ui::DevToolsWidget), cfg_(cfg) {
@@ -72,6 +107,95 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   plcLay->addLayout(btnLay2);
 
   ui_->verticalLayout->insertWidget(0, plcBox);
+
+  auto *algoBox = new QGroupBox(QStringLiteral("算法调试 / 几何回放"), this);
+  auto *algoLay = new QVBoxLayout(algoBox);
+
+  auto *algoBtnLay = new QHBoxLayout();
+  btnAlgoLoadJson_ = new QPushButton(QStringLiteral("加载JSON"), algoBox);
+  btnAlgoFillExample_ = new QPushButton(QStringLiteral("填充示例"), algoBox);
+  btnAlgoRun_ = new QPushButton(QStringLiteral("运行算法"), algoBox);
+  algoBtnLay->addWidget(btnAlgoLoadJson_);
+  algoBtnLay->addWidget(btnAlgoFillExample_);
+  algoBtnLay->addWidget(btnAlgoRun_);
+  algoBtnLay->addStretch(1);
+  algoLay->addLayout(algoBtnLay);
+
+  auto *paramForm = new QFormLayout();
+  spAlgoKIn_ = new QDoubleSpinBox(algoBox);
+  spAlgoKIn_->setDecimals(6);
+  spAlgoKIn_->setRange(-100000.0, 100000.0);
+  spAlgoKIn_->setValue(8.0);
+
+  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out"), algoBox);
+  cbAlgoUseExplicitKOut_->setChecked(false);
+  spAlgoKOut_ = new QDoubleSpinBox(algoBox);
+  spAlgoKOut_->setDecimals(6);
+  spAlgoKOut_->setRange(-100000.0, 100000.0);
+  spAlgoKOut_->setValue(23.0);
+  spAlgoKOut_->setEnabled(false);
+
+  spAlgoProbeBase_ = new QDoubleSpinBox(algoBox);
+  spAlgoProbeBase_->setDecimals(6);
+  spAlgoProbeBase_->setRange(-100000.0, 100000.0);
+  spAlgoProbeBase_->setValue(15.0);
+
+  spAlgoAngleOffset_ = new QDoubleSpinBox(algoBox);
+  spAlgoAngleOffset_->setDecimals(6);
+  spAlgoAngleOffset_->setRange(-360.0, 360.0);
+  spAlgoAngleOffset_->setValue(0.0);
+
+  spAlgoResidualIn_ = new QDoubleSpinBox(algoBox);
+  spAlgoResidualIn_->setDecimals(6);
+  spAlgoResidualIn_->setRange(0.0, 1000.0);
+  spAlgoResidualIn_->setValue(0.03);
+
+  spAlgoResidualOut_ = new QDoubleSpinBox(algoBox);
+  spAlgoResidualOut_->setDecimals(6);
+  spAlgoResidualOut_->setRange(0.0, 1000.0);
+  spAlgoResidualOut_->setValue(0.03);
+
+  auto *kOutRow = new QWidget(algoBox);
+  auto *kOutLay = new QHBoxLayout(kOutRow);
+  kOutLay->setContentsMargins(0, 0, 0, 0);
+  kOutLay->addWidget(cbAlgoUseExplicitKOut_);
+  kOutLay->addWidget(spAlgoKOut_, 1);
+
+  paramForm->addRow(QStringLiteral("K_in(mm)"), spAlgoKIn_);
+  paramForm->addRow(QStringLiteral("K_out(mm)"), kOutRow);
+  paramForm->addRow(QStringLiteral("探头基距L(mm)"), spAlgoProbeBase_);
+  paramForm->addRow(QStringLiteral("角度偏移(°)"), spAlgoAngleOffset_);
+  paramForm->addRow(QStringLiteral("内径残差阈值(mm)"), spAlgoResidualIn_);
+  paramForm->addRow(QStringLiteral("外径残差阈值(mm)"), spAlgoResidualOut_);
+  algoLay->addLayout(paramForm);
+
+  auto *seriesLay = new QHBoxLayout();
+  auto makeSeriesColumn = [algoBox](const QString &title, QPlainTextEdit **rawEdit,
+                                    QPlainTextEdit **validEdit) {
+    auto *box = new QGroupBox(title, algoBox);
+    auto *lay = new QVBoxLayout(box);
+    lay->addWidget(new QLabel(QStringLiteral("原始值（逗号/空格/换行分隔）"), box));
+    *rawEdit = new QPlainTextEdit(box);
+    (*rawEdit)->setPlaceholderText(QStringLiteral("例如：1.201, 1.203, 1.198, ... 共72点"));
+    (*rawEdit)->setMaximumBlockCount(0);
+    lay->addWidget(*rawEdit, 1);
+    lay->addWidget(new QLabel(QStringLiteral("有效mask（可空；1/0 或 true/false）"), box));
+    *validEdit = new QPlainTextEdit(box);
+    (*validEdit)->setPlaceholderText(QStringLiteral("可留空，默认全1；例如：1,1,1,0,1,..."));
+    (*validEdit)->setMaximumHeight(70);
+    lay->addWidget(*validEdit);
+    return box;
+  };
+  seriesLay->addWidget(makeSeriesColumn(QStringLiteral("内径/内壁输入 m_in"), &teAlgoInnerRaw_, &teAlgoInnerValid_), 1);
+  seriesLay->addWidget(makeSeriesColumn(QStringLiteral("外径/外壁输入 m_out"), &teAlgoOuterRaw_, &teAlgoOuterValid_), 1);
+  algoLay->addLayout(seriesLay);
+
+  ui_->verticalLayout->insertWidget(1, algoBox);
+
+  connect(cbAlgoUseExplicitKOut_, &QCheckBox::toggled, spAlgoKOut_, &QWidget::setEnabled);
+  connect(btnAlgoLoadJson_, &QPushButton::clicked, this, &DevToolsWidget::onLoadAlgorithmJson);
+  connect(btnAlgoRun_, &QPushButton::clicked, this, &DevToolsWidget::onRunAlgorithmFromInput);
+  connect(btnAlgoFillExample_, &QPushButton::clicked, this, &DevToolsWidget::onFillAlgorithmExample);
 
   connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index){
     const int mode = plcFlowCombo_->itemData(index).toInt();
@@ -304,3 +428,286 @@ void DevToolsWidget::onQueryLatest() {
 }
 
 void DevToolsWidget::onClearLog() { ui_->textLog->clear(); }
+
+bool DevToolsWidget::parseDoubleSeriesText(const QString &text,
+                                           QVector<double> *values,
+                                           QString *err) const {
+  values->clear();
+  QString normalized = text;
+  normalized.replace('\n', ',');
+  normalized.replace('\r', ',');
+  normalized.replace(';', ',');
+  normalized.replace('\t', ',');
+  normalized.replace(' ', ',');
+  const QStringList parts = normalized.split(',', Qt::SkipEmptyParts);
+  for (int i = 0; i < parts.size(); ++i) {
+    bool ok = false;
+    const double v = parts.at(i).trimmed().toDouble(&ok);
+    if (!ok) {
+      if (err) *err = QStringLiteral("第 %1 个数值无法解析：%2").arg(i + 1).arg(parts.at(i));
+      values->clear();
+      return false;
+    }
+    values->push_back(v);
+  }
+  return true;
+}
+
+bool DevToolsWidget::parseBoolSeriesText(const QString &text, int expectedSize,
+                                         QVector<bool> *values, QString *err) const {
+  values->clear();
+  if (text.trimmed().isEmpty()) {
+    *values = defaultValidMask(expectedSize);
+    return true;
+  }
+  QString normalized = text;
+  normalized.replace('\n', ',');
+  normalized.replace('\r', ',');
+  normalized.replace(';', ',');
+  normalized.replace('\t', ',');
+  normalized.replace(' ', ',');
+  const QStringList parts = normalized.split(',', Qt::SkipEmptyParts);
+  if (parts.size() != expectedSize) {
+    if (err) *err = QStringLiteral("有效mask数量(%1)与数据点数量(%2)不一致").arg(parts.size()).arg(expectedSize);
+    return false;
+  }
+  for (int i = 0; i < parts.size(); ++i) {
+    const QString token = parts.at(i).trimmed().toLower();
+    const bool isTrue = (token == QStringLiteral("1") || token == QStringLiteral("true") || token == QStringLiteral("t") || token == QStringLiteral("y") || token == QStringLiteral("yes"));
+    const bool isFalse = (token == QStringLiteral("0") || token == QStringLiteral("false") || token == QStringLiteral("f") || token == QStringLiteral("n") || token == QStringLiteral("no"));
+    if (!isTrue && !isFalse) {
+      if (err) *err = QStringLiteral("第 %1 个有效mask无法解析：%2").arg(i + 1).arg(parts.at(i));
+      values->clear();
+      return false;
+    }
+    values->push_back(isTrue);
+  }
+  return true;
+}
+
+QVector<bool> DevToolsWidget::defaultValidMask(int count) const {
+  QVector<bool> mask;
+  mask.resize(count);
+  for (int i = 0; i < count; ++i) {
+    mask[i] = true;
+  }
+  return mask;
+}
+
+QString DevToolsWidget::summarizeCircleFit(const QString &title,
+                                           const core::DiameterChannelResult &r) const {
+  QStringList lines;
+  lines << QStringLiteral("[%1]").arg(title);
+  if (!r.success || !r.circle_fit.success) {
+    lines << QStringLiteral("  失败：%1").arg(r.error.isEmpty() ? r.circle_fit.error : r.error);
+    return lines.join('\n');
+  }
+  lines << QStringLiteral("  直径 = %1 mm").arg(r.circle_fit.diameter_mm, 0, 'f', 6);
+  lines << QStringLiteral("  半径 = %1 mm").arg(r.circle_fit.radius_mm, 0, 'f', 6);
+  lines << QStringLiteral("  圆心 = (%1, %2) mm")
+              .arg(r.circle_fit.center_x_mm, 0, 'f', 6)
+              .arg(r.circle_fit.center_y_mm, 0, 'f', 6);
+  lines << QStringLiteral("  残差RMS = %1 mm, 最大绝对残差 = %2 mm")
+              .arg(r.circle_fit.residual_rms_mm, 0, 'f', 6)
+              .arg(r.circle_fit.residual_max_abs_mm, 0, 'f', 6);
+  lines << QStringLiteral("  点数(raw/final/reject) = %1 / %2 / %3")
+              .arg(r.circle_fit.valid_count_raw)
+              .arg(r.circle_fit.valid_count_final)
+              .arg(r.circle_fit.rejected_count);
+  return lines.join('\n');
+}
+
+QString DevToolsWidget::summarizeThickness(const core::ThicknessResult &r) const {
+  QStringList lines;
+  lines << QStringLiteral("[壁厚]");
+  if (!r.success) {
+    lines << QStringLiteral("  失败：%1").arg(r.error);
+    return lines.join('\n');
+  }
+  lines << QStringLiteral("  平均 = %1 mm").arg(r.mean_mm, 0, 'f', 6);
+  lines << QStringLiteral("  最小/最大 = %1 / %2 mm")
+              .arg(r.min_mm, 0, 'f', 6)
+              .arg(r.max_mm, 0, 'f', 6);
+  lines << QStringLiteral("  标准差 = %1 mm, 有效点数 = %2")
+              .arg(r.stddev_mm, 0, 'f', 6)
+              .arg(r.valid_count);
+  return lines.join('\n');
+}
+
+QString DevToolsWidget::summarizeHarmonics(const QString &title,
+                                           const core::HarmonicAnalysisResult &r) const {
+  QStringList lines;
+  lines << QStringLiteral("[%1 谐波]").arg(title);
+  if (!r.success) {
+    lines << QStringLiteral("  失败：%1").arg(r.error);
+    return lines.join('\n');
+  }
+  lines << QStringLiteral("  DC均值 = %1 mm").arg(r.dc_mean_mm, 0, 'f', 6);
+  for (const auto &c : r.components) {
+    if (c.order > 4) break;
+    lines << QStringLiteral("  %1X: 幅值=%2 mm, 相位=%3 rad")
+                .arg(c.order)
+                .arg(c.amplitude_mm, 0, 'f', 6)
+                .arg(c.phase_rad, 0, 'f', 6);
+  }
+  return lines.join('\n');
+}
+
+void DevToolsWidget::loadAlgorithmJsonObject(const QJsonObject &obj) {
+  auto readNumberArray = [](const QJsonObject &o, const QString &key) {
+    QVector<double> out;
+    const auto arr = o.value(key).toArray();
+    out.reserve(arr.size());
+    for (const auto &v : arr) out.push_back(v.toDouble());
+    return out;
+  };
+  auto readBoolArray = [](const QJsonObject &o, const QString &key) {
+    QVector<bool> out;
+    const auto arr = o.value(key).toArray();
+    out.reserve(arr.size());
+    for (const auto &v : arr) out.push_back(v.toBool());
+    return out;
+  };
+
+  const QVector<double> mIn = readNumberArray(obj, QStringLiteral("m_in"));
+  const QVector<double> mOut = readNumberArray(obj, QStringLiteral("m_out"));
+  const QVector<bool> validIn = readBoolArray(obj, QStringLiteral("valid_in"));
+  const QVector<bool> validOut = readBoolArray(obj, QStringLiteral("valid_out"));
+
+  if (!mIn.isEmpty() && teAlgoInnerRaw_) teAlgoInnerRaw_->setPlainText(joinDoubleList(mIn));
+  if (!mOut.isEmpty() && teAlgoOuterRaw_) teAlgoOuterRaw_->setPlainText(joinDoubleList(mOut));
+  if (!validIn.isEmpty() && teAlgoInnerValid_) teAlgoInnerValid_->setPlainText(joinBoolMask(validIn));
+  if (!validOut.isEmpty() && teAlgoOuterValid_) teAlgoOuterValid_->setPlainText(joinBoolMask(validOut));
+
+  const auto params = obj.value(QStringLiteral("params")).toObject();
+  if (!params.isEmpty()) {
+    if (spAlgoKIn_) spAlgoKIn_->setValue(params.value(QStringLiteral("k_in_mm")).toDouble(spAlgoKIn_->value()));
+    if (spAlgoKOut_) spAlgoKOut_->setValue(params.value(QStringLiteral("k_out_mm")).toDouble(spAlgoKOut_->value()));
+    if (spAlgoProbeBase_) spAlgoProbeBase_->setValue(params.value(QStringLiteral("probe_base_mm")).toDouble(spAlgoProbeBase_->value()));
+    if (spAlgoAngleOffset_) spAlgoAngleOffset_->setValue(params.value(QStringLiteral("angle_offset_deg")).toDouble(spAlgoAngleOffset_->value()));
+    if (spAlgoResidualIn_) spAlgoResidualIn_->setValue(params.value(QStringLiteral("residual_threshold_in_mm")).toDouble(spAlgoResidualIn_->value()));
+    if (spAlgoResidualOut_) spAlgoResidualOut_->setValue(params.value(QStringLiteral("residual_threshold_out_mm")).toDouble(spAlgoResidualOut_->value()));
+    if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(params.value(QStringLiteral("use_explicit_k_out")).toBool(cbAlgoUseExplicitKOut_->isChecked()));
+  }
+}
+
+void DevToolsWidget::onLoadAlgorithmJson() {
+  const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("加载算法调试JSON"), QString(), QStringLiteral("JSON Files (*.json);;All Files (*)"));
+  if (path.isEmpty()) {
+    return;
+  }
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("无法打开文件：%1").arg(path));
+    return;
+  }
+  QJsonParseError parseErr;
+  const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &parseErr);
+  if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("JSON解析失败：%1").arg(parseErr.errorString()));
+    return;
+  }
+  loadAlgorithmJsonObject(doc.object());
+  appendLog(QStringLiteral("[ALG] 已加载JSON：%1").arg(path));
+}
+
+void DevToolsWidget::onFillAlgorithmExample() {
+  QVector<double> mIn;
+  QVector<double> mOut;
+  mIn.reserve(72);
+  mOut.reserve(72);
+  for (int i = 0; i < 72; ++i) {
+    const double theta = qDegreesToRadians(static_cast<double>(i) * 5.0);
+    const double inVal = 1.200 + 0.060 * qCos(theta - 0.25) + 0.008 * qCos(2.0 * theta + 0.6);
+    const double outVal = 2.950 - 0.080 * qCos(theta - 0.25) + 0.006 * qCos(3.0 * theta - 0.3);
+    mIn.push_back(inVal);
+    mOut.push_back(outVal);
+  }
+  if (mIn.size() > 17) mIn[17] += 0.080;
+  if (mOut.size() > 43) mOut[43] -= 0.100;
+
+  if (teAlgoInnerRaw_) teAlgoInnerRaw_->setPlainText(joinDoubleList(mIn));
+  if (teAlgoOuterRaw_) teAlgoOuterRaw_->setPlainText(joinDoubleList(mOut));
+  if (teAlgoInnerValid_) teAlgoInnerValid_->clear();
+  if (teAlgoOuterValid_) teAlgoOuterValid_->clear();
+  if (spAlgoKIn_) spAlgoKIn_->setValue(8.000000);
+  if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(false);
+  if (spAlgoProbeBase_) spAlgoProbeBase_->setValue(15.000000);
+  if (spAlgoResidualIn_) spAlgoResidualIn_->setValue(0.03);
+  if (spAlgoResidualOut_) spAlgoResidualOut_->setValue(0.03);
+  appendLog(QStringLiteral("[ALG] 已填充示例数据（72点，含少量谐波与异常点）"));
+}
+
+void DevToolsWidget::onRunAlgorithmFromInput() {
+  QVector<double> mIn;
+  QVector<double> mOut;
+  QString err;
+  if (!parseDoubleSeriesText(teAlgoInnerRaw_ ? teAlgoInnerRaw_->toPlainText() : QString(), &mIn, &err)) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("内径原始值解析失败：\n%1").arg(err));
+    return;
+  }
+  if (!parseDoubleSeriesText(teAlgoOuterRaw_ ? teAlgoOuterRaw_->toPlainText() : QString(), &mOut, &err)) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("外径原始值解析失败：\n%1").arg(err));
+    return;
+  }
+  if (mIn.isEmpty() && mOut.isEmpty()) {
+    QMessageBox::information(this, QStringLiteral("算法调试"), QStringLiteral("请至少提供一组内径或外径原始值。"));
+    return;
+  }
+
+  QVector<bool> validIn;
+  QVector<bool> validOut;
+  if (!mIn.isEmpty() && !parseBoolSeriesText(teAlgoInnerValid_ ? teAlgoInnerValid_->toPlainText() : QString(), mIn.size(), &validIn, &err)) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("内径有效mask解析失败：\n%1").arg(err));
+    return;
+  }
+  if (!mOut.isEmpty() && !parseBoolSeriesText(teAlgoOuterValid_ ? teAlgoOuterValid_->toPlainText() : QString(), mOut.size(), &validOut, &err)) {
+    QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("外径有效mask解析失败：\n%1").arg(err));
+    return;
+  }
+
+  core::DiameterAlgoParams params;
+  params.k_in_mm = spAlgoKIn_ ? spAlgoKIn_->value() : 0.0;
+  params.k_out_mm = spAlgoKOut_ ? spAlgoKOut_->value() : 0.0;
+  params.use_explicit_k_out = cbAlgoUseExplicitKOut_ && cbAlgoUseExplicitKOut_->isChecked();
+  params.probe_base_mm = spAlgoProbeBase_ ? spAlgoProbeBase_->value() : 15.0;
+  params.angle_offset_deg = spAlgoAngleOffset_ ? spAlgoAngleOffset_->value() : 0.0;
+  params.inner_fit.residual_threshold_mm = spAlgoResidualIn_ ? spAlgoResidualIn_->value() : 0.03;
+  params.outer_fit.residual_threshold_mm = spAlgoResidualOut_ ? spAlgoResidualOut_->value() : 0.03;
+  params.harmonic.max_order = 8;
+  params.harmonic.remove_mean = false;
+
+  QStringList lines;
+  lines << QStringLiteral("[ALG] 运行算法调试");
+  lines << QStringLiteral("  K_in=%1, K_out=%2, use_explicit_k_out=%3, L=%4, angle_offset=%5")
+               .arg(params.k_in_mm, 0, 'f', 6)
+               .arg(params.k_out_mm, 0, 'f', 6)
+               .arg(params.use_explicit_k_out ? QStringLiteral("true") : QStringLiteral("false"))
+               .arg(params.probe_base_mm, 0, 'f', 6)
+               .arg(params.angle_offset_deg, 0, 'f', 6);
+
+  if (!mIn.isEmpty()) {
+    const auto inner = core::computeInnerDiameter(mIn, validIn, params);
+    lines << summarizeCircleFit(QStringLiteral("内径"), inner);
+    lines << summarizeHarmonics(QStringLiteral("内径"), inner.harmonics);
+  }
+
+  if (!mOut.isEmpty()) {
+    const auto outer = core::computeOuterDiameter(mOut, validOut, params);
+    lines << summarizeCircleFit(QStringLiteral("外径"), outer);
+    lines << summarizeHarmonics(QStringLiteral("外径"), outer.harmonics);
+  }
+
+  if (!mIn.isEmpty() && !mOut.isEmpty()) {
+    if (mIn.size() != mOut.size()) {
+      lines << QStringLiteral("[壁厚]\n  跳过：内外数组长度不一致（%1 vs %2）")
+                   .arg(mIn.size())
+                   .arg(mOut.size());
+    } else {
+      const auto t = core::computeThickness(mIn, validIn, mOut, validOut, params.probe_base_mm);
+      lines << summarizeThickness(t);
+    }
+  }
+
+  appendLog(lines.join('\n'));
+}
