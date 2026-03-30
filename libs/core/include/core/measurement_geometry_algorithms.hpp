@@ -81,9 +81,9 @@ struct DiameterAlgoParams
     double angle_offset_deg = 0.0;
 
     double k_in_mm = 0.0;
-    double k_out_mm = 0.0;
-    bool use_explicit_k_out = false;
-    double probe_base_mm = 15.0;
+    double k_out_mm = 0.0;         // 主参数：旋转轴 -> 外探头测量基准点
+    bool use_explicit_k_out = true;
+    double probe_base_mm = 15.0;  // 辅助/校验参数：名义探头基距L
 
     double raw_min_in_mm = -1e9;
     double raw_max_in_mm =  1e9;
@@ -170,6 +170,12 @@ ThicknessResult computeThickness(const QVector<double> &raw_inner_values_mm,
                                  const QVector<double> &raw_outer_values_mm,
                                  const QVector<bool> &raw_outer_valid_mask,
                                  double probe_base_mm);
+
+ThicknessResult computeThickness(const QVector<double> &raw_inner_values_mm,
+                                 const QVector<bool> &raw_inner_valid_mask,
+                                 const QVector<double> &raw_outer_values_mm,
+                                 const QVector<bool> &raw_outer_valid_mask,
+                                 const DiameterAlgoParams &params);
 
 EndSectionResult computeEndSectionGeometry(const QVector<double> &raw_inner_values_mm,
                                            const QVector<bool> &raw_inner_valid_mask,

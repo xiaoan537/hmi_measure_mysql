@@ -284,7 +284,18 @@ AngularSeries makeRawSeries(const QVector<double> &rawValues,
 
 double effectiveOuterOffset(const DiameterAlgoParams &params)
 {
-    return params.use_explicit_k_out ? params.k_out_mm : (params.k_in_mm + params.probe_base_mm);
+    if (params.use_explicit_k_out && isFinite(params.k_out_mm) && params.k_out_mm > 0.0) {
+        return params.k_out_mm;
+    }
+    if (isFinite(params.k_out_mm) && params.k_out_mm > 0.0) {
+        return params.k_out_mm;
+    }
+    return params.k_in_mm + params.probe_base_mm;
+}
+
+double effectiveProbeBase(const DiameterAlgoParams &params)
+{
+    return effectiveOuterOffset(params) - params.k_in_mm;
 }
 
 } // namespace
@@ -594,6 +605,19 @@ ThicknessResult computeThickness(const QVector<double> &raw_inner_values_mm,
     return result;
 }
 
+ThicknessResult computeThickness(const QVector<double> &raw_inner_values_mm,
+                                 const QVector<bool> &raw_inner_valid_mask,
+                                 const QVector<double> &raw_outer_values_mm,
+                                 const QVector<bool> &raw_outer_valid_mask,
+                                 const DiameterAlgoParams &params)
+{
+    return computeThickness(raw_inner_values_mm,
+                            raw_inner_valid_mask,
+                            raw_outer_values_mm,
+                            raw_outer_valid_mask,
+                            effectiveProbeBase(params));
+}
+
 EndSectionResult computeEndSectionGeometry(const QVector<double> &raw_inner_values_mm,
                                            const QVector<bool> &raw_inner_valid_mask,
                                            const QVector<double> &raw_outer_values_mm,
@@ -607,7 +631,7 @@ EndSectionResult computeEndSectionGeometry(const QVector<double> &raw_inner_valu
                                         raw_inner_valid_mask,
                                         raw_outer_values_mm,
                                         raw_outer_valid_mask,
-                                        params.probe_base_mm);
+                                        params);
     return result;
 }
 

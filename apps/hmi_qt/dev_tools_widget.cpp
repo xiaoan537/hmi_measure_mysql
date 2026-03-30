@@ -127,8 +127,8 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   spAlgoKIn_->setRange(-100000.0, 100000.0);
   spAlgoKIn_->setValue(8.0);
 
-  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out"), algoBox);
-  cbAlgoUseExplicitKOut_->setChecked(false);
+  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out（主参数）"), algoBox);
+  cbAlgoUseExplicitKOut_->setChecked(true);
   spAlgoKOut_ = new QDoubleSpinBox(algoBox);
   spAlgoKOut_->setDecimals(6);
   spAlgoKOut_->setRange(-100000.0, 100000.0);
@@ -162,8 +162,8 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   kOutLay->addWidget(spAlgoKOut_, 1);
 
   paramForm->addRow(QStringLiteral("K_in(mm)"), spAlgoKIn_);
-  paramForm->addRow(QStringLiteral("K_out(mm)"), kOutRow);
-  paramForm->addRow(QStringLiteral("探头基距L(mm)"), spAlgoProbeBase_);
+  paramForm->addRow(QStringLiteral("K_out(mm，主参数)"), kOutRow);
+  paramForm->addRow(QStringLiteral("探头基距L(mm，辅助/校验)"), spAlgoProbeBase_);
   paramForm->addRow(QStringLiteral("角度偏移(°)"), spAlgoAngleOffset_);
   paramForm->addRow(QStringLiteral("内径残差阈值(mm)"), spAlgoResidualIn_);
   paramForm->addRow(QStringLiteral("外径残差阈值(mm)"), spAlgoResidualOut_);
@@ -631,7 +631,8 @@ void DevToolsWidget::onFillAlgorithmExample() {
   if (teAlgoInnerValid_) teAlgoInnerValid_->clear();
   if (teAlgoOuterValid_) teAlgoOuterValid_->clear();
   if (spAlgoKIn_) spAlgoKIn_->setValue(8.000000);
-  if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(false);
+  if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(true);
+  if (spAlgoKOut_) spAlgoKOut_->setValue(23.000000);
   if (spAlgoProbeBase_) spAlgoProbeBase_->setValue(15.000000);
   if (spAlgoResidualIn_) spAlgoResidualIn_->setValue(0.03);
   if (spAlgoResidualOut_) spAlgoResidualOut_->setValue(0.03);
@@ -679,11 +680,12 @@ void DevToolsWidget::onRunAlgorithmFromInput() {
 
   QStringList lines;
   lines << QStringLiteral("[ALG] 运行算法调试");
-  lines << QStringLiteral("  K_in=%1, K_out=%2, use_explicit_k_out=%3, L=%4, angle_offset=%5")
+  lines << QStringLiteral("  K_in=%1, K_out=%2, use_explicit_k_out=%3, L_aux=%4, L_eff(Kout-Kin)=%5, angle_offset=%6")
                .arg(params.k_in_mm, 0, 'f', 6)
                .arg(params.k_out_mm, 0, 'f', 6)
                .arg(params.use_explicit_k_out ? QStringLiteral("true") : QStringLiteral("false"))
                .arg(params.probe_base_mm, 0, 'f', 6)
+               .arg(params.k_out_mm - params.k_in_mm, 0, 'f', 6)
                .arg(params.angle_offset_deg, 0, 'f', 6);
 
   if (!mIn.isEmpty()) {
@@ -704,7 +706,7 @@ void DevToolsWidget::onRunAlgorithmFromInput() {
                    .arg(mIn.size())
                    .arg(mOut.size());
     } else {
-      const auto t = core::computeThickness(mIn, validIn, mOut, validOut, params.probe_base_mm);
+      const auto t = core::computeThickness(mIn, validIn, mOut, validOut, params);
       lines << summarizeThickness(t);
     }
   }
