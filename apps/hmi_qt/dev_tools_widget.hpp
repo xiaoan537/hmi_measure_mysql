@@ -47,6 +47,8 @@ private slots:
   void onLoadAlgorithmJson();
   void onRunAlgorithmFromInput();
   void onFillAlgorithmExample();
+  void onRunRunoutFromInput();
+  void onFillRunoutExample();
 
 private:
   bool insertViaIngest(const QString &partType, const QString &partId,
@@ -66,6 +68,7 @@ private:
   QString summarizeThickness(const core::ThicknessResult &r) const;
   QString summarizeHarmonics(const QString &title,
                              const core::HarmonicAnalysisResult &r) const;
+  QString summarizeRunout(const core::RunoutResult &r, int primaryMode) const;
 
 private:
   Ui::DevToolsWidget *ui_ = nullptr;
@@ -96,4 +99,15 @@ private:
   class QPushButton *btnAlgoLoadJson_ = nullptr;
   class QPushButton *btnAlgoRun_ = nullptr;
   class QPushButton *btnAlgoFillExample_ = nullptr;
+
+  class QPlainTextEdit *teRunoutRaw_ = nullptr;
+  class QPlainTextEdit *teRunoutValid_ = nullptr;
+  class QDoubleSpinBox *spRunoutK_ = nullptr;
+  class QDoubleSpinBox *spRunoutAngleOffset_ = nullptr;
+  class QDoubleSpinBox *spRunoutResidual_ = nullptr;
+  class QDoubleSpinBox *spRunoutVAngle_ = nullptr;
+  class QSpinBox *spRunoutInterp_ = nullptr;
+  class QComboBox *cbRunoutPrimary_ = nullptr;
+  class QPushButton *btnRunoutRun_ = nullptr;
+  class QPushButton *btnRunoutFillExample_ = nullptr;
 };

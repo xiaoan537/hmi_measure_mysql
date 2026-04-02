@@ -298,6 +298,116 @@ double effectiveProbeBase(const DiameterAlgoParams &params)
     return effectiveOuterOffset(params) - params.k_in_mm;
 }
 
+PointSet2D densifyClosedPointSet(const PointSet2D &src, int factor)
+{
+    PointSet2D out;
+    if (src.points.isEmpty()) return out;
+    const int f = std::max(1, factor);
+    const int N = src.points.size();
+    out.points.reserve(N * f);
+    out.angles_deg.reserve(N * f);
+    for (int i = 0; i < N; ++i) {
+        const auto &p0 = src.points.at(i);
+        const auto &p1 = src.points.at((i + 1) % N);
+        const double a0 = (i < src.angles_deg.size()) ? src.angles_deg.at(i) : 0.0;
+        const double a1raw = ((i + 1) < src.angles_deg.size()) ? src.angles_deg.at(i + 1) : 360.0;
+        const double a1 = (i + 1 < N) ? a1raw : 360.0;
+        for (int k = 0; k < f; ++k) {
+            const double t = static_cast<double>(k) / static_cast<double>(f);
+            Point2D p;
+            p.x = p0.x + (p1.x - p0.x) * t;
+            p.y = p0.y + (p1.y - p0.y) * t;
+            p.valid = p0.valid && p1.valid;
+            out.points.push_back(p);
+            out.angles_deg.push_back(a0 + (a1 - a0) * t);
+        }
+    }
+    return out;
+}
+
+struct Vec2
+{
+    double x = 0.0;
+    double y = 0.0;
+};
+
+Point2D rotatePoint(const Point2D &p, double angleRad)
+{
+    const double c = std::cos(angleRad);
+    const double s = std::sin(angleRad);
+    Point2D out;
+    out.x = c * p.x - s * p.y;
+    out.y = s * p.x + c * p.y;
+    out.valid = p.valid;
+    return out;
+}
+
+bool solve2x2(double a11, double a12, double a21, double a22,
+              double b1, double b2,
+              double *x, double *y)
+{
+    const double det = a11 * a22 - a12 * a21;
+    if (std::fabs(det) < 1e-12) {
+        return false;
+    }
+    if (x) *x = (b1 * a22 - a12 * b2) / det;
+    if (y) *y = (a11 * b2 - b1 * a21) / det;
+    return true;
+}
+
+bool computeVBlockReading(const PointSet2D &densePointSet,
+                          double rotationRad,
+                          double vBlockAngleDeg,
+                          double *reading,
+                          double *txOut,
+                          double *tyOut,
+                          QString *err)
+{
+    if (densePointSet.points.isEmpty()) {
+        if (err) *err = QStringLiteral("V型块模拟点集为空");
+        return false;
+    }
+    const double half = degToRad(vBlockAngleDeg) / 2.0;
+    const Vec2 nLeft{-std::sin(half), std::cos(half)};
+    const Vec2 nRight{ std::sin(half), std::cos(half)};
+
+    double minLeft = std::numeric_limits<double>::infinity();
+    double minRight = std::numeric_limits<double>::infinity();
+    QVector<Point2D> rotated;
+    rotated.reserve(densePointSet.points.size());
+    for (const auto &p : densePointSet.points) {
+        if (!p.valid || !isFinite(p.x) || !isFinite(p.y)) continue;
+        Point2D pr = rotatePoint(p, rotationRad);
+        rotated.push_back(pr);
+        minLeft = std::min(minLeft, nLeft.x * pr.x + nLeft.y * pr.y);
+        minRight = std::min(minRight, nRight.x * pr.x + nRight.y * pr.y);
+    }
+    if (rotated.isEmpty()) {
+        if (err) *err = QStringLiteral("V型块模拟无有效点");
+        return false;
+    }
+
+    double tx = 0.0, ty = 0.0;
+    if (!solve2x2(nLeft.x, nLeft.y, nRight.x, nRight.y,
+                  -minLeft, -minRight, &tx, &ty)) {
+        if (err) *err = QStringLiteral("V型块接触平移求解失败");
+        return false;
+    }
+
+    double maxY = -std::numeric_limits<double>::infinity();
+    for (const auto &p : rotated) {
+        maxY = std::max(maxY, p.y + ty);
+    }
+    if (!isFinite(maxY)) {
+        if (err) *err = QStringLiteral("V型块读数求解失败");
+        return false;
+    }
+    if (reading) *reading = maxY;
+    if (txOut) *txOut = tx;
+    if (tyOut) *tyOut = ty;
+    return true;
+}
+
 } // namespace
 
 AngularSeries makeAngularSeries(int pointCount, double stepDeg)
@@ -551,6 +661,104 @@ DiameterChannelResult computeOuterDiameter(const QVector<double> &raw_outer_valu
     if (!result.success) {
         result.error = result.circle_fit.error;
     }
+    return result;
+}
+
+RunoutResult computeRunoutAnalysis(const QVector<double> &raw_runout_values_mm,
+                                   const QVector<bool> &raw_runout_valid_mask,
+                                   const RunoutAlgoParams &params)
+{
+    RunoutResult result;
+    result.raw_series = makeRawSeries(raw_runout_values_mm,
+                                      raw_runout_valid_mask,
+                                      params.raw_min_mm,
+                                      params.raw_max_mm);
+    result.radius_profile = buildRadiusProfile(result.raw_series.angles_deg,
+                                               raw_runout_values_mm,
+                                               result.raw_series.valid_mask,
+                                               params.k_runout_mm,
+                                               -1.0,
+                                               params.raw_min_mm,
+                                               params.raw_max_mm);
+    result.point_set = polarToPointSet(result.radius_profile, params.angle_offset_deg);
+    result.dense_point_set = densifyClosedPointSet(result.point_set, params.interpolation_factor);
+    result.circle_fit = fitCircleRobust(result.point_set, params.fit_options);
+    result.harmonics = analyzeHarmonics(result.radius_profile, params.harmonic);
+
+    // axis-referenced TIR
+    bool haveAxis = false;
+    for (int i = 0; i < result.radius_profile.values.size(); ++i) {
+        if (i >= result.radius_profile.valid_mask.size() || !result.radius_profile.valid_mask.at(i)) continue;
+        const double v = result.radius_profile.values.at(i);
+        if (!isFinite(v)) continue;
+        if (!haveAxis) {
+            result.max_radius_mm = result.min_radius_mm = v;
+            result.max_angle_deg = result.min_angle_deg = result.radius_profile.angles_deg.value(i);
+            haveAxis = true;
+        } else {
+            if (v > result.max_radius_mm) {
+                result.max_radius_mm = v;
+                result.max_angle_deg = result.radius_profile.angles_deg.value(i);
+            }
+            if (v < result.min_radius_mm) {
+                result.min_radius_mm = v;
+                result.min_angle_deg = result.radius_profile.angles_deg.value(i);
+            }
+        }
+    }
+    if (!haveAxis) {
+        result.error = QStringLiteral("跳动计算有效点不足");
+        return result;
+    }
+    result.tir_axis_mm = result.max_radius_mm - result.min_radius_mm;
+
+    // fitted-circle residual peak-to-peak
+    if (result.circle_fit.success) {
+        bool haveResidual = false;
+        double minE = 0.0, maxE = 0.0;
+        for (int i = 0; i < result.circle_fit.residuals_mm.size(); ++i) {
+            if (i >= result.circle_fit.final_mask.size() || !result.circle_fit.final_mask.at(i)) continue;
+            const double e = result.circle_fit.residuals_mm.at(i);
+            if (!isFinite(e)) continue;
+            if (!haveResidual) {
+                minE = maxE = e;
+                haveResidual = true;
+            } else {
+                minE = std::min(minE, e);
+                maxE = std::max(maxE, e);
+            }
+        }
+        if (haveResidual) {
+            result.fit_residual_peak_to_peak_mm = maxE - minE;
+            result.fit_residual_rms_mm = result.circle_fit.residual_rms_mm;
+        }
+    }
+
+    // v-block equivalent runout using dense contour and dense orientations
+    if (!result.dense_point_set.points.isEmpty()) {
+        const int evalCount = std::max(36, result.dense_point_set.points.size());
+        bool haveRead = false;
+        QString vErr;
+        for (int i = 0; i < evalCount; ++i) {
+            const double phi = 2.0 * kPi * static_cast<double>(i) / static_cast<double>(evalCount);
+            double reading = 0.0;
+            if (!computeVBlockReading(result.dense_point_set, phi, params.v_block_angle_deg, &reading, nullptr, nullptr, &vErr)) {
+                continue;
+            }
+            if (!haveRead) {
+                result.vblock_max_reading_mm = result.vblock_min_reading_mm = reading;
+                haveRead = true;
+            } else {
+                result.vblock_max_reading_mm = std::max(result.vblock_max_reading_mm, reading);
+                result.vblock_min_reading_mm = std::min(result.vblock_min_reading_mm, reading);
+            }
+        }
+        if (haveRead) {
+            result.runout_vblock_mm = result.vblock_max_reading_mm - result.vblock_min_reading_mm;
+        }
+    }
+
+    result.success = true;
     return result;
 }
 

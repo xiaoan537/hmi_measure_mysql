@@ -20,6 +20,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStringList>
 #include <QVBoxLayout>
 #include <QtMath>
@@ -127,7 +128,7 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   spAlgoKIn_->setRange(-100000.0, 100000.0);
   spAlgoKIn_->setValue(8.0);
 
-  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out（主参数）"), algoBox);
+  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out"), algoBox);
   cbAlgoUseExplicitKOut_->setChecked(true);
   spAlgoKOut_ = new QDoubleSpinBox(algoBox);
   spAlgoKOut_->setDecimals(6);
@@ -191,6 +192,60 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   algoLay->addLayout(seriesLay);
 
   ui_->verticalLayout->insertWidget(1, algoBox);
+
+  auto *runoutBox = new QGroupBox(QStringLiteral("跳动算法调试 / 回放"), this);
+  auto *runoutLay = new QVBoxLayout(runoutBox);
+
+  auto *runoutBtnLay = new QHBoxLayout();
+  btnRunoutFillExample_ = new QPushButton(QStringLiteral("填充跳动示例"), runoutBox);
+  btnRunoutRun_ = new QPushButton(QStringLiteral("运行跳动算法"), runoutBox);
+  runoutBtnLay->addWidget(btnRunoutFillExample_);
+  runoutBtnLay->addWidget(btnRunoutRun_);
+  runoutBtnLay->addStretch(1);
+  runoutLay->addLayout(runoutBtnLay);
+
+  auto *runoutParamForm = new QFormLayout();
+  spRunoutK_ = new QDoubleSpinBox(runoutBox);
+  spRunoutK_->setDecimals(6); spRunoutK_->setRange(-1000000.0, 1000000.0); spRunoutK_->setValue(20.0);
+  spRunoutAngleOffset_ = new QDoubleSpinBox(runoutBox);
+  spRunoutAngleOffset_->setDecimals(3); spRunoutAngleOffset_->setRange(-360.0, 360.0);
+  spRunoutResidual_ = new QDoubleSpinBox(runoutBox);
+  spRunoutResidual_->setDecimals(6); spRunoutResidual_->setRange(0.0, 1000.0); spRunoutResidual_->setValue(0.03);
+  spRunoutVAngle_ = new QDoubleSpinBox(runoutBox);
+  spRunoutVAngle_->setDecimals(3); spRunoutVAngle_->setRange(1.0, 179.0); spRunoutVAngle_->setValue(90.0);
+  spRunoutInterp_ = new QSpinBox(runoutBox);
+  spRunoutInterp_->setRange(1, 50); spRunoutInterp_->setValue(5);
+  cbRunoutPrimary_ = new QComboBox(runoutBox);
+  cbRunoutPrimary_->addItem(QStringLiteral("同时显示（推荐）"), 0);
+  cbRunoutPrimary_->addItem(QStringLiteral("V型块等效跳动优先"), 1);
+  cbRunoutPrimary_->addItem(QStringLiteral("拟合圆残差峰峰值优先"), 2);
+  runoutParamForm->addRow(QStringLiteral("K_runout(mm)"), spRunoutK_);
+  runoutParamForm->addRow(QStringLiteral("角度偏移(°)"), spRunoutAngleOffset_);
+  runoutParamForm->addRow(QStringLiteral("拟合残差阈值(mm)"), spRunoutResidual_);
+  runoutParamForm->addRow(QStringLiteral("V型块夹角(°)"), spRunoutVAngle_);
+  runoutParamForm->addRow(QStringLiteral("轮廓插值倍率"), spRunoutInterp_);
+  runoutParamForm->addRow(QStringLiteral("主显示算法"), cbRunoutPrimary_);
+  runoutLay->addLayout(runoutParamForm);
+
+  auto *runoutSeriesLay = new QHBoxLayout();
+  auto *runoutSeriesBox = new QGroupBox(QStringLiteral("跳动输入 m_runout"), runoutBox);
+  auto *runoutSeriesBoxLay = new QVBoxLayout(runoutSeriesBox);
+  runoutSeriesBoxLay->addWidget(new QLabel(QStringLiteral("原始值（逗号/空格/换行分隔）"), runoutSeriesBox));
+  teRunoutRaw_ = new QPlainTextEdit(runoutSeriesBox);
+  teRunoutRaw_->setPlaceholderText(QStringLiteral("例如：3.201, 3.198, 3.205, ... 共72点"));
+  runoutSeriesBoxLay->addWidget(teRunoutRaw_, 1);
+  runoutSeriesBoxLay->addWidget(new QLabel(QStringLiteral("有效mask（可空；1/0 或 true/false）"), runoutSeriesBox));
+  teRunoutValid_ = new QPlainTextEdit(runoutSeriesBox);
+  teRunoutValid_->setPlaceholderText(QStringLiteral("可留空，默认全1；例如：1,1,1,0,1,..."));
+  teRunoutValid_->setMaximumHeight(70);
+  runoutSeriesBoxLay->addWidget(teRunoutValid_);
+  runoutSeriesLay->addWidget(runoutSeriesBox, 1);
+  runoutLay->addLayout(runoutSeriesLay);
+
+  ui_->verticalLayout->insertWidget(2, runoutBox);
+
+  connect(btnRunoutFillExample_, &QPushButton::clicked, this, &DevToolsWidget::onFillRunoutExample);
+  connect(btnRunoutRun_, &QPushButton::clicked, this, &DevToolsWidget::onRunRunoutFromInput);
 
   connect(cbAlgoUseExplicitKOut_, &QCheckBox::toggled, spAlgoKOut_, &QWidget::setEnabled);
   connect(btnAlgoLoadJson_, &QPushButton::clicked, this, &DevToolsWidget::onLoadAlgorithmJson);
@@ -553,6 +608,36 @@ QString DevToolsWidget::summarizeHarmonics(const QString &title,
   return lines.join('\n');
 }
 
+QString DevToolsWidget::summarizeRunout(const core::RunoutResult &r, int primaryMode) const {
+  QStringList lines;
+  lines << QStringLiteral("[跳动]");
+  if (!r.success) {
+    lines << QStringLiteral("  失败：%1").arg(r.error);
+    return lines.join('\n');
+  }
+  const QString primaryText = (primaryMode == 1)
+      ? QStringLiteral("V型块等效跳动")
+      : (primaryMode == 2 ? QStringLiteral("拟合圆残差峰峰值")
+                          : QStringLiteral("同时显示"));
+  lines << QStringLiteral("  主显示算法 = %1").arg(primaryText);
+  lines << QStringLiteral("  设备轴参考TIR = %1 mm (max=%2 @ %3°, min=%4 @ %5°)")
+              .arg(r.tir_axis_mm, 0, 'f', 6)
+              .arg(r.max_radius_mm, 0, 'f', 6)
+              .arg(r.max_angle_deg, 0, 'f', 3)
+              .arg(r.min_radius_mm, 0, 'f', 6)
+              .arg(r.min_angle_deg, 0, 'f', 3);
+  lines << QStringLiteral("  V型块等效跳动 = %1 mm").arg(r.runout_vblock_mm, 0, 'f', 6);
+  lines << QStringLiteral("  拟合圆残差峰峰值 = %1 mm").arg(r.fit_residual_peak_to_peak_mm, 0, 'f', 6);
+  lines << QStringLiteral("  拟合残差RMS = %1 mm").arg(r.fit_residual_rms_mm, 0, 'f', 6);
+  if (r.circle_fit.success) {
+    lines << QStringLiteral("  拟合圆心 = (%1, %2) mm, 半径 = %3 mm")
+                .arg(r.circle_fit.center_x_mm, 0, 'f', 6)
+                .arg(r.circle_fit.center_y_mm, 0, 'f', 6)
+                .arg(r.circle_fit.radius_mm, 0, 'f', 6);
+  }
+  return lines.join('\n');
+}
+
 void DevToolsWidget::loadAlgorithmJsonObject(const QJsonObject &obj) {
   auto readNumberArray = [](const QJsonObject &o, const QString &key) {
     QVector<double> out;
@@ -573,11 +658,15 @@ void DevToolsWidget::loadAlgorithmJsonObject(const QJsonObject &obj) {
   const QVector<double> mOut = readNumberArray(obj, QStringLiteral("m_out"));
   const QVector<bool> validIn = readBoolArray(obj, QStringLiteral("valid_in"));
   const QVector<bool> validOut = readBoolArray(obj, QStringLiteral("valid_out"));
+  const QVector<double> mRunout = readNumberArray(obj, QStringLiteral("m_runout"));
+  const QVector<bool> validRunout = readBoolArray(obj, QStringLiteral("valid_runout"));
 
   if (!mIn.isEmpty() && teAlgoInnerRaw_) teAlgoInnerRaw_->setPlainText(joinDoubleList(mIn));
   if (!mOut.isEmpty() && teAlgoOuterRaw_) teAlgoOuterRaw_->setPlainText(joinDoubleList(mOut));
   if (!validIn.isEmpty() && teAlgoInnerValid_) teAlgoInnerValid_->setPlainText(joinBoolMask(validIn));
   if (!validOut.isEmpty() && teAlgoOuterValid_) teAlgoOuterValid_->setPlainText(joinBoolMask(validOut));
+  if (!mRunout.isEmpty() && teRunoutRaw_) teRunoutRaw_->setPlainText(joinDoubleList(mRunout));
+  if (!validRunout.isEmpty() && teRunoutValid_) teRunoutValid_->setPlainText(joinBoolMask(validRunout));
 
   const auto params = obj.value(QStringLiteral("params")).toObject();
   if (!params.isEmpty()) {
@@ -588,6 +677,11 @@ void DevToolsWidget::loadAlgorithmJsonObject(const QJsonObject &obj) {
     if (spAlgoResidualIn_) spAlgoResidualIn_->setValue(params.value(QStringLiteral("residual_threshold_in_mm")).toDouble(spAlgoResidualIn_->value()));
     if (spAlgoResidualOut_) spAlgoResidualOut_->setValue(params.value(QStringLiteral("residual_threshold_out_mm")).toDouble(spAlgoResidualOut_->value()));
     if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(params.value(QStringLiteral("use_explicit_k_out")).toBool(cbAlgoUseExplicitKOut_->isChecked()));
+    if (spRunoutK_) spRunoutK_->setValue(params.value(QStringLiteral("k_runout_mm")).toDouble(spRunoutK_->value()));
+    if (spRunoutAngleOffset_) spRunoutAngleOffset_->setValue(params.value(QStringLiteral("runout_angle_offset_deg")).toDouble(spRunoutAngleOffset_->value()));
+    if (spRunoutResidual_) spRunoutResidual_->setValue(params.value(QStringLiteral("runout_residual_threshold_mm")).toDouble(spRunoutResidual_->value()));
+    if (spRunoutVAngle_) spRunoutVAngle_->setValue(params.value(QStringLiteral("v_block_angle_deg")).toDouble(spRunoutVAngle_->value()));
+    if (spRunoutInterp_) spRunoutInterp_->setValue(params.value(QStringLiteral("runout_interpolation_factor")).toInt(spRunoutInterp_->value()));
   }
 }
 
@@ -632,11 +726,74 @@ void DevToolsWidget::onFillAlgorithmExample() {
   if (teAlgoOuterValid_) teAlgoOuterValid_->clear();
   if (spAlgoKIn_) spAlgoKIn_->setValue(8.000000);
   if (cbAlgoUseExplicitKOut_) cbAlgoUseExplicitKOut_->setChecked(true);
-  if (spAlgoKOut_) spAlgoKOut_->setValue(23.000000);
   if (spAlgoProbeBase_) spAlgoProbeBase_->setValue(15.000000);
   if (spAlgoResidualIn_) spAlgoResidualIn_->setValue(0.03);
   if (spAlgoResidualOut_) spAlgoResidualOut_->setValue(0.03);
-  appendLog(QStringLiteral("[ALG] 已填充示例数据（72点，含少量谐波与异常点）"));
+  appendLog(QStringLiteral("[ALG] 已填充示例数据（72点，含少量谐波与异常点，默认显式K_out）"));
+}
+
+void DevToolsWidget::onFillRunoutExample() {
+  QVector<double> m;
+  m.reserve(72);
+  for (int i = 0; i < 72; ++i) {
+    const double theta = qDegreesToRadians(static_cast<double>(i) * 5.0);
+    const double v = 2.800
+                   - 0.120 * qCos(theta - 0.40)   // 1X 偏心主导
+                   + 0.015 * qCos(2.0 * theta + 0.20)
+                   + 0.008 * qCos(3.0 * theta - 0.35);
+    m.push_back(v);
+  }
+  if (m.size() > 21) m[21] += 0.060;
+  if (m.size() > 47) m[47] -= 0.050;
+
+  if (teRunoutRaw_) teRunoutRaw_->setPlainText(joinDoubleList(m));
+  if (teRunoutValid_) teRunoutValid_->clear();
+  if (spRunoutK_) spRunoutK_->setValue(20.000000);
+  if (spRunoutAngleOffset_) spRunoutAngleOffset_->setValue(0.0);
+  if (spRunoutResidual_) spRunoutResidual_->setValue(0.03);
+  if (spRunoutVAngle_) spRunoutVAngle_->setValue(90.0);
+  if (spRunoutInterp_) spRunoutInterp_->setValue(5);
+  if (cbRunoutPrimary_) cbRunoutPrimary_->setCurrentIndex(0);
+  appendLog(QStringLiteral("[RUNOUT] 已填充跳动示例数据（72点，1X主导并含少量异常点）"));
+}
+
+void DevToolsWidget::onRunRunoutFromInput() {
+  QVector<double> m;
+  QString err;
+  if (!parseDoubleSeriesText(teRunoutRaw_ ? teRunoutRaw_->toPlainText() : QString(), &m, &err)) {
+    QMessageBox::warning(this, QStringLiteral("跳动算法调试"), QStringLiteral("跳动原始值解析失败：\n%1").arg(err));
+    return;
+  }
+  if (m.isEmpty()) {
+    QMessageBox::information(this, QStringLiteral("跳动算法调试"), QStringLiteral("请先提供一圈跳动原始值。"));
+    return;
+  }
+  QVector<bool> valid;
+  if (!parseBoolSeriesText(teRunoutValid_ ? teRunoutValid_->toPlainText() : QString(), m.size(), &valid, &err)) {
+    QMessageBox::warning(this, QStringLiteral("跳动算法调试"), QStringLiteral("跳动有效mask解析失败：\n%1").arg(err));
+    return;
+  }
+
+  core::RunoutAlgoParams params;
+  params.k_runout_mm = spRunoutK_ ? spRunoutK_->value() : 0.0;
+  params.angle_offset_deg = spRunoutAngleOffset_ ? spRunoutAngleOffset_->value() : 0.0;
+  params.v_block_angle_deg = spRunoutVAngle_ ? spRunoutVAngle_->value() : 90.0;
+  params.interpolation_factor = spRunoutInterp_ ? spRunoutInterp_->value() : 5;
+  params.fit_options.residual_threshold_mm = spRunoutResidual_ ? spRunoutResidual_->value() : 0.03;
+  params.harmonic.max_order = 8;
+  params.harmonic.remove_mean = false;
+
+  const auto r = core::computeRunoutAnalysis(m, valid, params);
+  QStringList lines;
+  lines << QStringLiteral("[RUNOUT] 运行跳动算法调试");
+  lines << QStringLiteral("  K_runout=%1, angle_offset=%2, V角=%3, 插值倍率=%4")
+               .arg(params.k_runout_mm, 0, 'f', 6)
+               .arg(params.angle_offset_deg, 0, 'f', 6)
+               .arg(params.v_block_angle_deg, 0, 'f', 3)
+               .arg(params.interpolation_factor);
+  lines << summarizeRunout(r, cbRunoutPrimary_ ? cbRunoutPrimary_->currentData().toInt() : 0);
+  lines << summarizeHarmonics(QStringLiteral("跳动"), r.harmonics);
+  appendLog(lines.join('\n'));
 }
 
 void DevToolsWidget::onRunAlgorithmFromInput() {

@@ -81,7 +81,7 @@ struct DiameterAlgoParams
     double angle_offset_deg = 0.0;
 
     double k_in_mm = 0.0;
-    double k_out_mm = 0.0;         // 主参数：旋转轴 -> 外探头测量基准点
+    double k_out_mm = 0.0;
     bool use_explicit_k_out = true;
     double probe_base_mm = 15.0;  // 辅助/校验参数：名义探头基距L
 
@@ -105,6 +105,47 @@ struct DiameterChannelResult
     CircleFitResult circle_fit;
     HarmonicAnalysisResult harmonics;
 
+    QString error;
+};
+
+
+struct RunoutAlgoParams
+{
+    double angle_offset_deg = 0.0;
+    double k_runout_mm = 0.0;
+    double raw_min_mm = -1e9;
+    double raw_max_mm = 1e9;
+    int interpolation_factor = 5;
+    double v_block_angle_deg = 90.0;
+
+    CircleFitOptions fit_options;
+    HarmonicAnalysisOptions harmonic;
+};
+
+struct RunoutResult
+{
+    bool success = false;
+
+    AngularSeries raw_series;
+    AngularSeries radius_profile;
+    PointSet2D point_set;
+    PointSet2D dense_point_set;
+
+    double tir_axis_mm = 0.0;
+    double max_radius_mm = 0.0;
+    double min_radius_mm = 0.0;
+    double max_angle_deg = 0.0;
+    double min_angle_deg = 0.0;
+
+    double runout_vblock_mm = 0.0;
+    double vblock_max_reading_mm = 0.0;
+    double vblock_min_reading_mm = 0.0;
+
+    double fit_residual_peak_to_peak_mm = 0.0;
+    double fit_residual_rms_mm = 0.0;
+
+    CircleFitResult circle_fit;
+    HarmonicAnalysisResult harmonics;
     QString error;
 };
 
@@ -164,6 +205,11 @@ DiameterChannelResult computeInnerDiameter(const QVector<double> &raw_inner_valu
 DiameterChannelResult computeOuterDiameter(const QVector<double> &raw_outer_values_mm,
                                            const QVector<bool> &raw_outer_valid_mask,
                                            const DiameterAlgoParams &params);
+
+
+RunoutResult computeRunoutAnalysis(const QVector<double> &raw_runout_values_mm,
+                                   const QVector<bool> &raw_runout_valid_mask,
+                                   const RunoutAlgoParams &params);
 
 ThicknessResult computeThickness(const QVector<double> &raw_inner_values_mm,
                                  const QVector<bool> &raw_inner_valid_mask,
