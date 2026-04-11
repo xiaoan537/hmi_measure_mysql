@@ -22,6 +22,31 @@ constexpr int kFirstStageChuantecRegsV24 = 1152;
 constexpr int kFirstStageRPosRegsV24 = 1152;
 constexpr float kFirstStageInvalidRawValueV24 = 2147.48364f;
 
+// 第二阶段（v2.5）固定布局
+constexpr int kStatusBlockRegsV25 = 11;
+constexpr int kCommandBlockRegsV25 = 6;
+constexpr int kTrayAllCodingBytesV25 = 16 * 81;
+constexpr int kTrayAllCodingRegsV25 = kTrayAllCodingBytesV25 / 2;
+constexpr int kMailboxHeaderRegsV25 = 83;  // item_count(1) + slot_mask(1) + 2*STRING(81B)=83regs
+constexpr int kMailboxDataRegsV25 = 16 + 1152;
+constexpr int kMailboxTotalRegsV25 = kMailboxHeaderRegsV25 + kMailboxDataRegsV25;
+constexpr int kStatusOffsetModeV25 = 0;
+constexpr int kStatusOffsetMachineStateV25 = 1;
+constexpr int kStatusOffsetStepStateV25 = 2;
+constexpr int kStatusOffsetInterlockMaskV25 = 3;
+constexpr int kStatusOffsetAlarmCodeV25 = 4;
+constexpr int kStatusOffsetTrayPresentMaskV25 = 5;
+constexpr int kStatusOffsetScanDoneV25 = 6;
+constexpr int kStatusOffsetActiveItemCountV25 = 7;
+constexpr int kStatusOffsetActiveSlotMaskV25 = 8;
+constexpr int kStatusOffsetMailboxReadyV25 = 9;
+constexpr int kStatusOffsetAfterMeasurementV25 = 10;
+constexpr int kCommandOffsetCategoryModeV25 = 0;
+constexpr int kCommandOffsetCmdCodeV25 = 1;
+constexpr int kCommandOffsetCmdResultV25 = 2;
+constexpr int kCommandOffsetCmdErrorCodeV25 = 3;
+constexpr int kCommandOffsetPcAckV25 = 4;
+constexpr int kCommandOffsetJudgeResultV25 = 5;
 
 constexpr int kMailboxHeaderUsedRegsV2 = 54;          // 当前有效字段长度
 constexpr int kMailboxHeaderReservedTailRegsV2 = 4;   // 物理头块尾部预留
@@ -97,6 +122,12 @@ constexpr int kMailboxOffsetReservedTail3 = 57;    // uint16 reserved
 // 6) Mailbox Header 当前有效字段长度为 54 regs，但物理头块固定预留 58 regs；
 //    尾部 4 regs 作为 reserved，Arrays 起始偏移保持在 58，便于后续扩展且不打乱数组区。
 
+enum class PlcControlModeV25 : qint16 {
+  Manual = 1,
+  Auto = 2,
+  SingleStep = 3,
+};
+
 enum class PlcMachineState : quint16 {
   Idle = 0,
   Auto = 1,
@@ -141,14 +172,14 @@ enum class ProductionMeasureModeV2 : quint16 {
 enum class PlcCommandCodeV2 : quint16 {
   SetModeAuto = 100,
   SetModeManual = 101,
-  StartAuto = 110,
-  StartCalibration = 111,
+  Initialize = 1,
+  StartAuto = 2,
+  StartCalibration = 2,
+  Stop = 3,
+  ResetAlarm = 4,
+  HomeAll = 4,
   Pause = 120,
   Resume = 121,
-  Stop = 122,
-  ResetAlarm = 130,
-  HomeAll = 140,
-  Initialize = 150,
 
   ContinueAfterIdCheck = 200,
   RequestRescanIds = 201,
@@ -164,6 +195,7 @@ enum class PlcCommandCodeV2 : quint16 {
 };
 
 struct PlcStatusBlockV2 {
+  qint16 control_mode = 0;
   quint16 machine_state = 0;
   quint16 step_state = 0;
   quint32 state_seq = 0;
@@ -178,9 +210,11 @@ struct PlcStatusBlockV2 {
 
   quint16 active_item_count = 0;                  // 当前流程正在处理的工件数：0/1/2
   quint16 active_slot_index[2] = {kInvalidSlotIndex, kInvalidSlotIndex};
+  quint16 active_slot_mask = 0;
 
   quint16 mailbox_ready = 0;     // 1=PLC 已冻结原始测量包，可读
   quint32 meas_seq = 0;          // 每冻结一帧测量包自增
+  quint16 after_measurement_count = 0;
 };
 
 struct PlcTrayPartIdBlockV2 {
@@ -188,6 +222,7 @@ struct PlcTrayPartIdBlockV2 {
 };
 
 struct PlcCommandBlockV2 {
+  qint16 category_mode = 0;
   quint16 cmd_code = 0;
   quint32 cmd_seq = 0;
   quint32 cmd_arg0 = 0;
@@ -195,10 +230,13 @@ struct PlcCommandBlockV2 {
   quint32 cmd_ack_seq = 0;
   quint16 cmd_result = 0;
   quint16 cmd_error_code = 0;
+  quint16 judge_result = 0;
+  quint16 pc_ack = 0;
 };
 
 struct PlcMailboxHeaderV2 {
   quint32 meas_seq = 0;
+  quint16 active_slot_mask = 0;
   quint16 part_type = 0;  // 1=A, 2=B
   quint16 item_count = 0; // 1 or 2
 

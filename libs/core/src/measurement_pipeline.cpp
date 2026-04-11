@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QJsonValue>
 #include <QUuid>
+#include <QVector>
 
 #include <cstring>
 
@@ -802,6 +803,148 @@ bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
     failWith(err, validErr);
     return false;
   }
+  *out = snapshot;
+  return true;
+}
+
+QVector<int> logicalSlotsFromMaskV25(quint16 slotMask) {
+  QVector<int> slotList;
+  for (int bit = 0; bit < 16; ++bit) {
+    if (((slotMask >> bit) & 0x1u) != 0) {
+      slotList.push_back(bit);
+    }
+  }
+  return slotList;
+}
+
+bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
+                            PlcStatusBlockV2 *out,
+                            QString *err) {
+  if (!out) return failWith(err, QStringLiteral("buildPlcStatusBlockV25.out 不能为空")).isEmpty();
+  if (statusRegs.size() < kStatusBlockRegsV25) {
+    failWith(err, QStringLiteral("statusRegs 长度不足，期望至少 %1，实际 %2").arg(kStatusBlockRegsV25).arg(statusRegs.size()));
+    return false;
+  }
+  PlcStatusBlockV2 status;
+  quint16 tmp = 0;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetModeV25, &tmp, err)) return false;
+  status.control_mode = static_cast<qint16>(tmp);
+  if (!plcReadUint16At(statusRegs, kStatusOffsetMachineStateV25, &status.machine_state, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetStepStateV25, &status.step_state, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetInterlockMaskV25, &tmp, err)) return false;
+  status.interlock_mask = tmp;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmCodeV25, &status.alarm_code, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetTrayPresentMaskV25, &status.tray_present_mask, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetScanDoneV25, &status.scan_done, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveItemCountV25, &status.active_item_count, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotMaskV25, &status.active_slot_mask, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetMailboxReadyV25, &status.mailbox_ready, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetAfterMeasurementV25, &status.after_measurement_count, err)) return false;
+  const auto slotList = logicalSlotsFromMaskV25(status.active_slot_mask);
+  status.active_slot_index[0] = slotList.size() >= 1 ? static_cast<quint16>(slotList.at(0)) : kInvalidSlotIndex;
+  status.active_slot_index[1] = slotList.size() >= 2 ? static_cast<quint16>(slotList.at(1)) : kInvalidSlotIndex;
+  *out = status;
+  return true;
+}
+
+bool buildPlcCommandBlockV25(const QVector<quint16> &commandRegs,
+                             PlcCommandBlockV2 *out,
+                             QString *err) {
+  if (!out) return failWith(err, QStringLiteral("buildPlcCommandBlockV25.out 不能为空")).isEmpty();
+  if (commandRegs.size() < kCommandBlockRegsV25) {
+    failWith(err, QStringLiteral("commandRegs 长度不足，期望至少 %1，实际 %2").arg(kCommandBlockRegsV25).arg(commandRegs.size()));
+    return false;
+  }
+  PlcCommandBlockV2 command;
+  quint16 tmp = 0;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCategoryModeV25, &tmp, err)) return false;
+  command.category_mode = static_cast<qint16>(tmp);
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdCodeV25, &command.cmd_code, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdResultV25, &command.cmd_result, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetCmdErrorCodeV25, &command.cmd_error_code, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetPcAckV25, &command.pc_ack, err)) return false;
+  if (!plcReadUint16At(commandRegs, kCommandOffsetJudgeResultV25, &command.judge_result, err)) return false;
+  command.cmd_arg0 = static_cast<quint32>(qMax(0, static_cast<int>(command.category_mode)));
+  *out = command;
+  return true;
+}
+
+bool buildPlcTrayAllCodingBlockV25(const QVector<quint16> &trayRegs,
+                                   PlcTrayPartIdBlockV2 *out,
+                                   QString *err) {
+  if (!out) return failWith(err, QStringLiteral("buildPlcTrayAllCodingBlockV25.out 不能为空")).isEmpty();
+  if (trayRegs.size() < kTrayAllCodingRegsV25) {
+    failWith(err, QStringLiteral("trayRegs 长度不足，期望至少 %1，实际 %2").arg(kTrayAllCodingRegsV25).arg(trayRegs.size()));
+    return false;
+  }
+  const QByteArray bytes = mbBytesFromRegs(trayRegs).left(kTrayAllCodingBytesV25);
+  PlcTrayPartIdBlockV2 block;
+  for (int slot = 0; slot < kLogicalSlotCount; ++slot) {
+    block.part_ids[slot] = asciiFromBytes(bytes.mid(slot * 81, 81));
+  }
+  *out = block;
+  return true;
+}
+
+bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
+                                        QChar partType,
+                                        PlcMailboxSnapshot *out,
+                                        QString *err) {
+  if (!out) return failWith(err, QStringLiteral("buildSecondStageMailboxSnapshotV25.out 不能为空")).isEmpty();
+  const QChar pt = partType.toUpper();
+  if (pt != QChar('A') && pt != QChar('B')) {
+    failWith(err, QStringLiteral("第二阶段读取 Mailbox 需要明确 partType=A/B"));
+    return false;
+  }
+  if (mailboxRegs.size() < kMailboxTotalRegsV25) {
+    failWith(err, QStringLiteral("mailboxRegs 长度不足，期望至少 %1，实际 %2").arg(kMailboxTotalRegsV25).arg(mailboxRegs.size()));
+    return false;
+  }
+  quint16 itemCount = 0, slotMask = 0;
+  if (!plcReadUint16At(mailboxRegs, 0, &itemCount, err)) return false;
+  if (!plcReadUint16At(mailboxRegs, 1, &slotMask, err)) return false;
+  const QByteArray bytes = mbBytesFromRegs(mailboxRegs.mid(2, 81)).left(162);
+  const QString id0 = asciiFromBytes(bytes.mid(0, 81));
+  const QString id1 = asciiFromBytes(bytes.mid(81, 81));
+  QVector<double> lenValues; lenValues.reserve(4);
+  const int keyenceOffset = kMailboxHeaderRegsV25;
+  for (int i = 0; i < 4; ++i) {
+    double v = 0.0;
+    if (!plcReadFloat64WordSwappedAt(mailboxRegs, keyenceOffset + i * 4, &v, err)) return false;
+    lenValues.push_back(v);
+  }
+  QVector<float> rawValues;
+  if (!plcReadFloat32ArrayAbcd(mailboxRegs, keyenceOffset + 16, 576, &rawValues, err)) return false;
+  for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
+  PlcMailboxSnapshot snapshot;
+  snapshot.meas_seq = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+  snapshot.part_type = pt;
+  snapshot.raw_layout_ver = 25;
+  snapshot.ring_count = 1;
+  snapshot.point_count = 72;
+  snapshot.channel_count = (pt == QChar('A')) ? 4 : 2;
+  snapshot.item_count = qBound(0, static_cast<int>(itemCount), 2);
+  const auto slotList = logicalSlotsFromMaskV25(slotMask);
+  auto slotForItem = [&](int idx)->int { return (slotList.size() > idx) ? slotList.at(idx) : -1; };
+  const auto buildItemA = [&](int itemIndex, const QString &partId, int curveBase) {
+    PlcMailboxItemSnapshot item;
+    item.present = true; item.item_index = itemIndex; item.slot_index = slotForItem(itemIndex); item.part_id = normalizedAsciiField(partId);
+    item.total_len_mm = static_cast<float>(lenValues.value(itemIndex));
+    item.raw_points_um.reserve(4 * 72);
+    for (int ch = 0; ch < 4; ++ch) { const int offset = (curveBase + ch) * 72; for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
+    return item;
+  };
+  const auto buildItemB = [&](int itemIndex, const QString &partId, int curveBase) {
+    PlcMailboxItemSnapshot item;
+    item.present = true; item.item_index = itemIndex; item.slot_index = slotForItem(itemIndex); item.part_id = normalizedAsciiField(partId);
+    item.ad_len_mm = static_cast<float>(lenValues.value(itemIndex * 2));
+    item.bc_len_mm = static_cast<float>(lenValues.value(itemIndex * 2 + 1));
+    item.raw_points_um.reserve(2 * 72);
+    for (int ch = 0; ch < 2; ++ch) { const int offset = (curveBase + ch) * 72; for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
+    return item;
+  };
+  if (snapshot.item_count >= 1) snapshot.items.push_back(pt == QChar('A') ? buildItemA(0, id0, 0) : buildItemB(0, id0, 0));
+  if (snapshot.item_count >= 2) snapshot.items.push_back(pt == QChar('A') ? buildItemA(1, id1, 4) : buildItemB(1, id1, 2));
   *out = snapshot;
   return true;
 }

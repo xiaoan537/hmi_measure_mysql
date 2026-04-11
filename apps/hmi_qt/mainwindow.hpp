@@ -16,6 +16,7 @@ class MesWorker;
 class ProductionWidget;
 class CalibrationWidget;
 class DevToolsWidget;
+class ManualMaintainWidget;
 
 namespace core {
 class PlcRuntimeServiceV2;
@@ -52,12 +53,14 @@ private:
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();
+    void refreshManualMaintainLiveStatus();
 
 private:
     Ui::MainWindow *ui_ = nullptr;
     QString iniPath_;
     DiagnosticsWidget *diagnosticsWidget_ = nullptr;
     DevToolsWidget *devToolsWidget_ = nullptr;
+    ManualMaintainWidget *manualMaintainWidget_ = nullptr;
     ProductionWidget *productionWidget_ = nullptr;
     CalibrationWidget *calibrationWidget_ = nullptr;
     QLabel *lbDb_ = nullptr;

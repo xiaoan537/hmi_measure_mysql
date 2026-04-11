@@ -244,6 +244,23 @@ bool plcWriteAsciiRegs(const QString &text, int regCount,
                        QVector<quint16> *out, QString *err = nullptr);
 
 // 第一阶段联调：直接由 g_aCoding / g_aKeyence_Result / g_aChuantec_Result 组装 v2.4 Mailbox 语义快照。
+
+QVector<int> logicalSlotsFromMaskV25(quint16 slotMask);
+
+bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
+                            PlcStatusBlockV2 *out,
+                            QString *err = nullptr);
+bool buildPlcCommandBlockV25(const QVector<quint16> &commandRegs,
+                             PlcCommandBlockV2 *out,
+                             QString *err = nullptr);
+bool buildPlcTrayAllCodingBlockV25(const QVector<quint16> &trayRegs,
+                                   PlcTrayPartIdBlockV2 *out,
+                                   QString *err = nullptr);
+bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
+                                        QChar partType,
+                                        PlcMailboxSnapshot *out,
+                                        QString *err = nullptr);
+
 bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
                                        const QVector<quint16> &keyenceRegs,
                                        const QVector<quint16> &chuantecRegs,

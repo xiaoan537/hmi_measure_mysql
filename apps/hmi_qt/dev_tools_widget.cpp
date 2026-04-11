@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -109,89 +110,9 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
 
   ui_->verticalLayout->insertWidget(0, plcBox);
 
-  auto *algoBox = new QGroupBox(QStringLiteral("算法调试 / 几何回放"), this);
-  auto *algoLay = new QVBoxLayout(algoBox);
+  // 手动/维护内容已迁移到“手动/维护”页面，开发调试页仅保留联调与算法调试内容。
 
-  auto *algoBtnLay = new QHBoxLayout();
-  btnAlgoLoadJson_ = new QPushButton(QStringLiteral("加载JSON"), algoBox);
-  btnAlgoFillExample_ = new QPushButton(QStringLiteral("填充示例"), algoBox);
-  btnAlgoRun_ = new QPushButton(QStringLiteral("运行算法"), algoBox);
-  algoBtnLay->addWidget(btnAlgoLoadJson_);
-  algoBtnLay->addWidget(btnAlgoFillExample_);
-  algoBtnLay->addWidget(btnAlgoRun_);
-  algoBtnLay->addStretch(1);
-  algoLay->addLayout(algoBtnLay);
-
-  auto *paramForm = new QFormLayout();
-  spAlgoKIn_ = new QDoubleSpinBox(algoBox);
-  spAlgoKIn_->setDecimals(6);
-  spAlgoKIn_->setRange(-100000.0, 100000.0);
-  spAlgoKIn_->setValue(8.0);
-
-  cbAlgoUseExplicitKOut_ = new QCheckBox(QStringLiteral("显式K_out"), algoBox);
-  cbAlgoUseExplicitKOut_->setChecked(true);
-  spAlgoKOut_ = new QDoubleSpinBox(algoBox);
-  spAlgoKOut_->setDecimals(6);
-  spAlgoKOut_->setRange(-100000.0, 100000.0);
-  spAlgoKOut_->setValue(23.0);
-  spAlgoKOut_->setEnabled(false);
-
-  spAlgoProbeBase_ = new QDoubleSpinBox(algoBox);
-  spAlgoProbeBase_->setDecimals(6);
-  spAlgoProbeBase_->setRange(-100000.0, 100000.0);
-  spAlgoProbeBase_->setValue(15.0);
-
-  spAlgoAngleOffset_ = new QDoubleSpinBox(algoBox);
-  spAlgoAngleOffset_->setDecimals(6);
-  spAlgoAngleOffset_->setRange(-360.0, 360.0);
-  spAlgoAngleOffset_->setValue(0.0);
-
-  spAlgoResidualIn_ = new QDoubleSpinBox(algoBox);
-  spAlgoResidualIn_->setDecimals(6);
-  spAlgoResidualIn_->setRange(0.0, 1000.0);
-  spAlgoResidualIn_->setValue(0.03);
-
-  spAlgoResidualOut_ = new QDoubleSpinBox(algoBox);
-  spAlgoResidualOut_->setDecimals(6);
-  spAlgoResidualOut_->setRange(0.0, 1000.0);
-  spAlgoResidualOut_->setValue(0.03);
-
-  auto *kOutRow = new QWidget(algoBox);
-  auto *kOutLay = new QHBoxLayout(kOutRow);
-  kOutLay->setContentsMargins(0, 0, 0, 0);
-  kOutLay->addWidget(cbAlgoUseExplicitKOut_);
-  kOutLay->addWidget(spAlgoKOut_, 1);
-
-  paramForm->addRow(QStringLiteral("K_in(mm)"), spAlgoKIn_);
-  paramForm->addRow(QStringLiteral("K_out(mm，主参数)"), kOutRow);
-  paramForm->addRow(QStringLiteral("探头基距L(mm，辅助/校验)"), spAlgoProbeBase_);
-  paramForm->addRow(QStringLiteral("角度偏移(°)"), spAlgoAngleOffset_);
-  paramForm->addRow(QStringLiteral("内径残差阈值(mm)"), spAlgoResidualIn_);
-  paramForm->addRow(QStringLiteral("外径残差阈值(mm)"), spAlgoResidualOut_);
-  algoLay->addLayout(paramForm);
-
-  auto *seriesLay = new QHBoxLayout();
-  auto makeSeriesColumn = [algoBox](const QString &title, QPlainTextEdit **rawEdit,
-                                    QPlainTextEdit **validEdit) {
-    auto *box = new QGroupBox(title, algoBox);
-    auto *lay = new QVBoxLayout(box);
-    lay->addWidget(new QLabel(QStringLiteral("原始值（逗号/空格/换行分隔）"), box));
-    *rawEdit = new QPlainTextEdit(box);
-    (*rawEdit)->setPlaceholderText(QStringLiteral("例如：1.201, 1.203, 1.198, ... 共72点"));
-    (*rawEdit)->setMaximumBlockCount(0);
-    lay->addWidget(*rawEdit, 1);
-    lay->addWidget(new QLabel(QStringLiteral("有效mask（可空；1/0 或 true/false）"), box));
-    *validEdit = new QPlainTextEdit(box);
-    (*validEdit)->setPlaceholderText(QStringLiteral("可留空，默认全1；例如：1,1,1,0,1,..."));
-    (*validEdit)->setMaximumHeight(70);
-    lay->addWidget(*validEdit);
-    return box;
-  };
-  seriesLay->addWidget(makeSeriesColumn(QStringLiteral("内径/内壁输入 m_in"), &teAlgoInnerRaw_, &teAlgoInnerValid_), 1);
-  seriesLay->addWidget(makeSeriesColumn(QStringLiteral("外径/外壁输入 m_out"), &teAlgoOuterRaw_, &teAlgoOuterValid_), 1);
-  algoLay->addLayout(seriesLay);
-
-  ui_->verticalLayout->insertWidget(1, algoBox);
+  // ui_->verticalLayout->insertWidget(1, algoBox);
 
   auto *runoutBox = new QGroupBox(QStringLiteral("跳动算法调试 / 回放"), this);
   auto *runoutLay = new QVBoxLayout(runoutBox);

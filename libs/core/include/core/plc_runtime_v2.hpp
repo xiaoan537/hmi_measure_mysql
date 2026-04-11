@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QByteArray>
 #include <QTimer>
 #include <QString>
 #include <QtGlobal>
@@ -69,8 +70,17 @@ public slots:
                            QString *err = nullptr);
   bool readHoldingRegistersRaw(quint32 startAddress, quint16 regCount,
                                QVector<quint16> *out, QString *err = nullptr);
+  bool writeHoldingRegistersRaw(quint32 startAddress, const QVector<quint16> &values,
+                                QString *err = nullptr);
+  bool readMbBytesRaw(quint32 mbByteAddress, quint16 byteCount, QByteArray *out, QString *err = nullptr);
+  bool writeMbBytesRaw(quint32 mbByteAddress, const QByteArray &bytes, QString *err = nullptr);
   bool readFirstStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
                                      QString *err = nullptr);
+  bool readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
+                                      QString *err = nullptr);
+  bool readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err = nullptr);
+  bool writePlcMode(qint16 mode, QString *err = nullptr);
+  bool writeJudgeResult(quint16 judgeResult, QString *err = nullptr);
 
 signals:
   void runningChanged(bool running);
@@ -91,6 +101,7 @@ private slots:
 
 private:
   bool ensureClientReady(QString *err = nullptr);
+  bool pollSecondStage(QString *err = nullptr);
   bool refreshConnectionState();
   void updateStatsFromCache();
   void publishError(const QString &message);

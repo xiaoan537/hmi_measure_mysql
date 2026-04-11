@@ -2,6 +2,7 @@
 #include "calibration_widget.hpp"
 #include "data_widget.hpp"
 #include "dev_tools_widget.hpp"
+#include "manual_maintain_widget.hpp"
 #include "diagnostics_widget.hpp"
 #include "mainwindow.hpp"
 #include "mes_upload_widget.hpp"
@@ -18,6 +19,11 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVariantMap>
+#include <QByteArray>
+#include <QThread>
+#include <QStringList>
+
+#include <cstring>
 
 #include <QSizePolicy>
 
@@ -65,6 +71,74 @@ QString stepStateText(quint16 stepState) {
   }
 }
 
+
+constexpr quint32 kAxisCtrlRegsPerAxisV25 = 104;
+constexpr quint32 kAxisStaRegsPerAxisV25 = 12;
+constexpr quint32 kAxisCtrlBytesPerAxisV25 = kAxisCtrlRegsPerAxisV25 * 2;
+constexpr quint32 kAxisStaBytesPerAxisV25 = kAxisStaRegsPerAxisV25 * 2;
+constexpr quint32 kAxisCtrlOffsetEnable = 162;
+constexpr quint32 kAxisCtrlOffsetReset = 163;
+constexpr quint32 kAxisCtrlOffsetHome = 164;
+constexpr quint32 kAxisCtrlOffsetEStop = 165;
+constexpr quint32 kAxisCtrlOffsetStop = 166;
+constexpr quint32 kAxisCtrlOffsetMoveAbs = 167;
+constexpr quint32 kAxisCtrlOffsetMoveRel = 168;
+constexpr quint32 kAxisCtrlOffsetJogForward = 169;
+constexpr quint32 kAxisCtrlOffsetJogBackward = 170;
+constexpr quint32 kAxisCtrlOffsetSetAcc = 176;
+constexpr quint32 kAxisCtrlOffsetSetDec = 184;
+constexpr quint32 kAxisCtrlOffsetSetPosition = 192;
+constexpr quint32 kAxisCtrlOffsetSetVelocity = 200;
+constexpr quint32 kAxisStaOffsetEnabled = 0;
+constexpr quint32 kAxisStaOffsetHomed = 1;
+constexpr quint32 kAxisStaOffsetError = 2;
+constexpr quint32 kAxisStaOffsetBusy = 3;
+constexpr quint32 kAxisStaOffsetDone = 4;
+constexpr quint32 kAxisStaOffsetErrorId = 6;
+constexpr quint32 kAxisStaOffsetActPositionRegs = 4;
+constexpr quint32 kAxisStaOffsetActVelocityRegs = 8;
+constexpr quint32 kCylinderCtrlBytes = 3;
+constexpr quint32 kCylinderStaBytes = 6;
+
+QString plcModeTextV25(int mode) {
+  switch (mode) {
+  case 1: return QStringLiteral("手动");
+  case 2: return QStringLiteral("自动");
+  case 3: return QStringLiteral("单步");
+  default: return QStringLiteral("模式(%1)").arg(mode);
+  }
+}
+
+QByteArray mbBytesFromRegsUi(const QVector<quint16> &regs) {
+  QByteArray bytes;
+  bytes.reserve(regs.size() * 2);
+  for (quint16 reg : regs) {
+    bytes.append(static_cast<char>(reg & 0x00FFu));
+    bytes.append(static_cast<char>((reg >> 8) & 0x00FFu));
+  }
+  return bytes;
+}
+
+QByteArray float64ToMbBytes(double value) {
+  QByteArray bytes(8, '\0');
+  quint64 bits = 0;
+  static_assert(sizeof(double) == sizeof(quint64), "double size");
+  std::memcpy(&bits, &value, sizeof(bits));
+  for (int i = 0; i < 8; ++i) {
+    bytes[i] = static_cast<char>((bits >> (8 * i)) & 0xFFu);
+  }
+  return bytes;
+}
+
+QString axisNameByIndex(int axisIndex) {
+  static const QStringList names = {
+      QStringLiteral("龙门X轴"), QStringLiteral("龙门Y轴"), QStringLiteral("龙门Z轴"),
+      QStringLiteral("测量X1轴"), QStringLiteral("测量X2轴"), QStringLiteral("测量X3轴"),
+      QStringLiteral("内外径R1轴"), QStringLiteral("内外径R2轴"),
+      QStringLiteral("跳动R3轴"), QStringLiteral("跳动R4轴")};
+  return (axisIndex >= 0 && axisIndex < names.size()) ? names.at(axisIndex) : QStringLiteral("Axis%1").arg(axisIndex + 1);
+}
+
 QString machineStateText(quint16 machineState) {
   switch (static_cast<core::PlcMachineState>(machineState)) {
   case core::PlcMachineState::Idle: return QStringLiteral("IDLE");
@@ -107,13 +181,14 @@ core::PlcCommandCodeV2 uiCommandToCode(const QString &cmd, bool *ok) {
   if (ok) *ok = true;
   if (cmd == QStringLiteral("SET_MODE_AUTO")) return core::PlcCommandCodeV2::SetModeAuto;
   if (cmd == QStringLiteral("SET_MODE_MANUAL")) return core::PlcCommandCodeV2::SetModeManual;
+  if (cmd == QStringLiteral("INITIALIZE")) return core::PlcCommandCodeV2::Initialize;
   if (cmd == QStringLiteral("START_AUTO")) return core::PlcCommandCodeV2::StartAuto;
   if (cmd == QStringLiteral("START_CALIBRATION")) return core::PlcCommandCodeV2::StartCalibration;
-  if (cmd == QStringLiteral("PAUSE")) return core::PlcCommandCodeV2::Pause;
-  if (cmd == QStringLiteral("RESUME")) return core::PlcCommandCodeV2::Resume;
   if (cmd == QStringLiteral("STOP")) return core::PlcCommandCodeV2::Stop;
   if (cmd == QStringLiteral("RESET_ALARM")) return core::PlcCommandCodeV2::ResetAlarm;
   if (cmd == QStringLiteral("HOME_ALL")) return core::PlcCommandCodeV2::HomeAll;
+  if (cmd == QStringLiteral("PAUSE")) return core::PlcCommandCodeV2::Pause;
+  if (cmd == QStringLiteral("RESUME")) return core::PlcCommandCodeV2::Resume;
   if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) return core::PlcCommandCodeV2::ContinueAfterIdCheck;
   if (cmd == QStringLiteral("REQUEST_RESCAN_IDS")) return core::PlcCommandCodeV2::RequestRescanIds;
   if (cmd == QStringLiteral("CONTINUE_AFTER_NG_CONFIRM")) return core::PlcCommandCodeV2::ContinueAfterNgConfirm;
@@ -195,10 +270,8 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   devToolsWidget_ = new DevToolsWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(devToolsWidget_);
 
-  ui_->stackedWidget->addWidget(new TodoWidget(
-      QStringLiteral("手动/维护（TODO）"),
-      QStringLiteral("后续将增加手动读写槽位、单步调试、回零等维护功能。"),
-      ui_->stackedWidget));
+  manualMaintainWidget_ = new ManualMaintainWidget(ui_->stackedWidget);
+  ui_->stackedWidget->addWidget(manualMaintainWidget_);
   ui_->stackedWidget->addWidget(new TodoWidget(
       QStringLiteral("统计报表（TODO）"),
       QStringLiteral("后续将增加良率、趋势、SPC/CPK 等统计视图。"),
@@ -318,7 +391,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(devToolsWidget_, &DevToolsWidget::requestPlcPollOnce,
             plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(devToolsWidget_, &DevToolsWidget::requestPlcReloadSlotIds,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) handlePlcRuntimeError(err); });
     connect(devToolsWidget_, &DevToolsWidget::requestPlcReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(devToolsWidget_, &DevToolsWidget::requestPlcAckMailbox,
@@ -329,7 +402,126 @@ void MainWindow::setupDiagnosticsBindings() {
             this, [this] { handleUiCommandRequested(QStringLiteral("REQUEST_RESCAN_IDS"), QVariantMap{}); });
     connect(devToolsWidget_, &DevToolsWidget::plcFlowModeChanged,
             this, &MainWindow::onPlcFlowModeChanged);
+    connect(devToolsWidget_, &DevToolsWidget::requestSetPlcMode, this, [this](int mode) {
+      QString err;
+      if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; }
+      if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode)));
+      plcRuntime_->pollOnce();
+    });
+    connect(devToolsWidget_, &DevToolsWidget::requestPlcNamedCommand, this, &MainWindow::handleUiCommandRequested);
+    connect(devToolsWidget_, &DevToolsWidget::requestAxisCommand, this, [this](int axisIndex, const QString &action) {
+      if (!plcRuntime_) return;
+      const quint32 baseMb = plcRuntime_->config().plc.axis_ctrl_start_address * 2u + static_cast<quint32>(axisIndex) * kAxisCtrlBytesPerAxisV25;
+      quint32 offset = kAxisCtrlOffsetEnable;
+      if (action == QStringLiteral("RESET")) offset = kAxisCtrlOffsetReset;
+      else if (action == QStringLiteral("HOME")) offset = kAxisCtrlOffsetHome;
+      else if (action == QStringLiteral("STOP")) offset = kAxisCtrlOffsetStop;
+      else if (action == QStringLiteral("JOG_FWD")) offset = kAxisCtrlOffsetJogForward;
+      else if (action == QStringLiteral("JOG_BWD")) offset = kAxisCtrlOffsetJogBackward;
+      QString err;
+      if (!plcRuntime_->writeMbBytesRaw(baseMb + offset, QByteArray(1, '\x01'), &err)) { handlePlcRuntimeError(err); return; }
+      if (action != QStringLiteral("ENABLE")) { QThread::msleep(50); plcRuntime_->writeMbBytesRaw(baseMb + offset, QByteArray(1, '\x00'), nullptr); }
+      if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("写轴控制：axis=%1 action=%2").arg(axisIndex + 1).arg(action));
+    });
+    connect(devToolsWidget_, &DevToolsWidget::requestReadAxisStatus, this, [this](int axisIndex) {
+      if (!plcRuntime_) return;
+      QByteArray bytes; QString err;
+      const quint32 baseMb = plcRuntime_->config().plc.axis_sta_start_address * 2u + static_cast<quint32>(axisIndex) * kAxisStaBytesPerAxisV25;
+      if (!plcRuntime_->readMbBytesRaw(baseMb, static_cast<quint16>(kAxisStaBytesPerAxisV25), &bytes, &err)) { handlePlcRuntimeError(err); return; }
+      auto u8 = [&](int i){ return (i < bytes.size()) ? static_cast<unsigned char>(bytes.at(i)) : 0; };
+      auto u16le = [&](int i){ return static_cast<int>(u8(i) | (u8(i+1) << 8)); };
+      QVector<quint16> regs;
+      if (!plcRuntime_->readHoldingRegistersRaw(plcRuntime_->config().plc.axis_sta_start_address + axisIndex * kAxisStaRegsPerAxisV25, static_cast<quint16>(kAxisStaRegsPerAxisV25), &regs, &err)) { handlePlcRuntimeError(err); return; }
+      double pos=0.0, vel=0.0;
+      core::plcReadFloat64WordSwappedAt(regs, 4, &pos, nullptr);
+      core::plcReadFloat64WordSwappedAt(regs, 8, &vel, nullptr);
+      if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("Axis%1 状态: enabled=%2 homed=%3 error=%4 busy=%5 done=%6 errId=%7 pos=%8 vel=%9")
+        .arg(axisIndex + 1).arg(u8(0)).arg(u8(1)).arg(u8(2)).arg(u8(3)).arg(u8(4)).arg(u16le(6)).arg(pos,0,'f',3).arg(vel,0,'f',3));
+    });
+    connect(devToolsWidget_, &DevToolsWidget::requestCylinderCommand, this, [this](const QString &group, int index, const QString &action) {
+      if (!plcRuntime_) return;
+      quint32 startMb = 0;
+      if (group == QStringLiteral("LM")) { startMb = plcRuntime_->config().plc.lm_ctrl_start_address * 2u; }
+      else if (group == QStringLiteral("CL")) { startMb = plcRuntime_->config().plc.cl_ctrl_start_address * 2u + static_cast<quint32>(index) * kCylinderCtrlBytes; }
+      else { startMb = plcRuntime_->config().plc.gt2_ctrl_start_address * 2u + static_cast<quint32>(index) * kCylinderCtrlBytes; }
+      QByteArray bytes(kCylinderCtrlBytes, '\0');
+      if (action == QStringLiteral("P")) bytes[0] = 1; else if (action == QStringLiteral("N")) bytes[1] = 1; else bytes[2] = 1;
+      QString err;
+      if (!plcRuntime_->writeMbBytesRaw(startMb, bytes, &err)) { handlePlcRuntimeError(err); return; }
+      QThread::msleep(50); plcRuntime_->writeMbBytesRaw(startMb, QByteArray(kCylinderCtrlBytes, '\0'), nullptr);
+      if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("写气缸控制：%1[%2] action=%3").arg(group).arg(index + 1).arg(action));
+    });
+    connect(devToolsWidget_, &DevToolsWidget::requestReadCylinderStatus, this, [this]() {
+      if (!plcRuntime_) return; QString err; QByteArray bytes;
+      auto readOne=[&](quint32 startMb, const QString &name){ QByteArray b; if (!plcRuntime_->readMbBytesRaw(startMb, kCylinderStaBytes, &b, &err)) return false; auto u8=[&](int i){ return (i < b.size()) ? static_cast<unsigned char>(b.at(i)) : 0; }; int errId = (u8(4) | (u8(5)<<8)); if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("%1 状态: P=%2 N=%3 Error=%4 ErrId=%5").arg(name).arg(u8(0)).arg(u8(1)).arg(u8(2)).arg(errId)); return true; };
+      if (!readOne(plcRuntime_->config().plc.lm_sta_start_address * 2u, QStringLiteral("抓料气缸"))) { handlePlcRuntimeError(err); return; }
+      for (int i=0;i<3;++i){ if (!readOne(plcRuntime_->config().plc.cl_sta_start_address * 2u + static_cast<quint32>(i)*kCylinderStaBytes, QStringLiteral("CL%1").arg(i+1))) { handlePlcRuntimeError(err); return; }}
+      for (int i=0;i<4;++i){ if (!readOne(plcRuntime_->config().plc.gt2_sta_start_address * 2u + static_cast<quint32>(i)*kCylinderStaBytes, QStringLiteral("GT2_%1").arg(i+1))) { handlePlcRuntimeError(err); return; }}
+    });
     devToolsWidget_->setPlcFlowMode(plcFlowMode_);
+  }
+
+  if (manualMaintainWidget_) {
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestSetPlcMode, this, [this](int mode) {
+      QString err;
+      if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; }
+      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode)));
+      plcRuntime_->pollOnce();
+    });
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcNamedCommand, this, &MainWindow::handleUiCommandRequested);
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestAxisCommand, this, [this](int axisIndex, const QString &action) {
+      if (!plcRuntime_) return;
+      const quint32 baseMb = plcRuntime_->config().plc.axis_ctrl_start_address * 2u + static_cast<quint32>(axisIndex) * kAxisCtrlBytesPerAxisV25;
+      quint32 offset = kAxisCtrlOffsetEnable;
+      QByteArray payload(1, '\x01');
+      bool pulse = false;
+      if (action == QStringLiteral("ENABLE_ON")) { offset = kAxisCtrlOffsetEnable; payload[0] = '\x01'; }
+      else if (action == QStringLiteral("ENABLE_OFF")) { offset = kAxisCtrlOffsetEnable; payload[0] = '\0'; }
+      else if (action == QStringLiteral("RESET")) { offset = kAxisCtrlOffsetReset; pulse = true; }
+      else if (action == QStringLiteral("HOME")) { offset = kAxisCtrlOffsetHome; pulse = true; }
+      else if (action == QStringLiteral("ESTOP")) { offset = kAxisCtrlOffsetEStop; pulse = true; }
+      else if (action == QStringLiteral("STOP")) { offset = kAxisCtrlOffsetStop; pulse = true; }
+      QString err;
+      if (!plcRuntime_->writeMbBytesRaw(baseMb + offset, payload, &err)) { handlePlcRuntimeError(err); return; }
+      if (pulse) { QThread::msleep(50); plcRuntime_->writeMbBytesRaw(baseMb + offset, QByteArray(1, '\0'), nullptr); }
+      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写轴控制：%1 action=%2 val=%3").arg(axisNameByIndex(axisIndex)).arg(action).arg(static_cast<int>(static_cast<unsigned char>(payload.at(0)))));
+    });
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestAxisJog, this, [this](int axisIndex, const QString &direction, bool active) {
+      if (!plcRuntime_) return;
+      const quint32 baseMb = plcRuntime_->config().plc.axis_ctrl_start_address * 2u + static_cast<quint32>(axisIndex) * kAxisCtrlBytesPerAxisV25;
+      const quint32 offset = (direction == QStringLiteral("JOG_BWD")) ? kAxisCtrlOffsetJogBackward : kAxisCtrlOffsetJogForward;
+      QString err;
+      if (!plcRuntime_->writeMbBytesRaw(baseMb + offset, QByteArray(1, active ? '\x01' : '\0'), &err)) { handlePlcRuntimeError(err); return; }
+    });
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestAxisMove, this, [this](int axisIndex, const QString &action, double acc, double dec, double pos, double vel) {
+      if (!plcRuntime_) return;
+      const quint32 baseMb = plcRuntime_->config().plc.axis_ctrl_start_address * 2u + static_cast<quint32>(axisIndex) * kAxisCtrlBytesPerAxisV25;
+      QString err;
+      QByteArray paramBytes;
+      paramBytes += float64ToMbBytes(acc);
+      paramBytes += float64ToMbBytes(dec);
+      paramBytes += float64ToMbBytes(pos);
+      paramBytes += float64ToMbBytes(vel);
+      if (!plcRuntime_->writeMbBytesRaw(baseMb + kAxisCtrlOffsetSetAcc, paramBytes, &err)) { handlePlcRuntimeError(err); return; }
+      const quint32 triggerOffset = (action == QStringLiteral("MOVE_REL")) ? kAxisCtrlOffsetMoveRel : kAxisCtrlOffsetMoveAbs;
+      if (!plcRuntime_->writeMbBytesRaw(baseMb + triggerOffset, QByteArray(1, '\x01'), &err)) { handlePlcRuntimeError(err); return; }
+      QThread::msleep(50);
+      plcRuntime_->writeMbBytesRaw(baseMb + triggerOffset, QByteArray(1, '\0'), nullptr);
+      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写轴运动：%1 action=%2 acc=%3 dec=%4 pos=%5 vel=%6").arg(axisNameByIndex(axisIndex)).arg(action).arg(acc,0,'f',3).arg(dec,0,'f',3).arg(pos,0,'f',3).arg(vel,0,'f',3));
+    });
+    connect(manualMaintainWidget_, &ManualMaintainWidget::requestCylinderCommand, this, [this](const QString &group, int index, const QString &action) {
+      if (!plcRuntime_) return;
+      quint32 startMb = 0;
+      if (group == QStringLiteral("LM")) { startMb = plcRuntime_->config().plc.lm_ctrl_start_address * 2u; }
+      else if (group == QStringLiteral("CL")) { startMb = plcRuntime_->config().plc.cl_ctrl_start_address * 2u + static_cast<quint32>(index) * kCylinderCtrlBytes; }
+      else { startMb = plcRuntime_->config().plc.gt2_ctrl_start_address * 2u + static_cast<quint32>(index) * kCylinderCtrlBytes; }
+      QByteArray bytes(kCylinderCtrlBytes, '\0');
+      if (action == QStringLiteral("P")) bytes[0] = 1; else if (action == QStringLiteral("N")) bytes[1] = 1; else bytes[2] = 1;
+      QString err;
+      if (!plcRuntime_->writeMbBytesRaw(startMb, bytes, &err)) { handlePlcRuntimeError(err); return; }
+      QThread::msleep(50); plcRuntime_->writeMbBytesRaw(startMb, QByteArray(kCylinderCtrlBytes, '\0'), nullptr);
+      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写气缸控制：%1[%2] action=%3").arg(group).arg(index + 1).arg(action));
+    });
   }
 }
 
@@ -342,7 +534,7 @@ void MainWindow::setupBusinessPageBindings() {
     connect(productionWidget_, &ProductionWidget::requestReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(productionWidget_, &ProductionWidget::requestReloadSlotIds,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) handlePlcRuntimeError(err); });
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
     connect(productionWidget_, &ProductionWidget::requestWriteSlotIds,
@@ -457,6 +649,12 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
                                           lastStatus_.scan_seq,
                                           lastStatus_.meas_seq);
   }
+  if (manualMaintainWidget_ && hasLastStatus_) {
+    manualMaintainWidget_->setRuntimeSummary(stats.connected,
+                                             machineStateText(lastStatus_.machine_state),
+                                             stepStateText(lastStatus_.step_state));
+    manualMaintainWidget_->setCurrentPlcMode(lastStatus_.control_mode);
+  }
 }
 
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
@@ -468,6 +666,13 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
                                           stepStateText(status.step_state),
                                           status.scan_seq,
                                           status.meas_seq);
+  }
+  if (manualMaintainWidget_) {
+    manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
+                                             machineStateText(status.machine_state),
+                                             stepStateText(status.step_state));
+    manualMaintainWidget_->setCurrentPlcMode(status.control_mode);
+    refreshManualMaintainLiveStatus();
   }
   if (diagnosticsWidget_) {
     diagnosticsWidget_->setStatusFields(static_cast<int>(status.step_state),
@@ -534,6 +739,60 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   }
 }
 
+
+void MainWindow::refreshManualMaintainLiveStatus() {
+  if (!manualMaintainWidget_ || !plcRuntime_ || !plcRuntime_->isConnected()) return;
+  QString err;
+  QVector<quint16> axisRegs;
+  if (plcRuntime_->readHoldingRegistersRaw(plcRuntime_->config().plc.axis_sta_start_address,
+                                           static_cast<quint16>(kAxisStaRegsPerAxisV25 * 10),
+                                           &axisRegs, &err)) {
+    const QByteArray axisBytes = mbBytesFromRegsUi(axisRegs);
+    QStringList lines;
+    for (int axisIndex = 0; axisIndex < 10; ++axisIndex) {
+      const int byteBase = axisIndex * static_cast<int>(kAxisStaBytesPerAxisV25);
+      const auto u8 = [&](int off) -> int { return (byteBase + off < axisBytes.size()) ? static_cast<unsigned char>(axisBytes.at(byteBase + off)) : 0; };
+      const auto u16le = [&](int off) -> int { return u8(off) | (u8(off + 1) << 8); };
+      double pos = 0.0, vel = 0.0;
+      core::plcReadFloat64WordSwappedAt(axisRegs, axisIndex * static_cast<int>(kAxisStaRegsPerAxisV25) + static_cast<int>(kAxisStaOffsetActPositionRegs), &pos, nullptr);
+      core::plcReadFloat64WordSwappedAt(axisRegs, axisIndex * static_cast<int>(kAxisStaRegsPerAxisV25) + static_cast<int>(kAxisStaOffsetActVelocityRegs), &vel, nullptr);
+      lines << QStringLiteral("%1 | En=%2 Homed=%3 Err=%4 Busy=%5 Done=%6 ErrId=%7 Pos=%8 Vel=%9")
+                   .arg(axisNameByIndex(axisIndex))
+                   .arg(u8(static_cast<int>(kAxisStaOffsetEnabled)))
+                   .arg(u8(static_cast<int>(kAxisStaOffsetHomed)))
+                   .arg(u8(static_cast<int>(kAxisStaOffsetError)))
+                   .arg(u8(static_cast<int>(kAxisStaOffsetBusy)))
+                   .arg(u8(static_cast<int>(kAxisStaOffsetDone)))
+                   .arg(u16le(static_cast<int>(kAxisStaOffsetErrorId)))
+                   .arg(pos, 0, 'f', 3)
+                   .arg(vel, 0, 'f', 3);
+    }
+    manualMaintainWidget_->setAxisStatesText(lines.join('\n'));
+  }
+
+  QVector<quint16> cylRegs;
+  if (plcRuntime_->readHoldingRegistersRaw(plcRuntime_->config().plc.lm_sta_start_address,
+                                           static_cast<quint16>(12 + 3 + 4 + 5),
+                                           &cylRegs, &err)) {
+    const QByteArray cylBytes = mbBytesFromRegsUi(cylRegs);
+    QStringList lines;
+    auto addCyl = [&](int byteBase, const QString &name) {
+      const auto u8 = [&](int off) -> int { return (byteBase + off < cylBytes.size()) ? static_cast<unsigned char>(cylBytes.at(byteBase + off)) : 0; };
+      const int errId = u8(4) | (u8(5) << 8);
+      lines << QStringLiteral("%1 | P=%2 N=%3 Err=%4 ErrId=%5").arg(name).arg(u8(0)).arg(u8(1)).arg(u8(2)).arg(errId);
+    };
+    addCyl(0, QStringLiteral("抓料气缸"));
+    addCyl(6, QStringLiteral("内外径夹持"));
+    addCyl(12, QStringLiteral("跳动夹持"));
+    addCyl(18, QStringLiteral("长度夹持"));
+    addCyl(24, QStringLiteral("GT2_1"));
+    addCyl(30, QStringLiteral("GT2_2"));
+    addCyl(36, QStringLiteral("GT2_3"));
+    addCyl(42, QStringLiteral("GT2_4"));
+    manualMaintainWidget_->setCylinderStatesText(lines.join('\n'));
+  }
+}
+
 void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
   if (productionWidget_) {
     productionWidget_->setScannedPartIds(trayToVector(tray));
@@ -552,13 +811,13 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
 
   if (!snapshot.items.isEmpty()) {
     slot0Value = snapshot.items.at(0).slot_index;
-    slot0 = QString::number(snapshot.items.at(0).slot_index);
+    slot0 = snapshot.items.at(0).slot_index >= 0 ? QString::number(snapshot.items.at(0).slot_index + 1) : QStringLiteral("-");
     partId0 = snapshot.items.at(0).part_id;
     total0 = snapshot.items.at(0).total_len_mm;
   }
   if (snapshot.items.size() > 1) {
     slot1Value = snapshot.items.at(1).slot_index;
-    slot1 = QString::number(snapshot.items.at(1).slot_index);
+    slot1 = snapshot.items.at(1).slot_index >= 0 ? QString::number(snapshot.items.at(1).slot_index + 1) : QStringLiteral("-");
     partId1 = snapshot.items.at(1).part_id;
     total1 = snapshot.items.at(1).total_len_mm;
   }
@@ -663,25 +922,35 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
 
   core::PlcCommandBlockV2 command;
   command.cmd_code = static_cast<quint16>(code);
-  command.cmd_seq = plcCommandSeq_++;
-  if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) {
-    command.cmd_arg0 = mapArg(args, QStringLiteral("part_type_arg"), mapArg(args, QStringLiteral("mode_arg"), 0));
-  } else {
-    command.cmd_arg0 = mapArg(args, QStringLiteral("mode_arg"), 0);
-  }
-  command.cmd_arg1 = mapArg(args, QStringLiteral("arg1"), 0);
+  command.category_mode = static_cast<qint16>(mapArg(args, QStringLiteral("part_type_arg"), 0));
+  command.cmd_arg0 = static_cast<quint32>(qMax(0, static_cast<int>(command.category_mode)));
+
+  qint16 plcMode = static_cast<qint16>(mapArg(args, QStringLiteral("plc_mode"), 1));
+  if (cmd == QStringLiteral("SET_MODE_MANUAL")) plcMode = 1;
+  if (cmd == QStringLiteral("SET_MODE_AUTO")) plcMode = 2;
+  if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) plcMode = 2;
 
   QString err;
-  if (!plcRuntime_->sendCommand(command, &err)) {
-    handlePlcRuntimeError(err);
-    return;
+  if (cmd == QStringLiteral("SET_MODE_MANUAL") || cmd == QStringLiteral("SET_MODE_AUTO")) {
+    if (!plcRuntime_->writePlcMode(plcMode, &err)) {
+      handlePlcRuntimeError(err);
+      return;
+    }
+  } else {
+    if (!plcRuntime_->writePlcMode(plcMode, &err)) {
+      handlePlcRuntimeError(err);
+      return;
+    }
+    if (!plcRuntime_->sendCommand(command, &err)) {
+      handlePlcRuntimeError(err);
+      return;
+    }
   }
   if (devToolsWidget_) {
-    devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 命令：%1 seq=%2 arg0=%3 arg1=%4")
+    devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3")
                                       .arg(cmd)
-                                      .arg(command.cmd_seq)
-                                      .arg(command.cmd_arg0)
-                                      .arg(command.cmd_arg1));
+                                      .arg(plcMode)
+                                      .arg(command.category_mode));
   }
 }
 
@@ -703,9 +972,9 @@ void MainWindow::handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds
 
 void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
   if (!plcRuntime_) return;
+  core::PlcMailboxSnapshot snapshot;
+  QString err;
   if (plcRuntime_->config().plc.first_stage_enabled) {
-    core::PlcMailboxSnapshot snapshot;
-    QString err;
     if (!plcRuntime_->readFirstStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
       handlePlcRuntimeError(err);
       return;
@@ -716,7 +985,14 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
     }
     return;
   }
-  plcRuntime_->pollOnce();
+  if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+    handlePlcRuntimeError(err);
+    return;
+  }
+  if (devToolsWidget_) {
+    devToolsWidget_->appendPlcLog(QStringLiteral("按第二阶段地址读取测量包：part=%1 item_count=%2")
+                                      .arg(QString(snapshot.part_type), QString::number(snapshot.item_count)));
+  }
 }
 
 void MainWindow::handleAckMailboxRequested() {

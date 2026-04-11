@@ -2,6 +2,9 @@
 #include "core/measurement_pipeline.hpp"
 
 #include <QElapsedTimer>
+#include <QByteArray>
+#include <QEventLoop>
+#include <QTimer>
 
 namespace core {
 namespace {
@@ -10,6 +13,27 @@ void failWith(QString *err, const QString &message) {
   if (err) {
     *err = message;
   }
+}
+
+QByteArray mbBytesFromRegsRuntime(const QVector<quint16> &regs) {
+  QByteArray bytes;
+  bytes.reserve(regs.size() * 2);
+  for (quint16 reg : regs) {
+    bytes.append(static_cast<char>(reg & 0x00FFu));
+    bytes.append(static_cast<char>((reg >> 8) & 0x00FFu));
+  }
+  return bytes;
+}
+
+QVector<quint16> regsFromMbBytesRuntime(const QByteArray &bytes) {
+  QVector<quint16> regs;
+  regs.reserve((bytes.size() + 1) / 2);
+  for (int i = 0; i < bytes.size(); i += 2) {
+    const quint16 lo = static_cast<unsigned char>(bytes.at(i));
+    const quint16 hi = (i + 1 < bytes.size()) ? static_cast<unsigned char>(bytes.at(i + 1)) : 0u;
+    regs.push_back(static_cast<quint16>((hi << 8) | lo));
+  }
+  return regs;
 }
 
 } // namespace
@@ -106,7 +130,7 @@ bool PlcRuntimeServiceV2::start(QString *err) {
   }
 
   stats_.running = true;
-  if (!cfg_.plc.first_stage_enabled) {
+  if (cfg_.plc.poll_interval_ms > 0 && cfg_.plc.status_start_address > 0) {
     poll_timer_.start();
   }
   emit runningChanged(true);
@@ -157,39 +181,28 @@ void PlcRuntimeServiceV2::disconnectNow() {
 
 bool PlcRuntimeServiceV2::sendCommand(const PlcCommandBlockV2 &command,
                                       QString *err) {
-  if (!ensureClientReady(err)) {
+  if (!ensureClientReady(err)) return false;
+  if (cfg_.plc.command_start_address == 0) {
+    failWith(err, QStringLiteral("Command Block 地址尚未配置"));
     return false;
   }
-  if (cfg_.plc.first_stage_enabled && cfg_.plc.command_start_address == 0) {
-    failWith(err, QStringLiteral("当前仍处于第一阶段联调：Command Block 地址尚未配置"));
+  QVector<quint16> regs;
+  regs.push_back(static_cast<quint16>(qMax(0, static_cast<int>(command.category_mode))));
+  regs.push_back(command.cmd_code);
+  if (!writeHoldingRegistersRaw(cfg_.plc.command_start_address, regs, err)) {
     return false;
   }
-  if (!writePlcCommandV2(client_, layout_, command, err)) {
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写 PLC Command 失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
   return true;
 }
 
 bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
-  if (!ensureClientReady(err)) {
+  if (!ensureClientReady(err)) return false;
+  if (cfg_.plc.pc_ack_start_address == 0) {
+    failWith(err, QStringLiteral("pc_ack 地址尚未配置"));
     return false;
   }
-  if (cfg_.plc.first_stage_enabled && cfg_.plc.pc_ack_start_address == 0) {
-    failWith(err, QStringLiteral("当前仍处于第一阶段联调：pc_ack 地址尚未配置"));
-    return false;
-  }
-  if (!writePlcPcAckV2(client_, layout_, pc_ack, err)) {
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写 pc_ack 失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
+  QVector<quint16> regs{pc_ack};
+  return writeHoldingRegistersRaw(cfg_.plc.pc_ack_start_address, regs, err);
 }
 
 bool PlcRuntimeServiceV2::readHoldingRegistersRaw(quint32 startAddress, quint16 regCount,
@@ -208,6 +221,76 @@ bool PlcRuntimeServiceV2::readHoldingRegistersRaw(quint32 startAddress, quint16 
   }
   refreshConnectionState();
   emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::writeHoldingRegistersRaw(quint32 startAddress, const QVector<quint16> &values,
+                                                   QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!client_) { failWith(err, QStringLiteral("PLC client 未就绪")); return false; }
+  if (!client_->writeHoldingRegisters(startAddress, values, err)) {
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写原始寄存器失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::readMbBytesRaw(quint32 mbByteAddress, quint16 byteCount, QByteArray *out, QString *err) {
+  if (!out) { failWith(err, QStringLiteral("readMbBytesRaw.out 不能为空")); return false; }
+  const quint32 startReg = mbByteAddress / 2u;
+  const quint32 byteOffset = mbByteAddress % 2u;
+  const quint32 regCount = static_cast<quint32>((byteOffset + byteCount + 1u) / 2u);
+  QVector<quint16> regs;
+  if (!readHoldingRegistersRaw(startReg, static_cast<quint16>(regCount), &regs, err)) return false;
+  const QByteArray bytes = mbBytesFromRegsRuntime(regs);
+  *out = bytes.mid(static_cast<int>(byteOffset), byteCount);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::writeMbBytesRaw(quint32 mbByteAddress, const QByteArray &bytes, QString *err) {
+  const quint32 startReg = mbByteAddress / 2u;
+  const quint32 byteOffset = mbByteAddress % 2u;
+  const quint32 regCount = static_cast<quint32>((byteOffset + bytes.size() + 1u) / 2u);
+  QVector<quint16> regs;
+  if (!readHoldingRegistersRaw(startReg, static_cast<quint16>(regCount), &regs, err)) return false;
+  QByteArray raw = mbBytesFromRegsRuntime(regs);
+  for (int i = 0; i < bytes.size(); ++i) {
+    if (static_cast<int>(byteOffset) + i < raw.size()) raw[static_cast<int>(byteOffset) + i] = bytes.at(i);
+  }
+  return writeHoldingRegistersRaw(startReg, regsFromMbBytesRuntime(raw), err);
+}
+
+bool PlcRuntimeServiceV2::writePlcMode(qint16 mode, QString *err) {
+  QVector<quint16> regs{static_cast<quint16>(mode)};
+  return writeHoldingRegistersRaw(cfg_.plc.status_start_address, regs, err);
+}
+
+bool PlcRuntimeServiceV2::writeJudgeResult(quint16 judgeResult, QString *err) {
+  if (cfg_.plc.command_start_address == 0) {
+    failWith(err, QStringLiteral("JudgeResult 地址未配置"));
+    return false;
+  }
+  QVector<quint16> regs{judgeResult};
+  return writeHoldingRegistersRaw(cfg_.plc.command_start_address + kCommandOffsetJudgeResultV25, regs, err);
+}
+
+bool PlcRuntimeServiceV2::readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err) {
+  QVector<quint16> regs;
+  if (!readHoldingRegistersRaw(cfg_.plc.tray_start_address, static_cast<quint16>(kTrayAllCodingRegsV25), &regs, err)) return false;
+  if (!buildPlcTrayAllCodingBlockV25(regs, out, err)) return false;
+  emit trayUpdated(*out);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
+                                                         QString *err) {
+  QVector<quint16> regs;
+  if (!readHoldingRegistersRaw(cfg_.plc.mailbox_start_address, static_cast<quint16>(kMailboxTotalRegsV25), &regs, err)) return false;
+  if (!buildSecondStageMailboxSnapshotV25(regs, partType, out, err)) return false;
+  emit mailboxSnapshotUpdated(*out);
   return true;
 }
 
@@ -235,34 +318,25 @@ bool PlcRuntimeServiceV2::readFirstStageMailboxSnapshot(QChar partType, PlcMailb
 bool PlcRuntimeServiceV2::writeTrayPartIdSlot(int slotIndex,
                                               const QString &partId,
                                               QString *err) {
-  if (!ensureClientReady(err)) {
+  if (!ensureClientReady(err)) return false;
+  if (cfg_.plc.tray_start_address == 0) {
+    failWith(err, QStringLiteral("Tray Part-ID Block 地址尚未配置"));
     return false;
   }
-  if (cfg_.plc.first_stage_enabled && cfg_.plc.tray_start_address == 0) {
-    failWith(err, QStringLiteral("当前仍处于第一阶段联调：Tray Part-ID Block 地址尚未配置"));
+  if (slotIndex < 0 || slotIndex >= kLogicalSlotCount) {
+    failWith(err, QStringLiteral("slotIndex 越界"));
     return false;
   }
-  if (!writePlcTrayPartIdSlotV2(client_, layout_, slotIndex, partId, err)) {
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写 Tray Part-ID 失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
+  QByteArray bytes(81, '\0');
+  const QByteArray src = partId.toLatin1().left(80);
+  for (int i = 0; i < src.size(); ++i) bytes[i] = src.at(i);
+  return writeMbBytesRaw(cfg_.plc.tray_start_address * 2u + static_cast<quint32>(slotIndex * 81), bytes, err);
 }
 
 void PlcRuntimeServiceV2::onPollTimerTimeout() { pollOnce(); }
 
 void PlcRuntimeServiceV2::pollOnce() {
-  if (cfg_.plc.first_stage_enabled) {
-    refreshConnectionState();
-    emit statsUpdated(stats_);
-    return;
-  }
-  if (poll_in_progress_) {
-    return;
-  }
+  if (poll_in_progress_) return;
   QString err;
   if (!ensureClientReady(&err)) {
     publishError(err);
@@ -270,15 +344,16 @@ void PlcRuntimeServiceV2::pollOnce() {
     emit statsUpdated(stats_);
     return;
   }
-
   poll_in_progress_ = true;
-  QElapsedTimer timer;
-  timer.start();
-
-  PlcPollRunResultV2 result;
-  const bool ok = runPlcPollCycleV2(client_, layout_, &cache_, &result, &err);
+  QElapsedTimer timer; timer.start();
+  bool ok = false;
+  if (cfg_.plc.status_start_address > 0) {
+    ok = pollSecondStage(&err);
+  } else {
+    refreshConnectionState();
+    ok = true;
+  }
   stats_.last_poll_ms = static_cast<int>(timer.elapsed());
-
   if (!ok) {
     stats_.poll_error_count += 1;
     stats_.consecutive_error_count += 1;
@@ -289,31 +364,29 @@ void PlcRuntimeServiceV2::pollOnce() {
     poll_in_progress_ = false;
     return;
   }
-
   stats_.poll_ok_count += 1;
   stats_.consecutive_error_count = 0;
   stats_.last_error.clear();
   refreshConnectionState();
-  updateStatsFromCache();
-
-  emit pollCycleCompleted(result);
-  emit plcEventsRaised(result.step.events);
-
-  if (result.step.decoded.has_status) {
-    emit statusUpdated(result.step.decoded.status);
-  }
-  if (result.step.decoded.has_tray) {
-    emit trayUpdated(result.step.decoded.tray);
-  }
-  if (result.step.decoded.has_command) {
-    emit commandUpdated(result.step.decoded.command);
-  }
-  if (result.step.decoded.has_mailbox_snapshot) {
-    emit mailboxSnapshotUpdated(result.step.decoded.mailbox_snapshot);
-  }
-
   emit statsUpdated(stats_);
   poll_in_progress_ = false;
+}
+
+bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
+  QVector<quint16> statusRegs;
+  if (!readHoldingRegistersRaw(cfg_.plc.status_start_address, static_cast<quint16>(kStatusBlockRegsV25), &statusRegs, err)) return false;
+  PlcStatusBlockV2 status;
+  if (!buildPlcStatusBlockV25(statusRegs, &status, err)) return false;
+  emit statusUpdated(status);
+
+  QVector<quint16> commandRegs;
+  if (cfg_.plc.command_start_address > 0) {
+    if (!readHoldingRegistersRaw(cfg_.plc.command_start_address, static_cast<quint16>(kCommandBlockRegsV25), &commandRegs, err)) return false;
+    PlcCommandBlockV2 command;
+    if (!buildPlcCommandBlockV25(commandRegs, &command, err)) return false;
+    emit commandUpdated(command);
+  }
+  return true;
 }
 
 bool PlcRuntimeServiceV2::refreshConnectionState() {

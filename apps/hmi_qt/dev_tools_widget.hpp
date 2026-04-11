@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QtGlobal>
+#include <QVariantMap>
 
 #include "core/config.hpp"
 #include "core/measurement_geometry_algorithms.hpp"
@@ -30,6 +31,12 @@ signals:
   void requestPlcContinueAfterIdCheck();
   void requestPlcRequestRescanIds();
   void plcFlowModeChanged(int mode);
+  void requestSetPlcMode(int mode);
+  void requestPlcNamedCommand(const QString &cmd, const QVariantMap &args);
+  void requestAxisCommand(int axisIndex, const QString &action);
+  void requestReadAxisStatus(int axisIndex);
+  void requestCylinderCommand(const QString &group, int index, const QString &action);
+  void requestReadCylinderStatus();
 
 public slots:
   void setPlcFlowMode(int mode);
@@ -84,6 +91,23 @@ private:
   class QPushButton *btnPlcRescan_ = nullptr;
   class QPushButton *btnPlcReadMailbox_ = nullptr;
   class QPushButton *btnPlcAck_ = nullptr;
+
+  class QComboBox *plcModeCombo_ = nullptr;
+  class QPushButton *btnPlcWriteMode_ = nullptr;
+  class QComboBox *cmdPartTypeCombo_ = nullptr;
+  class QComboBox *axisCombo_ = nullptr;
+  class QPushButton *btnAxisEnable_ = nullptr;
+  class QPushButton *btnAxisReset_ = nullptr;
+  class QPushButton *btnAxisHome_ = nullptr;
+  class QPushButton *btnAxisStop_ = nullptr;
+  class QPushButton *btnAxisJogFwd_ = nullptr;
+  class QPushButton *btnAxisJogBwd_ = nullptr;
+  class QPushButton *btnAxisReadSta_ = nullptr;
+  class QComboBox *cylCombo_ = nullptr;
+  class QPushButton *btnCylP_ = nullptr;
+  class QPushButton *btnCylN_ = nullptr;
+  class QPushButton *btnCylReset_ = nullptr;
+  class QPushButton *btnCylReadSta_ = nullptr;
 
   class QPlainTextEdit *teAlgoInnerRaw_ = nullptr;
   class QPlainTextEdit *teAlgoOuterRaw_ = nullptr;
