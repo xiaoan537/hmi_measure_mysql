@@ -7,9 +7,21 @@ namespace core {
 
 constexpr int kLogicalSlotCount = 16;
 constexpr int kAutoSlotCount = 15;
-constexpr int kCalibrationSlotIndex = 15;
+// UI / DB / 本地内存仍使用 0..15 的逻辑槽位索引；协议层槽位号使用 1..16。
+constexpr int kCalibrationSlotIndex = 15;      // 本地逻辑索引，对应协议槽位 16
+constexpr int kProtocolSlotMinV24 = 1;
+constexpr int kProtocolSlotMaxV24 = 16;
+constexpr int kProtocolCalibrationSlotV24 = 16;
 constexpr int kTrayPartIdAsciiChars = 32;
 constexpr int kTrayPartIdRegsPerSlot = 16;
+
+// 第一阶段联调：直接读取 PLC 功能块并在 PC 侧组装 v2.4 Mailbox。
+constexpr int kFirstStageCodingRegsV24 = 81;
+constexpr int kFirstStageKeyenceRegsV24 = 16;
+constexpr int kFirstStageChuantecRegsV24 = 1152;
+constexpr int kFirstStageRPosRegsV24 = 1152;
+constexpr float kFirstStageInvalidRawValueV24 = 2147.48364f;
+
 
 constexpr int kMailboxHeaderUsedRegsV2 = 54;          // 当前有效字段长度
 constexpr int kMailboxHeaderReservedTailRegsV2 = 4;   // 物理头块尾部预留
@@ -20,6 +32,11 @@ constexpr int kMailboxArrayFloatCountReservedV2 = kMailboxArrayRegsReservedV2 / 
 constexpr int kMailboxTotalRegsV2 = kMailboxHeaderBlockRegsV2 + kMailboxArrayRegsReservedV2;
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
+constexpr quint16 kProtocolInvalidSlotIndexV24 = 0u;
+
+inline bool isValidProtocolSlotV24(quint16 slot) { return slot >= kProtocolSlotMinV24 && slot <= kProtocolSlotMaxV24; }
+inline int logicalSlotIndexFromProtocolSlotV24(quint16 slot) { return isValidProtocolSlotV24(slot) ? static_cast<int>(slot) - 1 : -1; }
+inline quint16 protocolSlotFromLogicalIndexV24(int logicalIndex) { return (logicalIndex >= 0 && logicalIndex < kLogicalSlotCount) ? static_cast<quint16>(logicalIndex + 1) : kProtocolInvalidSlotIndexV24; }
 
 constexpr int kStatusBlockRegsV2 = 18;
 constexpr int kStatusOffsetMachineState = 0;      // uint16
@@ -103,7 +120,7 @@ enum class PlcStepStateV2 : quint16 {
   ReturnToTray = 100,
   CycleComplete = 110,
 
-  CalWaitLoadSlot15 = 200,
+  CalWaitLoadSlot16 = 200,
   CalWaitPcConfirm = 210,
   CalMeasure = 220,
   CalWaitPcRead = 230,
@@ -131,6 +148,7 @@ enum class PlcCommandCodeV2 : quint16 {
   Stop = 122,
   ResetAlarm = 130,
   HomeAll = 140,
+  Initialize = 150,
 
   ContinueAfterIdCheck = 200,
   RequestRescanIds = 201,

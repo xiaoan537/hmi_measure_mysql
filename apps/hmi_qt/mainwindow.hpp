@@ -50,6 +50,7 @@ private:
     void onPlcFlowModeChanged(int mode);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
+    void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();
 
 private:

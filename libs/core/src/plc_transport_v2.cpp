@@ -26,8 +26,8 @@ void appendUint16(QVector<quint16> *out, quint16 v) {
 }
 
 void appendUint32Abcd(QVector<quint16> *out, quint32 v) {
-  out->push_back(static_cast<quint16>((v >> 16) & 0xFFFFu));
   out->push_back(static_cast<quint16>(v & 0xFFFFu));
+  out->push_back(static_cast<quint16>((v >> 16) & 0xFFFFu));
 }
 
 bool mergeWindowRegs(const PlcRegisterWindowV2 &src, PlcRegisterWindowV2 *dst,

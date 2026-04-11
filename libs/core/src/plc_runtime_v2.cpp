@@ -1,4 +1,5 @@
 #include "core/plc_runtime_v2.hpp"
+#include "core/measurement_pipeline.hpp"
 
 #include <QElapsedTimer>
 
@@ -105,7 +106,9 @@ bool PlcRuntimeServiceV2::start(QString *err) {
   }
 
   stats_.running = true;
-  poll_timer_.start();
+  if (!cfg_.plc.first_stage_enabled) {
+    poll_timer_.start();
+  }
   emit runningChanged(true);
   emit statsUpdated(stats_);
   return true;
@@ -157,6 +160,10 @@ bool PlcRuntimeServiceV2::sendCommand(const PlcCommandBlockV2 &command,
   if (!ensureClientReady(err)) {
     return false;
   }
+  if (cfg_.plc.first_stage_enabled && cfg_.plc.command_start_address == 0) {
+    failWith(err, QStringLiteral("当前仍处于第一阶段联调：Command Block 地址尚未配置"));
+    return false;
+  }
   if (!writePlcCommandV2(client_, layout_, command, err)) {
     refreshConnectionState();
     publishError(err ? *err : QStringLiteral("写 PLC Command 失败"));
@@ -171,6 +178,10 @@ bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
   if (!ensureClientReady(err)) {
     return false;
   }
+  if (cfg_.plc.first_stage_enabled && cfg_.plc.pc_ack_start_address == 0) {
+    failWith(err, QStringLiteral("当前仍处于第一阶段联调：pc_ack 地址尚未配置"));
+    return false;
+  }
   if (!writePlcPcAckV2(client_, layout_, pc_ack, err)) {
     refreshConnectionState();
     publishError(err ? *err : QStringLiteral("写 pc_ack 失败"));
@@ -181,10 +192,54 @@ bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
   return true;
 }
 
+bool PlcRuntimeServiceV2::readHoldingRegistersRaw(quint32 startAddress, quint16 regCount,
+                                                 QVector<quint16> *out, QString *err) {
+  if (!ensureClientReady(err)) {
+    return false;
+  }
+  if (!client_) {
+    failWith(err, QStringLiteral("PLC client 未就绪"));
+    return false;
+  }
+  if (!client_->readHoldingRegisters(startAddress, regCount, out, err)) {
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("读取原始寄存器失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::readFirstStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
+                                                    QString *err) {
+  if (!cfg_.plc.first_stage_enabled) {
+    failWith(err, QStringLiteral("当前未启用第一阶段联调模式"));
+    return false;
+  }
+  QVector<quint16> codingRegs;
+  QVector<quint16> keyenceRegs;
+  QVector<quint16> chuantecRegs;
+  if (!readHoldingRegistersRaw(cfg_.plc.coding_start_address, static_cast<quint16>(kFirstStageCodingRegsV24), &codingRegs, err)) return false;
+  if (!readHoldingRegistersRaw(cfg_.plc.keyence_result_start_address, static_cast<quint16>(kFirstStageKeyenceRegsV24), &keyenceRegs, err)) return false;
+  if (!readHoldingRegistersRaw(cfg_.plc.chuantec_result_start_address, static_cast<quint16>(kFirstStageChuantecRegsV24), &chuantecRegs, err)) return false;
+  PlcMailboxSnapshot snapshot;
+  if (!buildFirstStageMailboxSnapshotV24(codingRegs, keyenceRegs, chuantecRegs, partType, &snapshot, err)) {
+    return false;
+  }
+  if (out) *out = snapshot;
+  emit mailboxSnapshotUpdated(snapshot);
+  return true;
+}
+
 bool PlcRuntimeServiceV2::writeTrayPartIdSlot(int slotIndex,
                                               const QString &partId,
                                               QString *err) {
   if (!ensureClientReady(err)) {
+    return false;
+  }
+  if (cfg_.plc.first_stage_enabled && cfg_.plc.tray_start_address == 0) {
+    failWith(err, QStringLiteral("当前仍处于第一阶段联调：Tray Part-ID Block 地址尚未配置"));
     return false;
   }
   if (!writePlcTrayPartIdSlotV2(client_, layout_, slotIndex, partId, err)) {
@@ -200,6 +255,11 @@ bool PlcRuntimeServiceV2::writeTrayPartIdSlot(int slotIndex,
 void PlcRuntimeServiceV2::onPollTimerTimeout() { pollOnce(); }
 
 void PlcRuntimeServiceV2::pollOnce() {
+  if (cfg_.plc.first_stage_enabled) {
+    refreshConnectionState();
+    emit statsUpdated(stats_);
+    return;
+  }
   if (poll_in_progress_) {
     return;
   }

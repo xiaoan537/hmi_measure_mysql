@@ -108,18 +108,27 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblConnDb->setProperty("connState", 0);
     ui_->lblConnMes->setProperty("connState", 0);
 
-    // 生产业务模式：普通 / 第二次 / 第三次 / 军检（单选，不含复测）
+    // 生产业务模式：普通 / 第二次 / 第三次 / 军检（仅 PC 侧业务语义）
     measureModeCombo_ = new QComboBox(this);
     measureModeCombo_->addItem(QStringLiteral("普通测量"), static_cast<int>(ProductionMeasureMode::Normal));
     measureModeCombo_->addItem(QStringLiteral("第二次测量"), static_cast<int>(ProductionMeasureMode::Second));
     measureModeCombo_->addItem(QStringLiteral("第三次测量"), static_cast<int>(ProductionMeasureMode::Third));
     measureModeCombo_->addItem(QStringLiteral("军检"), static_cast<int>(ProductionMeasureMode::Mil));
+    partTypeCombo_ = new QComboBox(this);
+    partTypeCombo_->addItem(QStringLiteral("A 型"), QStringLiteral("A"));
+    partTypeCombo_->addItem(QStringLiteral("B 型"), QStringLiteral("B"));
     if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
+        auto *typeRow = new QHBoxLayout();
+        auto *lbType = new QLabel(QStringLiteral("工件类型"), this);
+        typeRow->addWidget(lbType);
+        typeRow->addWidget(partTypeCombo_, 1);
+        vlRun->insertLayout(1, typeRow);
+
         auto *modeRow = new QHBoxLayout();
         auto *lbMode = new QLabel(QStringLiteral("业务模式"), this);
         modeRow->addWidget(lbMode);
         modeRow->addWidget(measureModeCombo_, 1);
-        vlRun->insertLayout(1, modeRow);
+        vlRun->insertLayout(2, modeRow);
     }
 
     // Mode buttons: 互斥
@@ -138,9 +147,10 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     connect(ui_->btnStart, &QPushButton::clicked, this, [this]{
         QVariantMap args;
         args.insert(QStringLiteral("measure_mode"), measureModeText());
-        args.insert(QStringLiteral("mode_arg"), static_cast<int>(measureModeCommandArg()));
+        args.insert(QStringLiteral("part_type"), selectedPartTypeText());
+        args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg()));
         emit uiCommandRequested("START_AUTO", args);
-        ui_->listMessages->addItem(QStringLiteral("开始生产测量：%1").arg(measureModeText()));
+        ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText()));
     });
     connect(ui_->btnPause, &QPushButton::clicked, this, [this]{
         emit uiCommandRequested("PAUSE", {});
@@ -409,7 +419,7 @@ QString ProductionWidget::stepText(quint16 step) const
     case 90: return QStringLiteral("等待PC读取");
     case 100: return QStringLiteral("放回料架");
     case 110: return QStringLiteral("循环完成");
-    case 200: return QStringLiteral("标定待上料(15号槽)");
+    case 200: return QStringLiteral("标定待上料(16号槽)");
     case 210: return QStringLiteral("标定等待PC确认");
     case 220: return QStringLiteral("标定测量中");
     case 230: return QStringLiteral("标定等待PC读取");
@@ -418,6 +428,24 @@ QString ProductionWidget::stepText(quint16 step) const
     case 910: return QStringLiteral("急停");
     default: return QStringLiteral("运行(%1)").arg(step);
     }
+}
+
+
+QString ProductionWidget::selectedPartTypeTextInternal() const
+{
+    if (!partTypeCombo_) return QStringLiteral("A");
+    const QString t = partTypeCombo_->currentData().toString().trimmed().toUpper();
+    return (t == QStringLiteral("B")) ? QStringLiteral("B") : QStringLiteral("A");
+}
+
+QString ProductionWidget::selectedPartTypeText() const
+{
+    return selectedPartTypeTextInternal();
+}
+
+quint32 ProductionWidget::selectedPartTypeArg() const
+{
+    return selectedPartTypeTextInternal() == QStringLiteral("B") ? 2u : 1u;
 }
 
 QString ProductionWidget::measureModeText() const

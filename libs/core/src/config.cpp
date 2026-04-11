@@ -127,11 +127,24 @@ namespace core
         c.plc.auto_reconnect = (s.value("auto_reconnect", 1).toInt() != 0);
         c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();
         c.plc.use_fake_client = (s.value("use_fake_client", 0).toInt() != 0);
+        c.plc.first_stage_enabled = (s.value("first_stage_enabled", 0).toInt() != 0);
         c.plc.status_start_address = s.value("status_start_address", 0).toULongLong();
         c.plc.tray_start_address = s.value("tray_start_address", 0).toULongLong();
         c.plc.command_start_address = s.value("command_start_address", 0).toULongLong();
         c.plc.mailbox_start_address = s.value("mailbox_start_address", 0).toULongLong();
         c.plc.pc_ack_start_address = s.value("pc_ack_start_address", 0).toULongLong();
+        c.plc.axis_ctrl_start_address = s.value("axis_ctrl_start_address", 0).toULongLong();
+        c.plc.axis_sta_start_address = s.value("axis_sta_start_address", 0).toULongLong();
+        c.plc.lm_ctrl_start_address = s.value("lm_ctrl_start_address", 0).toULongLong();
+        c.plc.cl_ctrl_start_address = s.value("cl_ctrl_start_address", 0).toULongLong();
+        c.plc.gt2_ctrl_start_address = s.value("gt2_ctrl_start_address", 0).toULongLong();
+        c.plc.lm_sta_start_address = s.value("lm_sta_start_address", 0).toULongLong();
+        c.plc.cl_sta_start_address = s.value("cl_sta_start_address", 0).toULongLong();
+        c.plc.gt2_sta_start_address = s.value("gt2_sta_start_address", 0).toULongLong();
+        c.plc.coding_start_address = s.value("coding_start_address", 0).toULongLong();
+        c.plc.keyence_result_start_address = s.value("keyence_result_start_address", 0).toULongLong();
+        c.plc.chuantec_result_start_address = s.value("chuantec_result_start_address", 0).toULongLong();
+        c.plc.r_pos_start_address = s.value("r_pos_start_address", 0).toULongLong();
         s.endGroup();
 
         return c;

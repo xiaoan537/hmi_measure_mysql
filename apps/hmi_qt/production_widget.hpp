@@ -99,6 +99,9 @@ public:
                            float total_len0_mm,
                            float total_len1_mm);
 
+    QString selectedPartTypeText() const;
+    quint32 selectedPartTypeArg() const;
+
 signals:
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
 
@@ -124,6 +127,7 @@ private:
     QString stepText(quint16 step) const;
     QString measureModeText() const;
     quint32 measureModeCommandArg() const;
+    QString selectedPartTypeTextInternal() const;
     QString runtimeStateText(int slot) const;
     int runtimeStateStyleCode(int slot) const;
     bool isPartIdEditableStep() const;
@@ -155,4 +159,5 @@ private:
     QString mb_part_id1_;
 
     class QComboBox *measureModeCombo_ = nullptr;
+    class QComboBox *partTypeCombo_ = nullptr;
 };

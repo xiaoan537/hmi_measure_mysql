@@ -54,7 +54,7 @@ QString stepStateText(quint16 stepState) {
   case core::PlcStepStateV2::WaitPcRead: return QStringLiteral("等待PC读取");
   case core::PlcStepStateV2::ReturnToTray: return QStringLiteral("回盘中");
   case core::PlcStepStateV2::CycleComplete: return QStringLiteral("循环完成");
-  case core::PlcStepStateV2::CalWaitLoadSlot15: return QStringLiteral("标定等待15号槽上料");
+  case core::PlcStepStateV2::CalWaitLoadSlot16: return QStringLiteral("标定等待16号槽上料");
   case core::PlcStepStateV2::CalWaitPcConfirm: return QStringLiteral("标定等待PC确认");
   case core::PlcStepStateV2::CalMeasure: return QStringLiteral("标定测量中");
   case core::PlcStepStateV2::CalWaitPcRead: return QStringLiteral("标定等待PC读取");
@@ -309,7 +309,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(diagnosticsWidget_, &DiagnosticsWidget::requestRefresh,
             plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(diagnosticsWidget_, &DiagnosticsWidget::requestReadMailbox,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().trimmed().isEmpty() ? QChar('A') : productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(diagnosticsWidget_, &DiagnosticsWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
   }
@@ -320,7 +320,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(devToolsWidget_, &DevToolsWidget::requestPlcReloadSlotIds,
             plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(devToolsWidget_, &DevToolsWidget::requestPlcReadMailbox,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(devToolsWidget_, &DevToolsWidget::requestPlcAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
     connect(devToolsWidget_, &DevToolsWidget::requestPlcContinueAfterIdCheck,
@@ -340,7 +340,7 @@ void MainWindow::setupBusinessPageBindings() {
 
   if (productionWidget_) {
     connect(productionWidget_, &ProductionWidget::requestReadMailbox,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(productionWidget_, &ProductionWidget::requestReloadSlotIds,
             plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
@@ -353,7 +353,7 @@ void MainWindow::setupBusinessPageBindings() {
 
   if (calibrationWidget_) {
     connect(calibrationWidget_, &CalibrationWidget::requestReadMailbox,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
+            this, [this] { handleReadMailboxRequested(calibrationWidget_ ? calibrationWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(calibrationWidget_, &CalibrationWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
     connect(calibrationWidget_, &CalibrationWidget::uiCommandRequested,
@@ -664,7 +664,11 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   core::PlcCommandBlockV2 command;
   command.cmd_code = static_cast<quint16>(code);
   command.cmd_seq = plcCommandSeq_++;
-  command.cmd_arg0 = mapArg(args, QStringLiteral("mode_arg"), 0);
+  if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) {
+    command.cmd_arg0 = mapArg(args, QStringLiteral("part_type_arg"), mapArg(args, QStringLiteral("mode_arg"), 0));
+  } else {
+    command.cmd_arg0 = mapArg(args, QStringLiteral("mode_arg"), 0);
+  }
   command.cmd_arg1 = mapArg(args, QStringLiteral("arg1"), 0);
 
   QString err;
@@ -693,6 +697,24 @@ void MainWindow::handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds
                                 : err);
       return;
     }
+  }
+  plcRuntime_->pollOnce();
+}
+
+void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
+  if (!plcRuntime_) return;
+  if (plcRuntime_->config().plc.first_stage_enabled) {
+    core::PlcMailboxSnapshot snapshot;
+    QString err;
+    if (!plcRuntime_->readFirstStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+      handlePlcRuntimeError(err);
+      return;
+    }
+    if (devToolsWidget_) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("按第一阶段联调方式读取测量包：part=%1 item_count=%2")
+                                        .arg(QString(snapshot.part_type), QString::number(snapshot.item_count)));
+    }
+    return;
   }
   plcRuntime_->pollOnce();
 }

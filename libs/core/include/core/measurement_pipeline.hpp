@@ -233,6 +233,8 @@ bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
                          quint32 *out, QString *err = nullptr);
 bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
                           float *out, QString *err = nullptr);
+bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
+                                 double *out, QString *err = nullptr);
 bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
                     QString *out, QString *err = nullptr);
 bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
@@ -240,6 +242,14 @@ bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
                              QString *err = nullptr);
 bool plcWriteAsciiRegs(const QString &text, int regCount,
                        QVector<quint16> *out, QString *err = nullptr);
+
+// 第一阶段联调：直接由 g_aCoding / g_aKeyence_Result / g_aChuantec_Result 组装 v2.4 Mailbox 语义快照。
+bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
+                                       const QVector<quint16> &keyenceRegs,
+                                       const QVector<quint16> &chuantecRegs,
+                                       QChar partType,
+                                       PlcMailboxSnapshot *out,
+                                       QString *err = nullptr);
 
 bool buildPlcStatusBlockV2(const QVector<quint16> &statusRegs,
                            PlcStatusBlockV2 *out,

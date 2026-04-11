@@ -26,14 +26,17 @@ public:
     void setSlotSummary(const core::CalibrationSlotSummary &s);
     void setSlotSummaries(const QVector<core::CalibrationSlotSummary> &summaries);
 
+    QString selectedPartTypeText() const;
+    quint32 selectedPartTypeArg() const;
+
 signals:
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
     void requestReadMailbox();
     void requestAckMailbox();
 
 private:
-    QString selectedMasterTypeText() const;
-    quint32 selectedMasterTypeArg() const;
+    QString selectedMasterTypeTextInternal() const;
+    quint32 selectedMasterTypeArgInternal() const;
     void refreshSlot15State();
     QString stepText(quint16 step) const;
 

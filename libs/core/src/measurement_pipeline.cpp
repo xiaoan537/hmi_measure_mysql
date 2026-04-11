@@ -1,5 +1,6 @@
 #include "core/measurement_pipeline.hpp"
 
+#include <QByteArray>
 #include <QJsonValue>
 #include <QUuid>
 
@@ -96,6 +97,33 @@ float floatFromBits(quint32 bits) {
   return value;
 }
 
+double doubleFromBits(quint64 bits) {
+  double value = 0.0;
+  static_assert(sizeof(value) == sizeof(bits), "float64 size mismatch");
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+float normalizedFirstStageRawValue(float v) {
+  return (qAbs(v - kFirstStageInvalidRawValueV24) < 1e-3f) ? qQNaN() : v;
+}
+
+QByteArray mbBytesFromRegs(const QVector<quint16> &regs) {
+  QByteArray bytes;
+  bytes.reserve(regs.size() * 2);
+  for (quint16 reg : regs) {
+    bytes.append(static_cast<char>(reg & 0x00FFu));
+    bytes.append(static_cast<char>((reg >> 8) & 0x00FFu));
+  }
+  return bytes;
+}
+
+QString asciiFromBytes(const QByteArray &bytes) {
+  int nul = bytes.indexOf('\0');
+  const QByteArray sliced = (nul >= 0) ? bytes.left(nul) : bytes;
+  return QString::fromLatin1(sliced).trimmed();
+}
+
 } // namespace
 
 bool PlcMailboxSnapshot::isValid(QString *err) const {
@@ -132,7 +160,7 @@ bool PlcMailboxSnapshot::isValid(QString *err) const {
       failWith(err, QStringLiteral("snapshot.items[%1].item_index 不匹配").arg(i));
       return false;
     }
-    if (item.slot_index < 0 || item.slot_index >= kLogicalSlotCount) {
+    if (item.slot_index >= kLogicalSlotCount) {
       failWith(err, QStringLiteral("snapshot.items[%1].slot_index 超出范围").arg(i));
       return false;
     }
@@ -167,7 +195,7 @@ bool MeasurementContext::isValid(QString *err) const {
   }
   if (run_kind == BusinessRunKind::Calibration) {
     if (calibration_slot_index != kCalibrationSlotIndex) {
-      failWith(err, QStringLiteral("标定 context.calibration_slot_index 必须为 15"));
+      failWith(err, QStringLiteral("标定 context.calibration_slot_index 必须为 15(协议槽位16)"));
       return false;
     }
     if (calibration_type.trimmed().isEmpty()) {
@@ -192,7 +220,7 @@ bool MeasurementComputeInput::isValid(QString *err) const {
       failWith(err, QStringLiteral("标定测量必须存在 item0"));
       return false;
     }
-    if (item0->slot_index != context.calibration_slot_index) {
+    if (item0->slot_index >= 0 && item0->slot_index != context.calibration_slot_index) {
       failWith(err, QStringLiteral("标定测量要求 snapshot.slot_index[0] 与 context.calibration_slot_index 一致"));
       return false;
     }
@@ -222,9 +250,9 @@ bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
   if (!checkRegSpan(regs, offsetRegs, 2, err, QStringLiteral("uint32 ABCD"))) {
     return false;
   }
-  const quint32 hi = static_cast<quint32>(regs.at(offsetRegs));
-  const quint32 lo = static_cast<quint32>(regs.at(offsetRegs + 1));
-  *out = (hi << 16) | lo;
+  const quint32 lo = static_cast<quint32>(regs.at(offsetRegs));
+  const quint32 hi = static_cast<quint32>(regs.at(offsetRegs + 1));
+  *out = lo | (hi << 16);
   return true;
 }
 
@@ -242,6 +270,24 @@ bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
+bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
+                                 double *out, QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("plcReadFloat64WordSwappedAt.out 不能为空"));
+    return false;
+  }
+  if (!checkRegSpan(regs, offsetRegs, 4, err, QStringLiteral("float64 word-swapped"))) {
+    return false;
+  }
+  quint64 bits = 0;
+  bits |= static_cast<quint64>(regs.at(offsetRegs));
+  bits |= static_cast<quint64>(regs.at(offsetRegs + 1)) << 16;
+  bits |= static_cast<quint64>(regs.at(offsetRegs + 2)) << 32;
+  bits |= static_cast<quint64>(regs.at(offsetRegs + 3)) << 48;
+  *out = doubleFromBits(bits);
+  return true;
+}
+
 bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
                     QString *out, QString *err) {
   if (!out) {
@@ -255,8 +301,8 @@ bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
   text.reserve(regCount * 2);
   for (int i = 0; i < regCount; ++i) {
     const quint16 reg = regs.at(offsetRegs + i);
-    text.append(QChar(static_cast<ushort>((reg >> 8) & 0x00FFu)));
     text.append(QChar(static_cast<ushort>(reg & 0x00FFu)));
+    text.append(QChar(static_cast<ushort>((reg >> 8) & 0x00FFu)));
   }
   *out = normalizedAsciiField(text);
   return true;
@@ -312,8 +358,8 @@ bool plcWriteAsciiRegs(const QString &text, int regCount,
   QVector<quint16> regs;
   regs.reserve(regCount);
   for (int i = 0; i < regCount; ++i) {
-    const ushort hi = static_cast<ushort>(normalized.at(i * 2).unicode() & 0x00FFu);
-    const ushort lo = static_cast<ushort>(normalized.at(i * 2 + 1).unicode() & 0x00FFu);
+    const ushort lo = static_cast<ushort>(normalized.at(i * 2).unicode() & 0x00FFu);
+    const ushort hi = static_cast<ushort>(normalized.at(i * 2 + 1).unicode() & 0x00FFu);
     regs.push_back(static_cast<quint16>((hi << 8) | lo));
   }
   *out = regs;
@@ -337,18 +383,21 @@ bool buildPlcStatusBlockV2(const QVector<quint16> &statusRegs,
   PlcStatusBlockV2 status;
   if (!plcReadUint16At(statusRegs, kStatusOffsetMachineState, &status.machine_state, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetStepState, &status.step_state, err)) return false;
-  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetStateSeq, &status.state_seq, err)) return false;
+  status.state_seq = 0;
   if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetInterlockMask, &status.interlock_mask, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmCode, &status.alarm_code, err)) return false;
-  if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmLevel, &status.alarm_level, err)) return false;
+  status.alarm_level = 0;
   if (!plcReadUint16At(statusRegs, kStatusOffsetTrayPresentMask, &status.tray_present_mask, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetScanDone, &status.scan_done, err)) return false;
-  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetScanSeq, &status.scan_seq, err)) return false;
+  status.scan_seq = 0;
   if (!plcReadUint16At(statusRegs, kStatusOffsetActiveItemCount, &status.active_item_count, err)) return false;
-  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex0, &status.active_slot_index[0], err)) return false;
-  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex1, &status.active_slot_index[1], err)) return false;
+  quint16 active0 = 0, active1 = 0;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex0, &active0, err)) return false;
+  if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotIndex1, &active1, err)) return false;
+  status.active_slot_index[0] = (active0 == kProtocolInvalidSlotIndexV24) ? kInvalidSlotIndex : static_cast<quint16>(logicalSlotIndexFromProtocolSlotV24(active0));
+  status.active_slot_index[1] = (active1 == kProtocolInvalidSlotIndexV24) ? kInvalidSlotIndex : static_cast<quint16>(logicalSlotIndexFromProtocolSlotV24(active1));
   if (!plcReadUint16At(statusRegs, kStatusOffsetMailboxReady, &status.mailbox_ready, err)) return false;
-  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetMeasSeq, &status.meas_seq, err)) return false;
+  status.meas_seq = 0;
 
   *out = status;
   return true;
@@ -608,7 +657,8 @@ bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
 
   for (int i = 0; i < snapshot.item_count; ++i) {
     const quint16 slotIndex = header.slot_index[i];
-    if (slotIndex == kInvalidSlotIndex || slotIndex >= kLogicalSlotCount) {
+    const int logicalSlotIndex = (slotIndex == kProtocolInvalidSlotIndexV24) ? -1 : logicalSlotIndexFromProtocolSlotV24(slotIndex);
+    if (slotIndex != kProtocolInvalidSlotIndexV24 && logicalSlotIndex < 0) {
       failWith(err, QStringLiteral("header.slot_index[%1] 非法").arg(i));
       return false;
     }
@@ -616,7 +666,7 @@ bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
     PlcMailboxItemSnapshot item;
     item.present = true;
     item.item_index = i;
-    item.slot_index = static_cast<int>(slotIndex);
+    item.slot_index = logicalSlotIndex;
     item.part_id = normalizedAsciiField(header.part_id_ascii[i]);
     item.total_len_mm = header.total_len_mm[i];
     item.ad_len_mm = header.ad_len_mm[i];
@@ -639,6 +689,121 @@ bool buildPlcMailboxSnapshot(const PlcMailboxRawFrame &frame,
                              PlcMailboxSnapshot *out,
                              QString *err) {
   return buildPlcMailboxSnapshot(frame.header, frame.arrays_um, out, err);
+}
+
+bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
+                                       const QVector<quint16> &keyenceRegs,
+                                       const QVector<quint16> &chuantecRegs,
+                                       QChar partType,
+                                       PlcMailboxSnapshot *out,
+                                       QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("buildFirstStageMailboxSnapshotV24.out 不能为空"));
+    return false;
+  }
+  const QChar pt = partType.toUpper();
+  if (pt != QChar('A') && pt != QChar('B')) {
+    failWith(err, QStringLiteral("第一阶段联调需要明确 partType=A/B"));
+    return false;
+  }
+  if (codingRegs.size() < kFirstStageCodingRegsV24) {
+    failWith(err, QStringLiteral("g_aCoding 长度不足，期望至少 %1，实际 %2").arg(kFirstStageCodingRegsV24).arg(codingRegs.size()));
+    return false;
+  }
+  if (keyenceRegs.size() < kFirstStageKeyenceRegsV24) {
+    failWith(err, QStringLiteral("g_aKeyence_Result 长度不足，期望至少 %1，实际 %2").arg(kFirstStageKeyenceRegsV24).arg(keyenceRegs.size()));
+    return false;
+  }
+  if (chuantecRegs.size() < kFirstStageChuantecRegsV24) {
+    failWith(err, QStringLiteral("g_aChuantec_Result 长度不足，期望至少 %1，实际 %2").arg(kFirstStageChuantecRegsV24).arg(chuantecRegs.size()));
+    return false;
+  }
+
+  const QByteArray codingBytes = mbBytesFromRegs(codingRegs).left(162);
+  if (codingBytes.size() < 162) {
+    failWith(err, QStringLiteral("g_aCoding 字节长度不足，期望至少 162，实际 %1").arg(codingBytes.size()));
+    return false;
+  }
+  const QString id0 = asciiFromBytes(codingBytes.mid(0, 81));
+  const QString id1 = asciiFromBytes(codingBytes.mid(81, 81));
+
+  QVector<double> lenValues;
+  lenValues.reserve(4);
+  for (int i = 0; i < 4; ++i) {
+    double v = 0.0;
+    if (!plcReadFloat64WordSwappedAt(keyenceRegs, i * 4, &v, err)) return false;
+    lenValues.push_back(v);
+  }
+
+  QVector<float> rawValues;
+  if (!plcReadFloat32ArrayAbcd(chuantecRegs, 0, kFirstStageChuantecRegsV24 / 2, &rawValues, err)) {
+    return false;
+  }
+  for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
+
+  PlcMailboxSnapshot snapshot;
+  snapshot.meas_seq = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+  snapshot.part_type = pt;
+  snapshot.raw_layout_ver = 24;
+  snapshot.ring_count = 1;
+  snapshot.point_count = 72;
+  snapshot.channel_count = (pt == QChar('A')) ? 4 : 2;
+
+  const bool has0 = !normalizedAsciiField(id0).isEmpty();
+  const bool has1 = !normalizedAsciiField(id1).isEmpty();
+  snapshot.item_count = has1 ? 2 : (has0 ? 1 : 0);
+  if (snapshot.item_count <= 0) {
+    failWith(err, QStringLiteral("第一阶段联调未读到有效工件 ID，无法组装 Mailbox"));
+    return false;
+  }
+
+  const auto buildItemA = [&](int itemIndex, const QString &partId, int curveBase) {
+    PlcMailboxItemSnapshot item;
+    item.present = true;
+    item.item_index = itemIndex;
+    item.slot_index = -1;
+    item.part_id = normalizedAsciiField(partId);
+    item.total_len_mm = static_cast<float>(lenValues.value(itemIndex));
+    item.raw_points_um.reserve(4 * 72);
+    for (int ch = 0; ch < 4; ++ch) {
+      const int curveIndex = curveBase + ch;
+      const int offset = curveIndex * 72;
+      for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx));
+    }
+    return item;
+  };
+  const auto buildItemB = [&](int itemIndex, const QString &partId, int curveBase) {
+    PlcMailboxItemSnapshot item;
+    item.present = true;
+    item.item_index = itemIndex;
+    item.slot_index = -1;
+    item.part_id = normalizedAsciiField(partId);
+    item.ad_len_mm = static_cast<float>(lenValues.value(itemIndex * 2));
+    item.bc_len_mm = static_cast<float>(lenValues.value(itemIndex * 2 + 1));
+    item.raw_points_um.reserve(2 * 72);
+    for (int ch = 0; ch < 2; ++ch) {
+      const int curveIndex = curveBase + ch;
+      const int offset = curveIndex * 72;
+      for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx));
+    }
+    return item;
+  };
+
+  if (pt == QChar('A')) {
+    snapshot.items.push_back(buildItemA(0, id0, 0));
+    if (snapshot.item_count > 1) snapshot.items.push_back(buildItemA(1, id1, 4));
+  } else {
+    snapshot.items.push_back(buildItemB(0, id0, 0));
+    if (snapshot.item_count > 1) snapshot.items.push_back(buildItemB(1, id1, 2));
+  }
+
+  QString validErr;
+  if (!snapshot.isValid(&validErr)) {
+    failWith(err, validErr);
+    return false;
+  }
+  *out = snapshot;
+  return true;
 }
 
 QString toString(BusinessRunKind v) {
@@ -844,8 +1009,10 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
 
   IngestItemInput ingestItem;
   ingestItem.item_index = itemIndex;
-  ingestItem.slot_index = item->slot_index;
-  ingestItem.slot_id = QStringLiteral("SLOT-%1").arg(item->slot_index, 2, 10, QLatin1Char('0'));
+  ingestItem.slot_index = (item->slot_index >= 0) ? QVariant(item->slot_index) : QVariant();
+  ingestItem.slot_id = (item->slot_index >= 0)
+                          ? QStringLiteral("SLOT-%1").arg(item->slot_index, 2, 10, QLatin1Char('0'))
+                          : QStringLiteral("UNKNOWN");
   ingestItem.part_id = item->part_id;
   ingestItem.result_ok = result.judgement == MeasurementJudgement::Unknown
                              ? QVariant()

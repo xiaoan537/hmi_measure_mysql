@@ -67,6 +67,10 @@ public slots:
   bool sendPcAck(quint16 pc_ack, QString *err = nullptr);
   bool writeTrayPartIdSlot(int slotIndex, const QString &partId,
                            QString *err = nullptr);
+  bool readHoldingRegistersRaw(quint32 startAddress, quint16 regCount,
+                               QVector<quint16> *out, QString *err = nullptr);
+  bool readFirstStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
+                                     QString *err = nullptr);
 
 signals:
   void runningChanged(bool running);

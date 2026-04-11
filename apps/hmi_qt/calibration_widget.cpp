@@ -44,7 +44,7 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
 
     lblMasterA_ = new QLabel(QStringLiteral("A 型标定件: CAL-A-001"), this);
     lblMasterB_ = new QLabel(QStringLiteral("B 型标定件: CAL-B-001"), this);
-    lblSlot15_ = new QLabel(QStringLiteral("15 号槽位: 空"), this);
+    lblSlot15_ = new QLabel(QStringLiteral("16 号槽位: 空"), this);
     lblSummary_ = new QLabel(QStringLiteral("结果摘要: --"), this);
     lblSummary_->setWordWrap(true);
     modeLay->addWidget(lblMasterA_);
@@ -75,10 +75,10 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
 
     connect(btnStart_, &QPushButton::clicked, this, [this]{
         QVariantMap args;
-        args.insert(QStringLiteral("part_type"), selectedMasterTypeText());
-        args.insert(QStringLiteral("mode_arg"), static_cast<int>(selectedMasterTypeArg()));
+        args.insert(QStringLiteral("part_type"), selectedPartTypeText());
+        args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg()));
         emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args);
-        listMessages_->addItem(QStringLiteral("开始标定：%1").arg(selectedMasterTypeText()));
+        listMessages_->addItem(QStringLiteral("开始标定：%1").arg(selectedPartTypeText()));
     });
     connect(btnRead, &QPushButton::clicked, this, [this]{
         emit requestReadMailbox();
@@ -92,7 +92,7 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
         setPlcConnected(true);
         setStepState(200);
         setTrayPresentMask(1u << 15);
-        listMessages_->addItem(QStringLiteral("演示：15 号槽位有料，可开始标定。"));
+        listMessages_->addItem(QStringLiteral("演示：16 号槽位有料，可开始标定。"));
     });
 
     setPlcConnected(false);
@@ -167,26 +167,36 @@ void CalibrationWidget::setSlotSummaries(const QVector<core::CalibrationSlotSumm
     }
 }
 
-QString CalibrationWidget::selectedMasterTypeText() const
+QString CalibrationWidget::selectedMasterTypeTextInternal() const
 {
     return rbB_ && rbB_->isChecked() ? QStringLiteral("B") : QStringLiteral("A");
 }
 
-quint32 CalibrationWidget::selectedMasterTypeArg() const
+quint32 CalibrationWidget::selectedMasterTypeArgInternal() const
 {
     return rbB_ && rbB_->isChecked() ? 2u : 1u;
+}
+
+QString CalibrationWidget::selectedPartTypeText() const
+{
+    return selectedMasterTypeTextInternal();
+}
+
+quint32 CalibrationWidget::selectedPartTypeArg() const
+{
+    return selectedMasterTypeArgInternal();
 }
 
 void CalibrationWidget::refreshSlot15State()
 {
     const bool loaded = ((trayPresentMask_ >> 15) & 0x1) != 0;
-    lblSlot15_->setText(loaded ? QStringLiteral("15 号槽位: 有料") : QStringLiteral("15 号槽位: 空"));
+    lblSlot15_->setText(loaded ? QStringLiteral("16 号槽位: 有料") : QStringLiteral("16 号槽位: 空"));
 }
 
 QString CalibrationWidget::stepText(quint16 step) const
 {
     switch (step) {
-    case 200: return QStringLiteral("标定待上料(15号槽)");
+    case 200: return QStringLiteral("标定待上料(16号槽)");
     case 210: return QStringLiteral("等待 PC 确认");
     case 220: return QStringLiteral("标定测量中");
     case 230: return QStringLiteral("等待 PC 读取");
