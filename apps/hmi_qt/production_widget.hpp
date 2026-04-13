@@ -101,6 +101,7 @@ public:
 
     QString selectedPartTypeText() const;
     quint32 selectedPartTypeArg() const;
+    void appendPlcLogMessage(const QString &text);
 
 signals:
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
@@ -110,6 +111,7 @@ signals:
 
     void requestReadMailbox();
     void requestAckMailbox();
+    void requestReconnectPlc();
 
 private slots:
     void onBtnWriteSlotIds();

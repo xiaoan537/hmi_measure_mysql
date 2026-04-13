@@ -54,6 +54,8 @@ private:
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();
     void refreshManualMaintainLiveStatus();
+    void appendProductionLog(const QString &text);
+    void attemptReconnectPlc(bool manual);
 
 private:
     Ui::MainWindow *ui_ = nullptr;
@@ -76,4 +78,7 @@ private:
     quint32 lastAutoAckMeasSeq_ = 0;
     core::PlcStatusBlockV2 lastStatus_{};
     bool hasLastStatus_ = false;
+    bool lastPlcConnectedKnown_ = false;
+    bool lastPlcConnected_ = false;
+    bool reconnectAttemptLogged_ = false;
 };

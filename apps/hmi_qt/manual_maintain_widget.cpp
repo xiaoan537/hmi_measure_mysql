@@ -60,8 +60,8 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   modeRow->addSpacing(12);
   modeRow->addWidget(new QLabel(QStringLiteral("工件类型："), manualBox));
   cmdPartTypeCombo_ = new QComboBox(manualBox);
-  cmdPartTypeCombo_->addItem(QStringLiteral("A型"), 1);
-  cmdPartTypeCombo_->addItem(QStringLiteral("B型"), 2);
+  cmdPartTypeCombo_->addItem(QStringLiteral("B型"), 1);
+  cmdPartTypeCombo_->addItem(QStringLiteral("A型"), 2);
   modeRow->addWidget(cmdPartTypeCombo_);
   modeRow->addStretch(1);
   manualLay->addLayout(modeRow);
@@ -244,7 +244,7 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
 }
 
 int ManualMaintainWidget::selectedPartType() const {
-  return cmdPartTypeCombo_ ? cmdPartTypeCombo_->currentData().toInt() : 1;
+  return cmdPartTypeCombo_ ? cmdPartTypeCombo_->currentData().toInt() : 2;
 }
 
 int ManualMaintainWidget::selectedTargetMode() const {

@@ -23,30 +23,27 @@ constexpr int kFirstStageRPosRegsV24 = 1152;
 constexpr float kFirstStageInvalidRawValueV24 = 2147.48364f;
 
 // 第二阶段（v2.5）固定布局
-constexpr int kStatusBlockRegsV25 = 11;
-constexpr int kCommandBlockRegsV25 = 6;
+constexpr int kStatusBlockRegsV25 = 16;   // 从 MB7202 开始到 MB7232，按寄存器窗口读取
+constexpr int kCommandBlockRegsV25 = 4;   // iCategory / wCmd_Code / wCmd_result / wReject_Instruction
 constexpr int kTrayAllCodingBytesV25 = 16 * 81;
 constexpr int kTrayAllCodingRegsV25 = kTrayAllCodingBytesV25 / 2;
 constexpr int kMailboxHeaderRegsV25 = 83;  // item_count(1) + slot_mask(1) + 2*STRING(81B)=83regs
 constexpr int kMailboxDataRegsV25 = 16 + 1152;
 constexpr int kMailboxTotalRegsV25 = kMailboxHeaderRegsV25 + kMailboxDataRegsV25;
-constexpr int kStatusOffsetModeV25 = 0;
-constexpr int kStatusOffsetMachineStateV25 = 1;
-constexpr int kStatusOffsetStepStateV25 = 2;
-constexpr int kStatusOffsetInterlockMaskV25 = 3;
-constexpr int kStatusOffsetAlarmCodeV25 = 4;
-constexpr int kStatusOffsetTrayPresentMaskV25 = 5;
-constexpr int kStatusOffsetScanDoneV25 = 6;
-constexpr int kStatusOffsetActiveItemCountV25 = 7;
-constexpr int kStatusOffsetActiveSlotMaskV25 = 8;
-constexpr int kStatusOffsetMailboxReadyV25 = 9;
-constexpr int kStatusOffsetAfterMeasurementV25 = 10;
+constexpr int kStatusOffsetMachineStateV25 = 0;
+constexpr int kStatusOffsetStepStateV25 = 1;
+constexpr int kStatusOffsetInterlockMaskV25 = 2; // DWORD，使用 2 个寄存器
+constexpr int kStatusOffsetAlarmCodeV25 = 9;
+constexpr int kStatusOffsetTrayPresentMaskV25 = 10;
+constexpr int kStatusOffsetScanDoneV25 = 11;
+constexpr int kStatusOffsetActiveItemCountV25 = 12;
+constexpr int kStatusOffsetActiveSlotMaskV25 = 13;
+constexpr int kStatusOffsetMailboxReadyV25 = 14;
+constexpr int kStatusOffsetAfterMeasurementV25 = 15;
 constexpr int kCommandOffsetCategoryModeV25 = 0;
 constexpr int kCommandOffsetCmdCodeV25 = 1;
 constexpr int kCommandOffsetCmdResultV25 = 2;
 constexpr int kCommandOffsetCmdErrorCodeV25 = 3;
-constexpr int kCommandOffsetPcAckV25 = 4;
-constexpr int kCommandOffsetJudgeResultV25 = 5;
 
 constexpr int kMailboxHeaderUsedRegsV2 = 54;          // 当前有效字段长度
 constexpr int kMailboxHeaderReservedTailRegsV2 = 4;   // 物理头块尾部预留
@@ -170,14 +167,14 @@ enum class ProductionMeasureModeV2 : quint16 {
 };
 
 enum class PlcCommandCodeV2 : quint16 {
-  SetModeAuto = 100,
-  SetModeManual = 101,
-  Initialize = 1,
-  StartAuto = 2,
-  StartCalibration = 2,
-  Stop = 3,
-  ResetAlarm = 4,
-  HomeAll = 4,
+  SetModeAuto = 0,
+  SetModeManual = 0,
+  Initialize = 0x0001,
+  StartAuto = 0x0002,
+  StartCalibration = 0x0004,
+  Stop = 0x0008,
+  ResetAlarm = 0x0010,
+  HomeAll = 0x0010,
   Pause = 120,
   Resume = 121,
 

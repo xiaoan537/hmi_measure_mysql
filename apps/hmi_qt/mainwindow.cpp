@@ -334,6 +334,12 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
             updatePlcStatusLabel();
             if (productionWidget_) productionWidget_->setPlcConnected(connected);
             if (calibrationWidget_) calibrationWidget_->setPlcConnected(connected);
+            if (!lastPlcConnectedKnown_ || lastPlcConnected_ != connected) {
+              appendProductionLog(connected ? QStringLiteral("PLC 连接成功") : QStringLiteral("PLC 已断开"));
+              lastPlcConnectedKnown_ = true;
+              lastPlcConnected_ = connected;
+              reconnectAttemptLogged_ = false;
+            }
           });
   connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::errorOccurred,
           this, &MainWindow::handlePlcRuntimeError);
@@ -366,6 +372,7 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
   }
 
   if (!cfg.plc.use_fake_client) {
+    appendProductionLog(QStringLiteral("正在连接 PLC..."));
     if (!plcRuntime_->connectNow(&err)) {
       handlePlcRuntimeError(err);
     }
@@ -541,6 +548,8 @@ void MainWindow::setupBusinessPageBindings() {
             this, &MainWindow::handleWriteTrayPartIdsRequested);
     connect(productionWidget_, &ProductionWidget::uiCommandRequested,
             this, &MainWindow::handleUiCommandRequested);
+    connect(productionWidget_, &ProductionWidget::requestReconnectPlc,
+            this, [this]{ attemptReconnectPlc(true); });
   }
 
   if (calibrationWidget_) {
@@ -623,9 +632,26 @@ void MainWindow::seedFakePlcDemoData() {
   fakePlcClient_->loadMailboxRawFrame(layout, frame, &err);
 }
 
+void MainWindow::appendProductionLog(const QString &text) {
+  if (productionWidget_) productionWidget_->appendPlcLogMessage(text);
+}
+
+void MainWindow::attemptReconnectPlc(bool manual) {
+  if (!plcRuntime_) return;
+  QString err;
+  if (manual) appendProductionLog(QStringLiteral("尝试重新连接 PLC..."));
+  plcRuntime_->disconnectNow();
+  if (!plcRuntime_->connectNow(&err)) {
+    handlePlcRuntimeError(err);
+    return;
+  }
+  plcRuntime_->pollOnce();
+}
+
 void MainWindow::handlePlcRuntimeError(const QString &message) {
   if (!message.trimmed().isEmpty()) {
     statusBar()->showMessage(QStringLiteral("PLC: %1").arg(message), 5000);
+    appendProductionLog(message);
   }
 }
 
@@ -646,8 +672,12 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
     devToolsWidget_->setPlcRuntimeSummary(stats.connected,
                                           machineStateText(lastStatus_.machine_state),
                                           stepStateText(lastStatus_.step_state),
-                                          lastStatus_.scan_seq,
-                                          lastStatus_.meas_seq);
+                                          0,
+                                          0);
+  }
+  if (!stats.connected && plcRuntime_ && plcRuntime_->config().plc.auto_reconnect && !reconnectAttemptLogged_) {
+    appendProductionLog(QStringLiteral("尝试重新连接 PLC..."));
+    reconnectAttemptLogged_ = true;
   }
   if (manualMaintainWidget_ && hasLastStatus_) {
     manualMaintainWidget_->setRuntimeSummary(stats.connected,
@@ -664,8 +694,8 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
     devToolsWidget_->setPlcRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
                                           machineStateText(status.machine_state),
                                           stepStateText(status.step_state),
-                                          status.scan_seq,
-                                          status.meas_seq);
+                                          0,
+                                          0);
   }
   if (manualMaintainWidget_) {
     manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
@@ -678,16 +708,16 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
     diagnosticsWidget_->setStatusFields(static_cast<int>(status.step_state),
                                         static_cast<int>(status.machine_state),
                                         static_cast<int>(status.alarm_code),
-                                        static_cast<int>(status.alarm_level),
+                                        0,
                                         static_cast<quint32>(status.interlock_mask),
-                                        static_cast<int>(status.meas_seq));
+                                        0);
   }
 
   if (productionWidget_) {
     productionWidget_->setMachineState(status.machine_state, machineStateText(status.machine_state));
     productionWidget_->setStepState(status.step_state);
-    productionWidget_->setStateSeq(status.state_seq);
-    productionWidget_->setAlarm(status.alarm_code, status.alarm_level);
+    productionWidget_->setStateSeq(0);
+    productionWidget_->setAlarm(status.alarm_code, 0);
     productionWidget_->setInterlockMask(status.interlock_mask);
     productionWidget_->setTrayPresentMask(status.tray_present_mask);
     productionWidget_->setCalibrationMode(isCalibrationStep(status.step_state));
@@ -731,10 +761,9 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   if (calibrationWidget_) {
     calibrationWidget_->setStepState(status.step_state);
     calibrationWidget_->setTrayPresentMask(status.tray_present_mask);
-    if (status.mailbox_ready != lastMailboxReady_ || status.meas_seq != lastMailboxSeq_) {
+    if (status.mailbox_ready != lastMailboxReady_) {
       calibrationWidget_->setMailboxReady(status.mailbox_ready != 0);
       lastMailboxReady_ = status.mailbox_ready;
-      lastMailboxSeq_ = status.meas_seq;
     }
   }
 }
@@ -880,11 +909,11 @@ void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
   if (devToolsWidget_) {
     if (events.scan_ready) {
       devToolsWidget_->appendPlcLog(QStringLiteral("检测到新扫码结果：scan_seq=%1")
-                                        .arg(hasLastStatus_ ? lastStatus_.scan_seq : 0));
+                                        .arg(0));
     }
     if (events.new_mailbox) {
       devToolsWidget_->appendPlcLog(QStringLiteral("检测到新测量包：meas_seq=%1，等待业务处理/ACK")
-                                        .arg(hasLastStatus_ ? lastStatus_.meas_seq : 0));
+                                        .arg(0));
     }
   }
 
@@ -895,12 +924,12 @@ void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
   if (plcFlowMode_ >= static_cast<int>(PlcFlowModeUi::SemiAuto) &&
       events.scan_ready &&
       lastStatus_.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcIdCheck) &&
-      lastStatus_.scan_seq != 0 && lastStatus_.scan_seq != lastAutoContinueScanSeq_) {
+      lastStatus_.scan_done != 0 && lastStatus_.scan_done != lastAutoContinueScanSeq_) {
     handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), QVariantMap{});
-    lastAutoContinueScanSeq_ = lastStatus_.scan_seq;
+    lastAutoContinueScanSeq_ = lastStatus_.scan_done;
     if (devToolsWidget_) {
       devToolsWidget_->appendPlcLog(QStringLiteral("自动继续流程：scan_seq=%1")
-                                        .arg(lastStatus_.scan_seq));
+                                        .arg(lastStatus_.scan_done));
     }
   }
 }
@@ -920,37 +949,38 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
 
+  qint16 plcMode = static_cast<qint16>(mapArg(args, QStringLiteral("plc_mode"), static_cast<quint32>(core::PlcControlModeV25::Manual)));
+  if (cmd == QStringLiteral("SET_MODE_MANUAL")) plcMode = static_cast<qint16>(core::PlcControlModeV25::Manual);
+  if (cmd == QStringLiteral("SET_MODE_AUTO")) plcMode = static_cast<qint16>(core::PlcControlModeV25::Auto);
+  if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) plcMode = static_cast<qint16>(core::PlcControlModeV25::Auto);
+
+  QString err;
+  if (!plcRuntime_->writePlcMode(plcMode, &err)) {
+    handlePlcRuntimeError(err);
+    return;
+  }
+
+  if (cmd == QStringLiteral("SET_MODE_MANUAL") || cmd == QStringLiteral("SET_MODE_AUTO")) {
+    if (devToolsWidget_) devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(plcMode)));
+    if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(plcMode)));
+    plcRuntime_->pollOnce();
+    return;
+  }
+
   core::PlcCommandBlockV2 command;
   command.cmd_code = static_cast<quint16>(code);
   command.category_mode = static_cast<qint16>(mapArg(args, QStringLiteral("part_type_arg"), 0));
   command.cmd_arg0 = static_cast<quint32>(qMax(0, static_cast<int>(command.category_mode)));
 
-  qint16 plcMode = static_cast<qint16>(mapArg(args, QStringLiteral("plc_mode"), 1));
-  if (cmd == QStringLiteral("SET_MODE_MANUAL")) plcMode = 1;
-  if (cmd == QStringLiteral("SET_MODE_AUTO")) plcMode = 2;
-  if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) plcMode = 2;
-
-  QString err;
-  if (cmd == QStringLiteral("SET_MODE_MANUAL") || cmd == QStringLiteral("SET_MODE_AUTO")) {
-    if (!plcRuntime_->writePlcMode(plcMode, &err)) {
-      handlePlcRuntimeError(err);
-      return;
-    }
-  } else {
-    if (!plcRuntime_->writePlcMode(plcMode, &err)) {
-      handlePlcRuntimeError(err);
-      return;
-    }
-    if (!plcRuntime_->sendCommand(command, &err)) {
-      handlePlcRuntimeError(err);
-      return;
-    }
+  if (!plcRuntime_->sendCommand(command, &err)) {
+    handlePlcRuntimeError(err);
+    return;
   }
   if (devToolsWidget_) {
-    devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3")
-                                      .arg(cmd)
-                                      .arg(plcMode)
-                                      .arg(command.category_mode));
+    devToolsWidget_->appendPlcLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3").arg(cmd).arg(plcMode).arg(command.category_mode));
+  }
+  if (manualMaintainWidget_) {
+    manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3").arg(cmd).arg(plcMode).arg(command.category_mode));
   }
 }
 

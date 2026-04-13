@@ -94,11 +94,13 @@ struct MesConfig
         bool use_fake_client = false; // 1=使用本地 Fake PLC，而非真实 Modbus/TCP
         bool first_stage_enabled = false; // 1=按第一阶段联调方式直接读取功能块
 
+        quint32 mode_start_address = 0;
         quint32 status_start_address = 0;
         quint32 tray_start_address = 0;
         quint32 command_start_address = 0;
         quint32 mailbox_start_address = 0;
         quint32 pc_ack_start_address = 0;
+        quint32 judge_result_start_address = 0;
 
         // 第一阶段联调：直接对接 PLC 功能块（0-based Holding Register）
         quint32 axis_ctrl_start_address = 0;

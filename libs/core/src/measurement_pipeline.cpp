@@ -826,13 +826,9 @@ bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
     return false;
   }
   PlcStatusBlockV2 status;
-  quint16 tmp = 0;
-  if (!plcReadUint16At(statusRegs, kStatusOffsetModeV25, &tmp, err)) return false;
-  status.control_mode = static_cast<qint16>(tmp);
   if (!plcReadUint16At(statusRegs, kStatusOffsetMachineStateV25, &status.machine_state, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetStepStateV25, &status.step_state, err)) return false;
-  if (!plcReadUint16At(statusRegs, kStatusOffsetInterlockMaskV25, &tmp, err)) return false;
-  status.interlock_mask = tmp;
+  if (!plcReadUint32AbcdAt(statusRegs, kStatusOffsetInterlockMaskV25, &status.interlock_mask, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetAlarmCodeV25, &status.alarm_code, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetTrayPresentMaskV25, &status.tray_present_mask, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetScanDoneV25, &status.scan_done, err)) return false;
@@ -840,6 +836,10 @@ bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
   if (!plcReadUint16At(statusRegs, kStatusOffsetActiveSlotMaskV25, &status.active_slot_mask, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetMailboxReadyV25, &status.mailbox_ready, err)) return false;
   if (!plcReadUint16At(statusRegs, kStatusOffsetAfterMeasurementV25, &status.after_measurement_count, err)) return false;
+  status.state_seq = 0;
+  status.alarm_level = 0;
+  status.scan_seq = 0;
+  status.meas_seq = 0;
   const auto slotList = logicalSlotsFromMaskV25(status.active_slot_mask);
   status.active_slot_index[0] = slotList.size() >= 1 ? static_cast<quint16>(slotList.at(0)) : kInvalidSlotIndex;
   status.active_slot_index[1] = slotList.size() >= 2 ? static_cast<quint16>(slotList.at(1)) : kInvalidSlotIndex;
@@ -862,9 +862,12 @@ bool buildPlcCommandBlockV25(const QVector<quint16> &commandRegs,
   if (!plcReadUint16At(commandRegs, kCommandOffsetCmdCodeV25, &command.cmd_code, err)) return false;
   if (!plcReadUint16At(commandRegs, kCommandOffsetCmdResultV25, &command.cmd_result, err)) return false;
   if (!plcReadUint16At(commandRegs, kCommandOffsetCmdErrorCodeV25, &command.cmd_error_code, err)) return false;
-  if (!plcReadUint16At(commandRegs, kCommandOffsetPcAckV25, &command.pc_ack, err)) return false;
-  if (!plcReadUint16At(commandRegs, kCommandOffsetJudgeResultV25, &command.judge_result, err)) return false;
   command.cmd_arg0 = static_cast<quint32>(qMax(0, static_cast<int>(command.category_mode)));
+  command.cmd_seq = 0;
+  command.cmd_arg1 = 0;
+  command.cmd_ack_seq = 0;
+  command.pc_ack = 0;
+  command.judge_result = 0;
   *out = command;
   return true;
 }

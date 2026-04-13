@@ -108,6 +108,13 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblConnDb->setProperty("connState", 0);
     ui_->lblConnMes->setProperty("connState", 0);
 
+    auto *btnReconnectPlc = new QPushButton(QStringLiteral("重连PLC"), this);
+    btnReconnectPlc->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    if (auto *hlConn = ui_->frameTop->findChild<QHBoxLayout*>(QStringLiteral("hlConn"))) {
+        hlConn->addWidget(btnReconnectPlc);
+    }
+    connect(btnReconnectPlc, &QPushButton::clicked, this, [this]{ emit requestReconnectPlc(); });
+
     // 生产业务模式：普通 / 第二次 / 第三次 / 军检（仅 PC 侧业务语义）
     measureModeCombo_ = new QComboBox(this);
     measureModeCombo_->addItem(QStringLiteral("普通测量"), static_cast<int>(ProductionMeasureMode::Normal));
@@ -115,8 +122,8 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     measureModeCombo_->addItem(QStringLiteral("第三次测量"), static_cast<int>(ProductionMeasureMode::Third));
     measureModeCombo_->addItem(QStringLiteral("军检"), static_cast<int>(ProductionMeasureMode::Mil));
     partTypeCombo_ = new QComboBox(this);
-    partTypeCombo_->addItem(QStringLiteral("A 型"), QStringLiteral("A"));
     partTypeCombo_->addItem(QStringLiteral("B 型"), QStringLiteral("B"));
+    partTypeCombo_->addItem(QStringLiteral("A 型"), QStringLiteral("A"));
     if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
         auto *typeRow = new QHBoxLayout();
         auto *lbType = new QLabel(QStringLiteral("工件类型"), this);
@@ -445,7 +452,7 @@ QString ProductionWidget::selectedPartTypeText() const
 
 quint32 ProductionWidget::selectedPartTypeArg() const
 {
-    return selectedPartTypeTextInternal() == QStringLiteral("B") ? 2u : 1u;
+    return selectedPartTypeTextInternal() == QStringLiteral("B") ? 1u : 2u;
 }
 
 QString ProductionWidget::measureModeText() const
@@ -469,6 +476,13 @@ quint32 ProductionWidget::measureModeCommandArg() const
     case ProductionMeasureMode::Mil: return 9;
     case ProductionMeasureMode::Normal:
     default: return 1;
+    }
+}
+
+void ProductionWidget::appendPlcLogMessage(const QString &text)
+{
+    if (!text.trimmed().isEmpty()) {
+        ui_->listMessages->addItem(text);
     }
 }
 

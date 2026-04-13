@@ -174,7 +174,7 @@ QString CalibrationWidget::selectedMasterTypeTextInternal() const
 
 quint32 CalibrationWidget::selectedMasterTypeArgInternal() const
 {
-    return rbB_ && rbB_->isChecked() ? 2u : 1u;
+    return rbB_ && rbB_->isChecked() ? 1u : 2u;
 }
 
 QString CalibrationWidget::selectedPartTypeText() const

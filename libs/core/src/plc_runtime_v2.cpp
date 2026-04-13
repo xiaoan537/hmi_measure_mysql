@@ -215,6 +215,7 @@ bool PlcRuntimeServiceV2::readHoldingRegistersRaw(quint32 startAddress, quint16 
     return false;
   }
   if (!client_->readHoldingRegisters(startAddress, regCount, out, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) { qtClient->disconnectFromPlc(); }
     refreshConnectionState();
     publishError(err ? *err : QStringLiteral("读取原始寄存器失败"));
     return false;
@@ -229,6 +230,7 @@ bool PlcRuntimeServiceV2::writeHoldingRegistersRaw(quint32 startAddress, const Q
   if (!ensureClientReady(err)) return false;
   if (!client_) { failWith(err, QStringLiteral("PLC client 未就绪")); return false; }
   if (!client_->writeHoldingRegisters(startAddress, values, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) { qtClient->disconnectFromPlc(); }
     refreshConnectionState();
     publishError(err ? *err : QStringLiteral("写原始寄存器失败"));
     return false;
@@ -264,17 +266,21 @@ bool PlcRuntimeServiceV2::writeMbBytesRaw(quint32 mbByteAddress, const QByteArra
 }
 
 bool PlcRuntimeServiceV2::writePlcMode(qint16 mode, QString *err) {
+  if (cfg_.plc.mode_start_address == 0) {
+    failWith(err, QStringLiteral("PLC 模式地址未配置"));
+    return false;
+  }
   QVector<quint16> regs{static_cast<quint16>(mode)};
-  return writeHoldingRegistersRaw(cfg_.plc.status_start_address, regs, err);
+  return writeHoldingRegistersRaw(cfg_.plc.mode_start_address, regs, err);
 }
 
 bool PlcRuntimeServiceV2::writeJudgeResult(quint16 judgeResult, QString *err) {
-  if (cfg_.plc.command_start_address == 0) {
+  if (cfg_.plc.judge_result_start_address == 0) {
     failWith(err, QStringLiteral("JudgeResult 地址未配置"));
     return false;
   }
   QVector<quint16> regs{judgeResult};
-  return writeHoldingRegistersRaw(cfg_.plc.command_start_address + kCommandOffsetJudgeResultV25, regs, err);
+  return writeHoldingRegistersRaw(cfg_.plc.judge_result_start_address, regs, err);
 }
 
 bool PlcRuntimeServiceV2::readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err) {
@@ -377,6 +383,11 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
   if (!readHoldingRegistersRaw(cfg_.plc.status_start_address, static_cast<quint16>(kStatusBlockRegsV25), &statusRegs, err)) return false;
   PlcStatusBlockV2 status;
   if (!buildPlcStatusBlockV25(statusRegs, &status, err)) return false;
+  if (cfg_.plc.mode_start_address > 0) {
+    QVector<quint16> modeRegs;
+    if (!readHoldingRegistersRaw(cfg_.plc.mode_start_address, 1, &modeRegs, err)) return false;
+    if (!modeRegs.isEmpty()) status.control_mode = static_cast<qint16>(modeRegs.at(0));
+  }
   emit statusUpdated(status);
 
   QVector<quint16> commandRegs;

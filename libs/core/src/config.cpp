@@ -128,11 +128,13 @@ namespace core
         c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();
         c.plc.use_fake_client = (s.value("use_fake_client", 0).toInt() != 0);
         c.plc.first_stage_enabled = (s.value("first_stage_enabled", 0).toInt() != 0);
+        c.plc.mode_start_address = s.value("mode_start_address", 0).toULongLong();
         c.plc.status_start_address = s.value("status_start_address", 0).toULongLong();
         c.plc.tray_start_address = s.value("tray_start_address", 0).toULongLong();
         c.plc.command_start_address = s.value("command_start_address", 0).toULongLong();
         c.plc.mailbox_start_address = s.value("mailbox_start_address", 0).toULongLong();
         c.plc.pc_ack_start_address = s.value("pc_ack_start_address", 0).toULongLong();
+        c.plc.judge_result_start_address = s.value("judge_result_start_address", 0).toULongLong();
         c.plc.axis_ctrl_start_address = s.value("axis_ctrl_start_address", 0).toULongLong();
         c.plc.axis_sta_start_address = s.value("axis_sta_start_address", 0).toULongLong();
         c.plc.lm_ctrl_start_address = s.value("lm_ctrl_start_address", 0).toULongLong();
