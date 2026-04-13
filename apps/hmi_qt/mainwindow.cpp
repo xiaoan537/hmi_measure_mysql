@@ -731,6 +731,10 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   lastStatus_ = status;
   hasLastStatus_ = true;
+  if (status.scan_done == 0) {
+    // scan_done 已被 PC 清零，允许下一轮扫码完成后再次触发自动继续。
+    lastAutoContinueScanSeq_ = 0;
+  }
   if (devToolsWidget_) {
     devToolsWidget_->setPlcRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
                                           machineStateText(status.machine_state),
@@ -975,6 +979,31 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (!plcRuntime_) {
     return;
   }
+  if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) {
+    const quint32 statusStart = plcRuntime_->config().plc.status_start_address;
+    if (statusStart == 0) {
+      handlePlcRuntimeError(QStringLiteral("Status Block 地址尚未配置，无法写 scan_done"));
+      return;
+    }
+    QString err;
+    if (!plcRuntime_->writeHoldingRegistersRaw(
+            statusStart + static_cast<quint32>(core::kStatusOffsetScanDoneV25),
+            QVector<quint16>{0},
+            &err)) {
+      handlePlcRuntimeError(err);
+      return;
+    }
+    lastAutoContinueScanSeq_ = 0;
+    if (devToolsWidget_) {
+      devToolsWidget_->appendPlcLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
+    }
+    if (manualMaintainWidget_) {
+      manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
+    }
+    plcRuntime_->pollOnce();
+    return;
+  }
+
   bool ok = false;
   const auto code = uiCommandToCode(cmd, &ok);
   if (!ok) {
