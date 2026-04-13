@@ -195,10 +195,8 @@ bool encodePlcCommandWriteRegsV2(const PlcCommandBlockV2 &command,
 
   QVector<quint16> regs;
   regs.reserve(kCommandWriteRegsV2);
-  appendUint16(&regs, command.cmd_code);
-  appendUint32Abcd(&regs, command.cmd_seq);
-  appendUint32Abcd(&regs, command.cmd_arg0);
-  appendUint32Abcd(&regs, command.cmd_arg1);
+  regs.push_back(static_cast<quint16>(command.category_mode));
+  regs.push_back(command.cmd_code);
 
   if (regs.size() != kCommandWriteRegsV2) {
     failWith(err, QStringLiteral("编码 Command Block 写入区失败：寄存器数应为 %1，实际 %2")

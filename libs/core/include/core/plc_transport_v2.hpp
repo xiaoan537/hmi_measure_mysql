@@ -10,7 +10,7 @@ namespace core {
 
 // Command Block 中真正由 PC 写入 PLC 的寄存器长度：
 // cmd_code(1) + cmd_seq(2) + cmd_arg0(2) + cmd_arg1(2) = 7 regs。
-constexpr int kCommandWriteRegsV2 = 7;
+constexpr int kCommandWriteRegsV2 = 2;
 constexpr int kPcAckWriteRegsV2 = 1;
 
 struct PlcRegisterSpanV2 {

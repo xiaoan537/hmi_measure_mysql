@@ -38,10 +38,10 @@ bool buildPlcAddressLayoutV2(const PlcConfig &cfg,
   }
 
   PlcAddressLayoutV2 layout;
-  layout.status = {cfg.status_start_address, static_cast<quint16>(kStatusBlockRegsV2), QStringLiteral("status")};
-  layout.tray = {cfg.tray_start_address, static_cast<quint16>(kTrayPartIdBlockRegsV2), QStringLiteral("tray")};
-  layout.command = {cfg.command_start_address, static_cast<quint16>(kCommandBlockRegsV2), QStringLiteral("command")};
-  layout.mailbox = {cfg.mailbox_start_address, static_cast<quint16>(kMailboxTotalRegsV2), QStringLiteral("mailbox")};
+  layout.status = {cfg.status_start_address, static_cast<quint16>(kStatusBlockRegsV25), QStringLiteral("status")};
+  layout.tray = {cfg.tray_start_address, static_cast<quint16>(kTrayAllCodingRegsV25), QStringLiteral("tray")};
+  layout.command = {cfg.command_start_address, static_cast<quint16>(kCommandBlockRegsV25), QStringLiteral("command")};
+  layout.mailbox = {cfg.mailbox_start_address, static_cast<quint16>(kMailboxTotalRegsV25), QStringLiteral("mailbox")};
   layout.pc_ack = {cfg.pc_ack_start_address, static_cast<quint16>(kPcAckWriteRegsV2), QStringLiteral("pc_ack")};
 
   if (!layout.isValid(err)) {

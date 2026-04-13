@@ -175,20 +175,21 @@ enum class PlcCommandCodeV2 : quint16 {
   Stop = 0x0008,
   ResetAlarm = 0x0010,
   HomeAll = 0x0010,
-  Pause = 120,
-  Resume = 121,
 
-  ContinueAfterIdCheck = 200,
-  RequestRescanIds = 201,
-  ContinueAfterNgConfirm = 202,
-  StartRetestCurrent = 203,
+  // 以下命令当前仍保留为扩展位；若 PLC 后续给出明确位图定义，再同步收敛。
+  Pause = 0x0020,
+  Resume = 0x0040,
+  ContinueAfterIdCheck = 0x0080,
+  RequestRescanIds = 0x0100,
+  ContinueAfterNgConfirm = 0x0200,
+  StartRetestCurrent = 0x0400,
 
-  GripperOpen = 300,
-  GripperClose = 301,
-  ClampScan = 302,
-  UnclampScan = 303,
-  ClampLen = 304,
-  UnclampLen = 305,
+  GripperOpen = 0x0800,
+  GripperClose = 0x1000,
+  ClampScan = 0x2000,
+  UnclampScan = 0x4000,
+  ClampLen = 0x8000,
+  UnclampLen = 0x8000,
 };
 
 struct PlcStatusBlockV2 {
