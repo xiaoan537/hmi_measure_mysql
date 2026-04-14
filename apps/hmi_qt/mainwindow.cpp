@@ -444,21 +444,22 @@ void MainWindow::setupDiagnosticsBindings() {
       if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode)));
       plcRuntime_->pollOnce();
     });
-    connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcPollOnce,
-            plcRuntime_.get(), &core::PlcRuntimeServiceV2::pollOnce);
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcReloadSlotIds,
-            this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) handlePlcRuntimeError(err); });
+            this, [this] {
+              core::PlcTrayPartIdBlockV2 tray; QString err;
+              if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) { handlePlcRuntimeError(err); return; }
+              QStringList lines;
+              lines << QStringLiteral("读取扫码ID成功：");
+              for (int i = 0; i < core::kLogicalSlotCount; ++i) {
+                const QString id = tray.part_ids[i].trimmed().isEmpty() ? QStringLiteral("NG") : tray.part_ids[i].trimmed();
+                lines << QStringLiteral("槽位%1: %2").arg(i + 1).arg(id);
+              }
+              if (manualMaintainWidget_) manualMaintainWidget_->appendLog(lines.join('\n'));
+            });
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
-    connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcContinueAfterIdCheck,
-            this, [this] { handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), QVariantMap{}); });
-    connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcRequestRescanIds,
-            this, [this] { handleUiCommandRequested(QStringLiteral("REQUEST_RESCAN_IDS"), QVariantMap{}); });
-    connect(manualMaintainWidget_, &ManualMaintainWidget::plcFlowModeChanged,
-            this, &MainWindow::onPlcFlowModeChanged);
-    manualMaintainWidget_->setPlcFlowMode(plcFlowMode_);
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcNamedCommand, this, &MainWindow::handleUiCommandRequested);
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestAxisCommand, this, [this](int axisIndex, const QString &action) {
       if (!plcRuntime_) return;
@@ -875,26 +876,11 @@ void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
       manualMaintainWidget_->appendLog(QStringLiteral("检测到新扫码结果"));
     }
     if (events.new_mailbox) {
-      manualMaintainWidget_->appendLog(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
-    }
-  }
-
-  if (!hasLastStatus_ || !plcRuntime_) {
-    return;
-  }
-
-  if (plcFlowMode_ >= static_cast<int>(PlcFlowModeUi::SemiAuto) &&
-      events.scan_ready &&
-      lastStatus_.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcIdCheck) &&
-      lastStatus_.scan_done != 0 && lastStatus_.scan_done != lastAutoContinueScanSeq_) {
-    handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), QVariantMap{});
-    lastAutoContinueScanSeq_ = lastStatus_.scan_done;
-    if (manualMaintainWidget_) {
-      manualMaintainWidget_->appendLog(QStringLiteral("自动继续流程：scan_done=%1")
-                                           .arg(lastStatus_.scan_done));
+      manualMaintainWidget_->appendLog(QStringLiteral("检测到新测量包，等待手动读取/ACK"));
     }
   }
 }
+
 
 void MainWindow::onPlcFlowModeChanged(int mode) {
   plcFlowMode_ = mode;
@@ -922,9 +908,6 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     if (manualMaintainWidget_) {
       manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
     }
-    if (manualMaintainWidget_) {
-      manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
-    }
     plcRuntime_->pollOnce();
     return;
   }
@@ -949,7 +932,6 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
 
   if (cmd == QStringLiteral("SET_MODE_MANUAL") || cmd == QStringLiteral("SET_MODE_AUTO")) {
     if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(plcMode)));
-    if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(plcMode)));
     plcRuntime_->pollOnce();
     return;
   }
@@ -962,9 +944,6 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (!plcRuntime_->sendCommand(command, &err)) {
     handlePlcRuntimeError(err);
     return;
-  }
-  if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3").arg(cmd).arg(plcMode).arg(command.category_mode));
   }
   if (manualMaintainWidget_) {
     manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3").arg(cmd).arg(plcMode).arg(command.category_mode));
@@ -996,19 +975,32 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
       handlePlcRuntimeError(err);
       return;
     }
-    if (manualMaintainWidget_) {
-      manualMaintainWidget_->appendLog(QStringLiteral("按第一阶段联调方式读取测量包：part=%1 item_count=%2")
-                                           .arg(QString(snapshot.part_type), QString::number(snapshot.item_count)));
+  } else {
+    if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+      handlePlcRuntimeError(err);
+      return;
     }
-    return;
-  }
-  if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
-    handlePlcRuntimeError(err);
-    return;
   }
   if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("按第二阶段地址读取测量包：part=%1 item_count=%2")
-                                         .arg(QString(snapshot.part_type), QString::number(snapshot.item_count)));
+    QStringList lines;
+    lines << QStringLiteral("读取测量包成功：part=%1 item_count=%2 meas_seq=%3")
+                 .arg(QString(snapshot.part_type))
+                 .arg(snapshot.item_count)
+                 .arg(snapshot.meas_seq);
+    for (const auto &item : snapshot.items) {
+      lines << QStringLiteral("item%1 槽位=%2 ID=%3 total=%4 AD=%5 BC=%6 点数=%7")
+                   .arg(item.item_index)
+                   .arg(item.slot_index >= 0 ? QString::number(item.slot_index + 1) : QStringLiteral("-"))
+                   .arg(item.part_id.isEmpty() ? QStringLiteral("NG") : item.part_id)
+                   .arg(item.total_len_mm, 0, 'f', 6)
+                   .arg(item.ad_len_mm, 0, 'f', 6)
+                   .arg(item.bc_len_mm, 0, 'f', 6)
+                   .arg(item.raw_points_um.size());
+      QStringList raw; raw.reserve(item.raw_points_um.size());
+      for (float v : item.raw_points_um) raw << QString::number(v, 'f', 6);
+      lines << QStringLiteral("item%1 raw=[%2]").arg(item.item_index).arg(raw.join(','));
+    }
+    manualMaintainWidget_->appendLog(lines.join('\n'));
   }
 }
 
@@ -1020,6 +1012,6 @@ void MainWindow::handleAckMailboxRequested() {
     return;
   }
   if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("手动写入 pc_ack=1"));
+    manualMaintainWidget_->appendLog(QStringLiteral("手动写入 pc_ack=1 到地址 %1").arg(plcRuntime_->config().plc.pc_ack_start_address));
   }
 }

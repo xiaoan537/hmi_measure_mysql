@@ -73,27 +73,27 @@ bool PlcAddressLayoutV2::isValid(QString *err) const {
     return false;
   }
 
-  if (status.reg_count != kStatusBlockRegsV2) {
+  if (status.reg_count != kStatusBlockRegsV25) {
     failWith(err, QStringLiteral("Status Block reg_count 应为 %1，当前为 %2")
-                      .arg(kStatusBlockRegsV2)
+                      .arg(kStatusBlockRegsV25)
                       .arg(status.reg_count));
     return false;
   }
-  if (tray.reg_count != kTrayPartIdBlockRegsV2) {
+  if (tray.reg_count != kTrayAllCodingRegsV25) {
     failWith(err, QStringLiteral("Tray Part-ID Block reg_count 应为 %1，当前为 %2")
-                      .arg(kTrayPartIdBlockRegsV2)
+                      .arg(kTrayAllCodingRegsV25)
                       .arg(tray.reg_count));
     return false;
   }
-  if (command.reg_count != kCommandBlockRegsV2) {
+  if (command.reg_count != kCommandBlockRegsV25) {
     failWith(err, QStringLiteral("Command Block reg_count 应为 %1，当前为 %2")
-                      .arg(kCommandBlockRegsV2)
+                      .arg(kCommandBlockRegsV25)
                       .arg(command.reg_count));
     return false;
   }
-  if (mailbox.reg_count != kMailboxTotalRegsV2) {
+  if (mailbox.reg_count != kMailboxTotalRegsV25) {
     failWith(err, QStringLiteral("Mailbox Block reg_count 应为 %1，当前为 %2")
-                      .arg(kMailboxTotalRegsV2)
+                      .arg(kMailboxTotalRegsV25)
                       .arg(mailbox.reg_count));
     return false;
   }

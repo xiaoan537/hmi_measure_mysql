@@ -79,47 +79,21 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
     });
   };
   addCmdBtn(QStringLiteral("初始化"), QStringLiteral("INITIALIZE"), 0, 0);
-  addCmdBtn(QStringLiteral("回零"), QStringLiteral("HOME_ALL"), 0, 1);
-  addCmdBtn(QStringLiteral("报警复位"), QStringLiteral("RESET_ALARM"), 0, 2);
-  addCmdBtn(QStringLiteral("开始测量"), QStringLiteral("START_AUTO"), 0, 3);
-  addCmdBtn(QStringLiteral("开始标定"), QStringLiteral("START_CALIBRATION"), 1, 0);
-  addCmdBtn(QStringLiteral("停止"), QStringLiteral("STOP"), 1, 1);
-  addCmdBtn(QStringLiteral("继续(ID核对通过)"), QStringLiteral("CONTINUE_AFTER_ID_CHECK"), 1, 2);
-  addCmdBtn(QStringLiteral("请求重扫"), QStringLiteral("REQUEST_RESCAN_IDS"), 1, 3);
-  addCmdBtn(QStringLiteral("NG后继续"), QStringLiteral("CONTINUE_AFTER_NG_CONFIRM"), 2, 0);
-  addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 2, 1);
+  addCmdBtn(QStringLiteral("报警复位"), QStringLiteral("RESET_ALARM"), 0, 1);
+  addCmdBtn(QStringLiteral("开始测量"), QStringLiteral("START_AUTO"), 0, 2);
+  addCmdBtn(QStringLiteral("开始标定"), QStringLiteral("START_CALIBRATION"), 0, 3);
+  addCmdBtn(QStringLiteral("停止"), QStringLiteral("STOP"), 1, 0);
+  addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 1, 1);
   manualLay->addLayout(cmdLay);
 
   auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), manualBox);
-  auto *flowLay = new QVBoxLayout(flowBox);
-
-  auto *flowModeLay = new QHBoxLayout();
-  flowModeLay->addWidget(new QLabel(QStringLiteral("流程模式："), flowBox));
-  plcFlowCombo_ = new QComboBox(flowBox);
-  plcFlowCombo_->addItem(QStringLiteral("手动（只监听，不自动推进）"), 0);
-  plcFlowCombo_->addItem(QStringLiteral("半自动（扫码后自动继续，不自动ACK）"), 1);
-  plcFlowCombo_->addItem(QStringLiteral("全自动（扫码后自动继续，读包后自动ACK）"), 2);
-  flowModeLay->addWidget(plcFlowCombo_, 1);
-  flowLay->addLayout(flowModeLay);
-
-  auto *flowBtnLay1 = new QHBoxLayout();
-  auto *btnPlcPoll = new QPushButton(QStringLiteral("轮询一拍"), flowBox);
+  auto *flowLay = new QHBoxLayout(flowBox);
   auto *btnPlcReloadIds = new QPushButton(QStringLiteral("读取扫码ID"), flowBox);
-  auto *btnPlcContinue = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), flowBox);
-  flowBtnLay1->addWidget(btnPlcPoll);
-  flowBtnLay1->addWidget(btnPlcReloadIds);
-  flowBtnLay1->addWidget(btnPlcContinue);
-  flowLay->addLayout(flowBtnLay1);
-
-  auto *flowBtnLay2 = new QHBoxLayout();
-  auto *btnPlcRescan = new QPushButton(QStringLiteral("请求重扫ID"), flowBox);
   auto *btnPlcReadMailbox = new QPushButton(QStringLiteral("读取测量包"), flowBox);
   auto *btnPlcAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), flowBox);
-  flowBtnLay2->addWidget(btnPlcRescan);
-  flowBtnLay2->addWidget(btnPlcReadMailbox);
-  flowBtnLay2->addWidget(btnPlcAck);
-  flowLay->addLayout(flowBtnLay2);
-
+  flowLay->addWidget(btnPlcReloadIds);
+  flowLay->addWidget(btnPlcReadMailbox);
+  flowLay->addWidget(btnPlcAck);
   manualLay->addWidget(flowBox);
 
   auto *axisBox = new QGroupBox(QStringLiteral("单轴维护"), manualBox);
@@ -229,14 +203,7 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   root->addWidget(logBox, 1);
 
   connect(btnWriteMode, &QPushButton::clicked, this, [this]() { emit requestSetPlcMode(selectedTargetMode()); });
-  connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
-    if (!plcFlowCombo_) return;
-    emit plcFlowModeChanged(plcFlowCombo_->itemData(index).toInt());
-  });
-  connect(btnPlcPoll, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcPollOnce);
   connect(btnPlcReloadIds, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReloadSlotIds);
-  connect(btnPlcContinue, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcContinueAfterIdCheck);
-  connect(btnPlcRescan, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcRequestRescanIds);
   connect(btnPlcReadMailbox, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReadMailbox);
   connect(btnPlcAck, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcAckMailbox);
 
@@ -294,16 +261,9 @@ int ManualMaintainWidget::selectedTargetMode() const {
   return targetModeCombo_ ? targetModeCombo_->currentData().toInt() : 1;
 }
 
-void ManualMaintainWidget::setPlcFlowMode(int mode) {
-  if (!plcFlowCombo_) return;
-  for (int i = 0; i < plcFlowCombo_->count(); ++i) {
-    if (plcFlowCombo_->itemData(i).toInt() == mode) {
-      const QSignalBlocker blocker(plcFlowCombo_);
-      plcFlowCombo_->setCurrentIndex(i);
-      break;
-    }
-  }
+void ManualMaintainWidget::setPlcFlowMode(int) {
 }
+
 
 void ManualMaintainWidget::setCurrentPlcMode(int mode) {
   if (lbCurrentMode_) lbCurrentMode_->setText(QStringLiteral("当前PLC模式：%1").arg(plcModeText(mode)));

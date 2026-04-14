@@ -13,6 +13,9 @@
 namespace core {
 namespace {
 
+constexpr quint16 kMaxHoldingReadRegsPerRequest = 120;
+constexpr int kMaxHoldingWriteRegsPerRequest = 120;
+
 void failWith(QString *err, const QString &message) {
   if (err) {
     *err = message;
@@ -266,10 +269,30 @@ bool QtModbusTcpRegisterClientV2::readHoldingRegisters(quint32 start_address,
     failWith(err, QStringLiteral("readHoldingRegisters.reg_count 必须 > 0"));
     return false;
   }
+  if (!out) {
+    failWith(err, QStringLiteral("readHoldingRegisters.out 不能为空"));
+    return false;
+  }
   if (!ensureConnected(err)) {
     return false;
   }
-  return waitForReadReply(start_address, reg_count, out, err);
+
+  QVector<quint16> regs;
+  regs.reserve(reg_count);
+  quint32 currentStart = start_address;
+  quint16 remaining = reg_count;
+  while (remaining > 0) {
+    const quint16 chunk = qMin<quint16>(remaining, kMaxHoldingReadRegsPerRequest);
+    QVector<quint16> chunkRegs;
+    if (!waitForReadReply(currentStart, chunk, &chunkRegs, err)) {
+      return false;
+    }
+    regs += chunkRegs;
+    currentStart += chunk;
+    remaining = static_cast<quint16>(remaining - chunk);
+  }
+  *out = regs;
+  return true;
 }
 
 bool QtModbusTcpRegisterClientV2::writeHoldingRegisters(quint32 start_address,
@@ -282,7 +305,19 @@ bool QtModbusTcpRegisterClientV2::writeHoldingRegisters(quint32 start_address,
   if (!ensureConnected(err)) {
     return false;
   }
-  return waitForWriteReply(start_address, values, err);
+
+  quint32 currentStart = start_address;
+  int offset = 0;
+  while (offset < values.size()) {
+    const int chunk = qMin(values.size() - offset, kMaxHoldingWriteRegsPerRequest);
+    QVector<quint16> part(values.begin() + offset, values.begin() + offset + chunk);
+    if (!waitForWriteReply(currentStart, part, err)) {
+      return false;
+    }
+    currentStart += static_cast<quint32>(chunk);
+    offset += chunk;
+  }
+  return true;
 }
 
 } // namespace core

@@ -47,7 +47,6 @@ private:
   QLabel *lbStep_ = nullptr;
   QLabel *lbCurrentMode_ = nullptr;
   QComboBox *targetModeCombo_ = nullptr;
-  QComboBox *plcFlowCombo_ = nullptr;
   QComboBox *cmdPartTypeCombo_ = nullptr;
   QComboBox *axisCombo_ = nullptr;
   QComboBox *cylCombo_ = nullptr;
