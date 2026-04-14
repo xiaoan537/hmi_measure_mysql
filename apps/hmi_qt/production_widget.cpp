@@ -29,6 +29,19 @@ inline QString shortId(const QString &id32)
     return id32.left(6) + QStringLiteral("…") + id32.right(3);
 }
 
+inline QString machineStateMaskText(quint16 mask)
+{
+    QStringList parts;
+    if (mask & (1u << 0)) parts << QStringLiteral("空闲");
+    if (mask & (1u << 1)) parts << QStringLiteral("自动");
+    if (mask & (1u << 2)) parts << QStringLiteral("手动");
+    if (mask & (1u << 3)) parts << QStringLiteral("暂停");
+    if (mask & (1u << 4)) parts << QStringLiteral("错误");
+    if (mask & (1u << 5)) parts << QStringLiteral("急停");
+    if (!parts.isEmpty()) return parts.join(QStringLiteral(" | "));
+    return QStringLiteral("状态(%1)").arg(mask);
+}
+
 SlotMeasureSummary toWidgetSummary(const core::ProductionSlotSummary &src)
 {
     SlotMeasureSummary out;
@@ -137,9 +150,11 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     statusTopLay->setContentsMargins(0, 0, 0, 0);
     statusTopLay->setSpacing(8);
     lbRuntimeMachine_ = makeTopTag(QStringLiteral("设备主状态：-"));
-    statusTopLay->addWidget(lbRuntimeMachine_, 1);
-    if (auto *topLayout = qobject_cast<QVBoxLayout*>(ui_->frameTop->layout())) {
-        topLayout->insertWidget(1, statusTopFrame);
+    lbRuntimeMachine_->setMinimumWidth(180);
+    statusTopLay->addWidget(lbRuntimeMachine_);
+    statusTopFrame->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    if (auto *topLayout = qobject_cast<QHBoxLayout*>(ui_->frameTop->layout())) {
+        topLayout->insertWidget(1, statusTopFrame, 0, Qt::AlignVCenter);
     }
 
     // 生产业务模式：普通 / 第二次 / 第三次 / 军检（仅 PC 侧业务语义）
@@ -562,13 +577,14 @@ void ProductionWidget::setPlcConnected(bool ok)
     ui_->lblConnPlc->style()->polish(ui_->lblConnPlc);
 }
 
-void ProductionWidget::setMachineState(quint16 /*machine_state*/, const QString &text)
+void ProductionWidget::setMachineState(quint16 machine_state, const QString &text)
 {
-    if (text.isEmpty()) return;
-    if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("设备主状态：%1").arg(text));
-    if (text == last_machine_state_text_) return;
-    last_machine_state_text_ = text;
-    ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(text));
+    const QString display = machine_state != 0 ? machineStateMaskText(machine_state)
+                                               : (text.isEmpty() ? QStringLiteral("-") : text);
+    if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("设备主状态：%1").arg(display));
+    if (display == last_machine_state_text_) return;
+    last_machine_state_text_ = display;
+    ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(display));
 }
 
 void ProductionWidget::setStepState(quint16 step_state)
