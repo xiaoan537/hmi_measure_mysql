@@ -8,6 +8,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace {
@@ -88,6 +89,38 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   addCmdBtn(QStringLiteral("NG后继续"), QStringLiteral("CONTINUE_AFTER_NG_CONFIRM"), 2, 0);
   addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 2, 1);
   manualLay->addLayout(cmdLay);
+
+  auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), manualBox);
+  auto *flowLay = new QVBoxLayout(flowBox);
+
+  auto *flowModeLay = new QHBoxLayout();
+  flowModeLay->addWidget(new QLabel(QStringLiteral("流程模式："), flowBox));
+  plcFlowCombo_ = new QComboBox(flowBox);
+  plcFlowCombo_->addItem(QStringLiteral("手动（只监听，不自动推进）"), 0);
+  plcFlowCombo_->addItem(QStringLiteral("半自动（扫码后自动继续，不自动ACK）"), 1);
+  plcFlowCombo_->addItem(QStringLiteral("全自动（扫码后自动继续，读包后自动ACK）"), 2);
+  flowModeLay->addWidget(plcFlowCombo_, 1);
+  flowLay->addLayout(flowModeLay);
+
+  auto *flowBtnLay1 = new QHBoxLayout();
+  auto *btnPlcPoll = new QPushButton(QStringLiteral("轮询一拍"), flowBox);
+  auto *btnPlcReloadIds = new QPushButton(QStringLiteral("读取扫码ID"), flowBox);
+  auto *btnPlcContinue = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), flowBox);
+  flowBtnLay1->addWidget(btnPlcPoll);
+  flowBtnLay1->addWidget(btnPlcReloadIds);
+  flowBtnLay1->addWidget(btnPlcContinue);
+  flowLay->addLayout(flowBtnLay1);
+
+  auto *flowBtnLay2 = new QHBoxLayout();
+  auto *btnPlcRescan = new QPushButton(QStringLiteral("请求重扫ID"), flowBox);
+  auto *btnPlcReadMailbox = new QPushButton(QStringLiteral("读取测量包"), flowBox);
+  auto *btnPlcAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), flowBox);
+  flowBtnLay2->addWidget(btnPlcRescan);
+  flowBtnLay2->addWidget(btnPlcReadMailbox);
+  flowBtnLay2->addWidget(btnPlcAck);
+  flowLay->addLayout(flowBtnLay2);
+
+  manualLay->addWidget(flowBox);
 
   auto *axisBox = new QGroupBox(QStringLiteral("单轴维护"), manualBox);
   auto *axisRoot = new QVBoxLayout(axisBox);
@@ -196,6 +229,16 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   root->addWidget(logBox, 1);
 
   connect(btnWriteMode, &QPushButton::clicked, this, [this]() { emit requestSetPlcMode(selectedTargetMode()); });
+  connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+    if (!plcFlowCombo_) return;
+    emit plcFlowModeChanged(plcFlowCombo_->itemData(index).toInt());
+  });
+  connect(btnPlcPoll, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcPollOnce);
+  connect(btnPlcReloadIds, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReloadSlotIds);
+  connect(btnPlcContinue, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcContinueAfterIdCheck);
+  connect(btnPlcRescan, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcRequestRescanIds);
+  connect(btnPlcReadMailbox, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReadMailbox);
+  connect(btnPlcAck, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcAckMailbox);
 
   auto emitAxis = [&](const QString &action) { emit requestAxisCommand(axisCombo_ ? axisCombo_->currentData().toInt() : 0, action); };
   connect(btnEnableOn, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("ENABLE_ON")); });
@@ -249,6 +292,17 @@ int ManualMaintainWidget::selectedPartType() const {
 
 int ManualMaintainWidget::selectedTargetMode() const {
   return targetModeCombo_ ? targetModeCombo_->currentData().toInt() : 1;
+}
+
+void ManualMaintainWidget::setPlcFlowMode(int mode) {
+  if (!plcFlowCombo_) return;
+  for (int i = 0; i < plcFlowCombo_->count(); ++i) {
+    if (plcFlowCombo_->itemData(i).toInt() == mode) {
+      const QSignalBlocker blocker(plcFlowCombo_);
+      plcFlowCombo_->setCurrentIndex(i);
+      break;
+    }
+  }
 }
 
 void ManualMaintainWidget::setCurrentPlcMode(int mode) {

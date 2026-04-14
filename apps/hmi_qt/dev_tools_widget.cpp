@@ -67,49 +67,6 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   connect(ui_->btnClearLog, &QPushButton::clicked, this,
           &DevToolsWidget::onClearLog);
 
-  auto *plcBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), this);
-  auto *plcLay = new QVBoxLayout(plcBox);
-
-  auto *modeLay = new QHBoxLayout();
-  modeLay->addWidget(new QLabel(QStringLiteral("流程模式："), plcBox));
-  plcFlowCombo_ = new QComboBox(plcBox);
-  plcFlowCombo_->addItem(QStringLiteral("手动（只监听，不自动推进）"), static_cast<int>(PlcFlowModeUi::Manual));
-  plcFlowCombo_->addItem(QStringLiteral("半自动（扫码后自动继续，不自动ACK）"), static_cast<int>(PlcFlowModeUi::SemiAuto));
-  plcFlowCombo_->addItem(QStringLiteral("全自动（扫码后自动继续，读包后自动ACK）"), static_cast<int>(PlcFlowModeUi::FullAuto));
-  modeLay->addWidget(plcFlowCombo_, 1);
-  plcLay->addLayout(modeLay);
-
-  auto *summaryLay = new QHBoxLayout();
-  lbPlcConn_ = new QLabel(QStringLiteral("连接：-"), plcBox);
-  lbPlcMachine_ = new QLabel(QStringLiteral("机器：-"), plcBox);
-  lbPlcStep_ = new QLabel(QStringLiteral("步骤：-"), plcBox);
-  lbPlcSeq_ = new QLabel(QStringLiteral("seq(scan/meas)：-/-"), plcBox);
-  summaryLay->addWidget(lbPlcConn_);
-  summaryLay->addWidget(lbPlcMachine_);
-  summaryLay->addWidget(lbPlcStep_);
-  summaryLay->addWidget(lbPlcSeq_, 1);
-  plcLay->addLayout(summaryLay);
-
-  auto *btnLay1 = new QHBoxLayout();
-  btnPlcPoll_ = new QPushButton(QStringLiteral("轮询一拍"), plcBox);
-  btnPlcReloadIds_ = new QPushButton(QStringLiteral("读取扫码ID"), plcBox);
-  btnPlcContinue_ = new QPushButton(QStringLiteral("继续流程(ID核对通过)"), plcBox);
-  btnLay1->addWidget(btnPlcPoll_);
-  btnLay1->addWidget(btnPlcReloadIds_);
-  btnLay1->addWidget(btnPlcContinue_);
-  plcLay->addLayout(btnLay1);
-
-  auto *btnLay2 = new QHBoxLayout();
-  btnPlcRescan_ = new QPushButton(QStringLiteral("请求重扫ID"), plcBox);
-  btnPlcReadMailbox_ = new QPushButton(QStringLiteral("读取测量包"), plcBox);
-  btnPlcAck_ = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), plcBox);
-  btnLay2->addWidget(btnPlcRescan_);
-  btnLay2->addWidget(btnPlcReadMailbox_);
-  btnLay2->addWidget(btnPlcAck_);
-  plcLay->addLayout(btnLay2);
-
-  ui_->verticalLayout->insertWidget(0, plcBox);
-
   auto *algoBox = new QGroupBox(QStringLiteral("算法调试 / 几何回放"), this);
   auto *algoLay = new QVBoxLayout(algoBox);
 
@@ -192,7 +149,7 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   seriesLay->addWidget(makeSeriesColumn(QStringLiteral("外径/外壁输入 m_out"), &teAlgoOuterRaw_, &teAlgoOuterValid_), 1);
   algoLay->addLayout(seriesLay);
 
-  ui_->verticalLayout->insertWidget(1, algoBox);
+  ui_->verticalLayout->insertWidget(0, algoBox);
 
   auto *runoutBox = new QGroupBox(QStringLiteral("跳动算法调试 / 回放"), this);
   auto *runoutLay = new QVBoxLayout(runoutBox);
@@ -243,7 +200,7 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   runoutSeriesLay->addWidget(runoutSeriesBox, 1);
   runoutLay->addLayout(runoutSeriesLay);
 
-  ui_->verticalLayout->insertWidget(2, runoutBox);
+  ui_->verticalLayout->insertWidget(1, runoutBox);
 
   connect(btnRunoutFillExample_, &QPushButton::clicked, this, &DevToolsWidget::onFillRunoutExample);
   connect(btnRunoutRun_, &QPushButton::clicked, this, &DevToolsWidget::onRunRunoutFromInput);
