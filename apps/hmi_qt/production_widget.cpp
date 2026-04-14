@@ -136,12 +136,8 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     auto *statusTopLay = new QHBoxLayout(statusTopFrame);
     statusTopLay->setContentsMargins(0, 0, 0, 0);
     statusTopLay->setSpacing(8);
-    lbRuntimeConn_ = makeTopTag(QStringLiteral("连接：-"));
-    lbRuntimeMachine_ = makeTopTag(QStringLiteral("机器：-"));
-    lbRuntimeMode_ = makeTopTag(QStringLiteral("当前PLC模式：-"));
-    statusTopLay->addWidget(lbRuntimeConn_);
-    statusTopLay->addWidget(lbRuntimeMachine_);
-    statusTopLay->addWidget(lbRuntimeMode_, 1);
+    lbRuntimeMachine_ = makeTopTag(QStringLiteral("设备主状态：-"));
+    statusTopLay->addWidget(lbRuntimeMachine_, 1);
     if (auto *topLayout = qobject_cast<QVBoxLayout*>(ui_->frameTop->layout())) {
         topLayout->insertWidget(1, statusTopFrame);
     }
@@ -523,9 +519,8 @@ int ProductionWidget::selectedPlcModeValue() const
     return plcModeCombo_ ? plcModeCombo_->currentData().toInt() : 1;
 }
 
-void ProductionWidget::setCurrentPlcMode(int mode)
+void ProductionWidget::setCurrentPlcMode(int /*mode*/)
 {
-    if (lbRuntimeMode_) lbRuntimeMode_->setText(QStringLiteral("当前PLC模式：%1").arg(mode == 1 ? QStringLiteral("手动") : mode == 2 ? QStringLiteral("自动") : mode == 3 ? QStringLiteral("单步") : QStringLiteral("模式(%1)").arg(mode)));
 }
 
 QString ProductionWidget::measureModeText() const
@@ -565,13 +560,12 @@ void ProductionWidget::setPlcConnected(bool ok)
     ui_->lblConnPlc->setProperty("connState", ok ? 1 : 0);
     ui_->lblConnPlc->style()->unpolish(ui_->lblConnPlc);
     ui_->lblConnPlc->style()->polish(ui_->lblConnPlc);
-    if (lbRuntimeConn_) lbRuntimeConn_->setText(QStringLiteral("连接：%1").arg(ok ? QStringLiteral("已连接") : QStringLiteral("未连接")));
 }
 
 void ProductionWidget::setMachineState(quint16 /*machine_state*/, const QString &text)
 {
     if (text.isEmpty()) return;
-    if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("机器：%1").arg(text));
+    if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("设备主状态：%1").arg(text));
     if (text == last_machine_state_text_) return;
     last_machine_state_text_ = text;
     ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(text));

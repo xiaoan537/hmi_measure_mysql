@@ -797,7 +797,8 @@ void MainWindow::refreshManualMaintainLiveStatus() {
     return true;
   };
   if (!readCyl(plcRuntime_->config().plc.lm_sta_start_address * 2u, QStringLiteral("抓料气缸"))) { handlePlcRuntimeError(err); return; }
-  for (int i = 0; i < 3; ++i) { if (!readCyl(clStaMbAddress(i), QStringLiteral("CL%1").arg(i + 1))) { handlePlcRuntimeError(err); return; } }
+  const QStringList clNames = {QStringLiteral("内外径夹持"), QStringLiteral("跳动夹持"), QStringLiteral("长度夹持")};
+  for (int i = 0; i < 3; ++i) { if (!readCyl(clStaMbAddress(i), clNames.value(i))) { handlePlcRuntimeError(err); return; } }
   for (int i = 0; i < 4; ++i) { if (!readCyl(gt2StaMbAddress(i), QStringLiteral("GT2_%1").arg(i + 1))) { handlePlcRuntimeError(err); return; } }
   manualMaintainWidget_->setCylinderStatesText(cylLines.join('\n'));
 }
