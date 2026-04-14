@@ -531,7 +531,7 @@ void MainWindow::setupBusinessPageBindings() {
     connect(productionWidget_, &ProductionWidget::requestReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(productionWidget_, &ProductionWidget::requestReloadSlotIds,
-            this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) handlePlcRuntimeError(err); });
+            this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("已读取16个槽位扫码ID")); });
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
     connect(productionWidget_, &ProductionWidget::requestContinueAfterIdCheck,
@@ -805,6 +805,11 @@ void MainWindow::refreshManualMaintainLiveStatus() {
 void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
   if (productionWidget_) {
     productionWidget_->setScannedPartIds(trayToVector(tray));
+    productionWidget_->appendPlcLogMessage(QStringLiteral("读取扫码ID成功："));
+    for (int i = 0; i < core::kLogicalSlotCount; ++i) {
+      const QString id = tray.part_ids[i].trimmed().isEmpty() ? QStringLiteral("NG") : tray.part_ids[i].trimmed();
+      productionWidget_->appendPlcLogMessage(QStringLiteral("  槽位%1：%2").arg(i + 1).arg(id));
+    }
   }
 }
 
@@ -868,20 +873,20 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
     }
   }
 
-  if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("Mailbox 已解析：part=%1 slot0=%2 slot1=%3")
-                                         .arg(mailboxPartTypeText(snapshot), slot0, slot1));
+  if (productionWidget_) {
+    productionWidget_->appendPlcLogMessage(QStringLiteral("Mailbox 已解析：part=%1 slot0=%2 slot1=%3")
+                                               .arg(mailboxPartTypeText(snapshot), slot0, slot1));
   }
 
 }
 
 void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
-  if (manualMaintainWidget_) {
+  if (productionWidget_) {
     if (events.scan_ready) {
-      manualMaintainWidget_->appendLog(QStringLiteral("检测到新扫码结果"));
+      productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新扫码结果"));
     }
     if (events.new_mailbox) {
-      manualMaintainWidget_->appendLog(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
+      productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
     }
   }
 
@@ -1002,34 +1007,34 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
     }
   }
 
-  if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
-                                         .arg(QString(snapshot.part_type))
-                                         .arg(snapshot.item_count));
+  if (productionWidget_) {
+    productionWidget_->appendPlcLogMessage(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
+                                               .arg(QString(snapshot.part_type))
+                                               .arg(snapshot.item_count));
     for (const auto &item : snapshot.items) {
       const QString slotText = item.slot_index >= 0 ? QString::number(item.slot_index + 1) : QStringLiteral("-");
       const QString idText = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
       if (snapshot.part_type == QChar('A')) {
-        manualMaintainWidget_->appendLog(QStringLiteral("  item%1 slot=%2 id=%3 total=%4 raw_points=%5")
-                                             .arg(item.item_index)
-                                             .arg(slotText)
-                                             .arg(idText)
-                                             .arg(item.total_len_mm, 0, 'f', 6)
-                                             .arg(item.raw_points_um.size()));
+        productionWidget_->appendPlcLogMessage(QStringLiteral("  item%1 slot=%2 id=%3 总长=%4 原始点数=%5")
+                                                   .arg(item.item_index)
+                                                   .arg(slotText)
+                                                   .arg(idText)
+                                                   .arg(item.total_len_mm, 0, 'f', 6)
+                                                   .arg(item.raw_points_um.size()));
       } else {
-        manualMaintainWidget_->appendLog(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 raw_points=%6")
-                                             .arg(item.item_index)
-                                             .arg(slotText)
-                                             .arg(idText)
-                                             .arg(item.ad_len_mm, 0, 'f', 6)
-                                             .arg(item.bc_len_mm, 0, 'f', 6)
-                                             .arg(item.raw_points_um.size()));
+        productionWidget_->appendPlcLogMessage(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 原始点数=%6")
+                                                   .arg(item.item_index)
+                                                   .arg(slotText)
+                                                   .arg(idText)
+                                                   .arg(item.ad_len_mm, 0, 'f', 6)
+                                                   .arg(item.bc_len_mm, 0, 'f', 6)
+                                                   .arg(item.raw_points_um.size()));
       }
       if (!item.raw_points_um.isEmpty()) {
         QStringList vals;
         vals.reserve(item.raw_points_um.size());
         for (float v : item.raw_points_um) vals << QString::number(v, 'f', 6);
-        manualMaintainWidget_->appendLog(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
+        productionWidget_->appendPlcLogMessage(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
       }
     }
   }
@@ -1043,7 +1048,7 @@ void MainWindow::handleAckMailboxRequested() {
     handlePlcRuntimeError(err);
     return;
   }
-  if (manualMaintainWidget_) {
-    manualMaintainWidget_->appendLog(QStringLiteral("手动写入 pc_ack=1"));
+  if (productionWidget_) {
+    productionWidget_->appendPlcLogMessage(QStringLiteral("手动写入 pc_ack=1"));
   }
 }

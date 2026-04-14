@@ -111,13 +111,40 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->btnDevDemo->hide();
     ui_->btnOpenLastRaw->setMinimumHeight(32);
     ui_->btnWriteSlotIds->setMinimumHeight(32);
+    ui_->btnModeAuto->hide();
+    ui_->btnModeManual->hide();
+    ui_->btnHomeAll->hide();
+    ui_->btnStart->hide();
+    ui_->btnPause->hide();
+    ui_->btnResume->hide();
+    ui_->btnStop->hide();
 
     auto *btnReconnectPlc = new QPushButton(QStringLiteral("重连PLC"), this);
     btnReconnectPlc->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btnReconnectPlc->setMinimumHeight(30);
     if (auto *hlConn = ui_->frameTop->findChild<QHBoxLayout*>(QStringLiteral("hlConn"))) {
         hlConn->addWidget(btnReconnectPlc);
     }
     connect(btnReconnectPlc, &QPushButton::clicked, this, [this]{ emit requestReconnectPlc(); });
+
+    auto makeTopTag = [this](const QString &text) {
+        auto *lb = new QLabel(text, this);
+        lb->setStyleSheet(QStringLiteral("QLabel{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-weight:600;}"));
+        return lb;
+    };
+    auto *statusTopFrame = new QFrame(this);
+    auto *statusTopLay = new QHBoxLayout(statusTopFrame);
+    statusTopLay->setContentsMargins(0, 0, 0, 0);
+    statusTopLay->setSpacing(8);
+    lbRuntimeConn_ = makeTopTag(QStringLiteral("连接：-"));
+    lbRuntimeMachine_ = makeTopTag(QStringLiteral("机器：-"));
+    lbRuntimeMode_ = makeTopTag(QStringLiteral("当前PLC模式：-"));
+    statusTopLay->addWidget(lbRuntimeConn_);
+    statusTopLay->addWidget(lbRuntimeMachine_);
+    statusTopLay->addWidget(lbRuntimeMode_, 1);
+    if (auto *topLayout = qobject_cast<QVBoxLayout*>(ui_->frameTop->layout())) {
+        topLayout->insertWidget(1, statusTopFrame);
+    }
 
     // 生产业务模式：普通 / 第二次 / 第三次 / 军检（仅 PC 侧业务语义）
     measureModeCombo_ = new QComboBox(this);
@@ -147,31 +174,12 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
             delete item;
         }
 
-        auto makeTag = [this](const QString &text) {
-            auto *lb = new QLabel(text, this);
-            lb->setStyleSheet(QStringLiteral("QLabel{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-weight:600;}"));
-            return lb;
-        };
         auto makeCmdBtn = [this](const QString &text) {
             auto *btn = new QPushButton(text, this);
-            btn->setMinimumSize(92, 34);
-            btn->setMaximumHeight(36);
+            btn->setMinimumSize(96, 34);
+            btn->setMaximumSize(160, 36);
             return btn;
         };
-
-        auto *statusFrame = new QFrame(this);
-        auto *statusLay = new QHBoxLayout(statusFrame);
-        statusLay->setContentsMargins(0,0,0,0);
-        statusLay->setSpacing(8);
-        lbRuntimeConn_ = makeTag(QStringLiteral("连接：-"));
-        lbRuntimeMachine_ = makeTag(QStringLiteral("机器：-"));
-        lbRuntimeStep_ = makeTag(QStringLiteral("步骤：-"));
-        lbRuntimeMode_ = makeTag(QStringLiteral("当前PLC模式：-"));
-        statusLay->addWidget(lbRuntimeConn_);
-        statusLay->addWidget(lbRuntimeMachine_);
-        statusLay->addWidget(lbRuntimeStep_);
-        statusLay->addWidget(lbRuntimeMode_, 1);
-        vlRun->addWidget(statusFrame);
 
         auto *selectRow = new QHBoxLayout();
         selectRow->setSpacing(8);
@@ -204,20 +212,19 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         vlRun->addLayout(cmdGrid);
 
         auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), this);
-        auto *flowLay = new QHBoxLayout(flowBox);
+        auto *flowLay = new QGridLayout(flowBox);
+        flowLay->setHorizontalSpacing(8);
+        flowLay->setVerticalSpacing(8);
         auto *btnReadIds = makeCmdBtn(QStringLiteral("读取扫码ID"));
         auto *btnContinue = makeCmdBtn(QStringLiteral("继续(ID核对通过)"));
         auto *btnReadMb = makeCmdBtn(QStringLiteral("读取测量包"));
-        auto *btnAck = makeCmdBtn(QStringLiteral("写ACK(pc_ack)"));
-        btnContinue->setMinimumWidth(132);
-        btnReadIds->setMinimumWidth(110);
-        btnReadMb->setMinimumWidth(110);
-        btnAck->setMinimumWidth(110);
-        flowLay->addWidget(btnReadIds);
-        flowLay->addWidget(btnContinue);
-        flowLay->addWidget(btnReadMb);
-        flowLay->addWidget(btnAck);
-        flowLay->addStretch(1);
+        auto *btnAck = makeCmdBtn(QStringLiteral("写ACK"));
+        btnContinue->setMinimumWidth(144);
+        flowLay->addWidget(btnReadIds, 0, 0);
+        flowLay->addWidget(btnContinue, 0, 1);
+        flowLay->addWidget(btnReadMb, 1, 0);
+        flowLay->addWidget(btnAck, 1, 1);
+        flowLay->setColumnStretch(2, 1);
         vlRun->addWidget(flowBox);
 
         connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestSetPlcMode(selectedPlcModeValue()); });
@@ -234,7 +241,6 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         connect(btnAck, &QPushButton::clicked, this, &ProductionWidget::requestAckMailbox);
     }
 
-    ui_->btnResetAlarm->hide();
     connect(ui_->btnWriteSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnWriteSlotIds);
     connect(ui_->btnDevDemo, &QPushButton::clicked, this, &ProductionWidget::onBtnDevDemo);
 
@@ -576,7 +582,6 @@ void ProductionWidget::setStepState(quint16 step_state)
     step_state_ = step_state;
     const QString txt = stepText(step_state);
     ui_->lblStepBig->setText(txt);
-    if (lbRuntimeStep_) lbRuntimeStep_->setText(QStringLiteral("步骤：%1").arg(txt));
     updateSlotEditability();
 }
 

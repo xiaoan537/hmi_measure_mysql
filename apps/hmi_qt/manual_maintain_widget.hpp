@@ -7,6 +7,7 @@ class QLabel;
 class QComboBox;
 class QDoubleSpinBox;
 class QPlainTextEdit;
+class QTableWidget;
 
 class ManualMaintainWidget : public QWidget {
   Q_OBJECT
@@ -50,7 +51,7 @@ private:
   QDoubleSpinBox *spDec_ = nullptr;
   QDoubleSpinBox *spPos_ = nullptr;
   QDoubleSpinBox *spVel_ = nullptr;
-  QPlainTextEdit *axisStateEdit_ = nullptr;
-  QPlainTextEdit *cylStateEdit_ = nullptr;
+  QTableWidget *axisStateTable_ = nullptr;
+  QTableWidget *cylStateTable_ = nullptr;
   QPlainTextEdit *logEdit_ = nullptr;
 };
