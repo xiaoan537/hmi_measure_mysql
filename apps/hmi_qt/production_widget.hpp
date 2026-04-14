@@ -101,7 +101,9 @@ public:
 
     QString selectedPartTypeText() const;
     quint32 selectedPartTypeArg() const;
+    int selectedPlcModeValue() const;
     void appendPlcLogMessage(const QString &text);
+    void setCurrentPlcMode(int mode);
 
 signals:
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
@@ -112,6 +114,9 @@ signals:
     void requestReadMailbox();
     void requestAckMailbox();
     void requestReconnectPlc();
+    void requestSetPlcMode(int mode);
+    void requestWriteCategoryMode(int partTypeArg);
+    void requestContinueAfterIdCheck();
 
 private slots:
     void onBtnWriteSlotIds();
@@ -160,6 +165,11 @@ private:
     QString mb_part_id0_;
     QString mb_part_id1_;
 
+    class QLabel *lbRuntimeConn_ = nullptr;
+    class QLabel *lbRuntimeMachine_ = nullptr;
+    class QLabel *lbRuntimeStep_ = nullptr;
+    class QLabel *lbRuntimeMode_ = nullptr;
     class QComboBox *measureModeCombo_ = nullptr;
     class QComboBox *partTypeCombo_ = nullptr;
+    class QComboBox *plcModeCombo_ = nullptr;
 };

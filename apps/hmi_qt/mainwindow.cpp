@@ -294,8 +294,13 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
        QStringLiteral("MES上传"), QStringLiteral("设置"),
        QStringLiteral("报警/事件"), QStringLiteral("诊断"),
        QStringLiteral("RAW查看"), QStringLiteral("开发调试"),
-       QStringLiteral("手动(待做)"), QStringLiteral("报表(待做)"),
+       QStringLiteral("手动/维护"), QStringLiteral("报表(待做)"),
        QStringLiteral("用户权限(待做)")});
+  ui_->navList->setIconSize(QSize(18,18));
+  ui_->navList->setSpacing(6);
+  ui_->navList->setStyleSheet(QStringLiteral("QListWidget{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:8px;} QListWidget::item{padding:10px 12px;border-radius:10px;font-weight:600;} QListWidget::item:selected{background:#dbeafe;color:#111827;} QListWidget::item:hover{background:#eff6ff;}"));
+  const QList<QStyle::StandardPixmap> navIcons = {QStyle::SP_DesktopIcon, QStyle::SP_FileDialogDetailedView, QStyle::SP_DirIcon, QStyle::SP_DialogSaveButton, QStyle::SP_FileDialogContentsView, QStyle::SP_MessageBoxWarning, QStyle::SP_MessageBoxInformation, QStyle::SP_DriveHDIcon, QStyle::SP_ComputerIcon, QStyle::SP_ToolBarHorizontalExtensionButton, QStyle::SP_FileDialogListView, QStyle::SP_DialogOpenButton};
+  for (int i = 0; i < ui_->navList->count() && i < navIcons.size(); ++i) { ui_->navList->item(i)->setIcon(style()->standardIcon(navIcons.at(i))); }
 
   productionWidget_ = new ProductionWidget(cfg, ui_->stackedWidget);
   calibrationWidget_ = new CalibrationWidget(cfg, ui_->stackedWidget);
@@ -529,6 +534,12 @@ void MainWindow::setupBusinessPageBindings() {
             this, [this] { core::PlcTrayPartIdBlockV2 tray; QString err; if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) handlePlcRuntimeError(err); });
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
+    connect(productionWidget_, &ProductionWidget::requestContinueAfterIdCheck,
+            this, [this]{ handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), {}); });
+    connect(productionWidget_, &ProductionWidget::requestSetPlcMode,
+            this, [this](int mode){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode))); plcRuntime_->pollOnce(); });
+    connect(productionWidget_, &ProductionWidget::requestWriteCategoryMode,
+            this, [this](int partTypeArg){ if (!plcRuntime_) return; const quint32 start = plcRuntime_->config().plc.command_start_address; if (start == 0) { handlePlcRuntimeError(QStringLiteral("Command Block 地址尚未配置")); return; } QString err; if (!plcRuntime_->writeHoldingRegistersRaw(start, QVector<quint16>{static_cast<quint16>(partTypeArg)}, &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写工件类型到 PLC：%1").arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型"))); });
     connect(productionWidget_, &ProductionWidget::requestWriteSlotIds,
             this, &MainWindow::handleWriteTrayPartIdsRequested);
     connect(productionWidget_, &ProductionWidget::uiCommandRequested,
@@ -644,6 +655,7 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
   updatePlcStatusLabel();
   if (productionWidget_) {
     productionWidget_->setPlcConnected(stats.connected);
+    if (hasLastStatus_) productionWidget_->setCurrentPlcMode(lastStatus_.control_mode);
   }
   if (calibrationWidget_) {
     calibrationWidget_->setPlcConnected(stats.connected);
@@ -696,6 +708,7 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
     productionWidget_->setInterlockMask(status.interlock_mask);
     productionWidget_->setTrayPresentMask(status.tray_present_mask);
     productionWidget_->setCalibrationMode(isCalibrationStep(status.step_state));
+    productionWidget_->setCurrentPlcMode(status.control_mode);
 
     for (int slot = 0; slot < core::kLogicalSlotCount; ++slot) {
       const bool present = ((status.tray_present_mask >> slot) & 0x1u) != 0;

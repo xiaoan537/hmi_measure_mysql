@@ -48,60 +48,9 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
 
   auto *manualBox = new QGroupBox(QStringLiteral("手动控制 / 维护"), this);
   auto *manualLay = new QVBoxLayout(manualBox);
-
-  auto *modeRow = new QHBoxLayout();
-  modeRow->addWidget(new QLabel(QStringLiteral("目标PLC模式："), manualBox));
-  targetModeCombo_ = new QComboBox(manualBox);
-  targetModeCombo_->addItem(QStringLiteral("手动"), 1);
-  targetModeCombo_->addItem(QStringLiteral("自动"), 2);
-  targetModeCombo_->addItem(QStringLiteral("单步"), 3);
-  auto *btnWriteMode = new QPushButton(QStringLiteral("写入模式"), manualBox);
-  modeRow->addWidget(targetModeCombo_);
-  modeRow->addWidget(btnWriteMode);
-  modeRow->addSpacing(12);
-  modeRow->addWidget(new QLabel(QStringLiteral("工件类型："), manualBox));
-  cmdPartTypeCombo_ = new QComboBox(manualBox);
-  cmdPartTypeCombo_->addItem(QStringLiteral("B型"), 1);
-  cmdPartTypeCombo_->addItem(QStringLiteral("A型"), 2);
-  modeRow->addWidget(cmdPartTypeCombo_);
-  modeRow->addStretch(1);
-  manualLay->addLayout(modeRow);
-
-  auto *cmdLay = new QGridLayout();
-  auto addCmdBtn = [&](const QString &textLabel, const QString &cmdName, int row, int col) {
-    auto *btn = new QPushButton(textLabel, manualBox);
-    cmdLay->addWidget(btn, row, col);
-    connect(btn, &QPushButton::clicked, this, [this, cmdName]() {
-      QVariantMap args;
-      args.insert(QStringLiteral("plc_mode"), selectedTargetMode());
-      args.insert(QStringLiteral("part_type_arg"), selectedPartType());
-      emit requestPlcNamedCommand(cmdName, args);
-    });
-  };
-  addCmdBtn(QStringLiteral("初始化"), QStringLiteral("INITIALIZE"), 0, 0);
-  addCmdBtn(QStringLiteral("报警复位"), QStringLiteral("RESET_ALARM"), 0, 2);
-  addCmdBtn(QStringLiteral("开始测量"), QStringLiteral("START_AUTO"), 0, 3);
-  addCmdBtn(QStringLiteral("开始标定"), QStringLiteral("START_CALIBRATION"), 1, 0);
-  addCmdBtn(QStringLiteral("停止"), QStringLiteral("STOP"), 1, 1);
-  addCmdBtn(QStringLiteral("继续(ID核对通过)"), QStringLiteral("CONTINUE_AFTER_ID_CHECK"), 1, 2);
-  addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 2, 1);
-  manualLay->addLayout(cmdLay);
-
-  auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), manualBox);
-  auto *flowLay = new QVBoxLayout(flowBox);
-
-  auto *flowBtnLay1 = new QHBoxLayout();
-  auto *btnPlcReloadIds = new QPushButton(QStringLiteral("读取扫码ID"), flowBox);
-  auto *btnPlcContinue = new QPushButton(QStringLiteral("继续(ID核对通过)"), flowBox);
-  auto *btnPlcReadMailbox = new QPushButton(QStringLiteral("读取测量包"), flowBox);
-  auto *btnPlcAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), flowBox);
-  flowBtnLay1->addWidget(btnPlcReloadIds);
-  flowBtnLay1->addWidget(btnPlcContinue);
-  flowBtnLay1->addWidget(btnPlcReadMailbox);
-  flowBtnLay1->addWidget(btnPlcAck);
-  flowLay->addLayout(flowBtnLay1);
-
-  manualLay->addWidget(flowBox);
+  auto *manualTip = new QLabel(QStringLiteral("生产流程命令、模式选择、A/B型选择与PLC联调按钮已迁移到生产页；本页保留轴/气缸维护和实时状态。"), manualBox);
+  manualTip->setWordWrap(true);
+  manualLay->addWidget(manualTip);
 
   auto *axisBox = new QGroupBox(QStringLiteral("单轴维护"), manualBox);
   auto *axisRoot = new QVBoxLayout(axisBox);
@@ -207,11 +156,6 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   logLay->addWidget(logEdit_);
   root->addWidget(logBox, 1);
 
-  connect(btnWriteMode, &QPushButton::clicked, this, [this]() { emit requestSetPlcMode(selectedTargetMode()); });
-  connect(btnPlcReloadIds, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReloadSlotIds);
-  connect(btnPlcContinue, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcContinueAfterIdCheck);
-  connect(btnPlcReadMailbox, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReadMailbox);
-  connect(btnPlcAck, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcAckMailbox);
 
   auto emitAxis = [&](const QString &action) { emit requestAxisCommand(axisCombo_ ? axisCombo_->currentData().toInt() : 0, action); };
   connect(btnEnableOn, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("ENABLE_ON")); });
@@ -259,11 +203,11 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
 }
 
 int ManualMaintainWidget::selectedPartType() const {
-  return cmdPartTypeCombo_ ? cmdPartTypeCombo_->currentData().toInt() : 2;
+  return 2;
 }
 
 int ManualMaintainWidget::selectedTargetMode() const {
-  return targetModeCombo_ ? targetModeCombo_->currentData().toInt() : 1;
+  return 1;
 }
 
 

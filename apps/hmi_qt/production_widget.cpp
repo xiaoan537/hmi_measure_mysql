@@ -79,9 +79,6 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblPart1Caption->setText(QStringLiteral("测量包预览"));
     ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
     ui_->btnWriteSlotIds->setText(QStringLiteral("写回工件ID"));
-    ui_->btnReloadSlotIds->hide();
-    ui_->btnReadMailbox->hide();
-    ui_->btnAckMailbox->hide();
 
     // 连接状态灯（用样式表）
     setStyleSheet(R"(
@@ -108,6 +105,13 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblConnDb->setProperty("connState", 0);
     ui_->lblConnMes->setProperty("connState", 0);
 
+    ui_->groupRun->setTitle(QStringLiteral("生产控制 / 自动流程"));
+    ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
+    ui_->groupDataOps->hide();
+    ui_->btnDevDemo->hide();
+    ui_->btnOpenLastRaw->setMinimumHeight(32);
+    ui_->btnWriteSlotIds->setMinimumHeight(32);
+
     auto *btnReconnectPlc = new QPushButton(QStringLiteral("重连PLC"), this);
     btnReconnectPlc->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     if (auto *hlConn = ui_->frameTop->findChild<QHBoxLayout*>(QStringLiteral("hlConn"))) {
@@ -122,63 +126,116 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     measureModeCombo_->addItem(QStringLiteral("第三次测量"), static_cast<int>(ProductionMeasureMode::Third));
     measureModeCombo_->addItem(QStringLiteral("军检"), static_cast<int>(ProductionMeasureMode::Mil));
     partTypeCombo_ = new QComboBox(this);
-    partTypeCombo_->addItem(QStringLiteral("B 型"), QStringLiteral("B"));
-    partTypeCombo_->addItem(QStringLiteral("A 型"), QStringLiteral("A"));
-    if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
-        auto *typeRow = new QHBoxLayout();
-        auto *lbType = new QLabel(QStringLiteral("工件类型"), this);
-        typeRow->addWidget(lbType);
-        typeRow->addWidget(partTypeCombo_, 1);
-        vlRun->insertLayout(1, typeRow);
+    partTypeCombo_->addItem(QStringLiteral("B型"), QStringLiteral("B"));
+    partTypeCombo_->addItem(QStringLiteral("A型"), QStringLiteral("A"));
+    plcModeCombo_ = new QComboBox(this);
+    plcModeCombo_->addItem(QStringLiteral("手动"), 1);
+    plcModeCombo_->addItem(QStringLiteral("自动"), 2);
+    plcModeCombo_->addItem(QStringLiteral("单步"), 3);
 
-        auto *modeRow = new QHBoxLayout();
-        auto *lbMode = new QLabel(QStringLiteral("业务模式"), this);
-        modeRow->addWidget(lbMode);
-        modeRow->addWidget(measureModeCombo_, 1);
-        vlRun->insertLayout(2, modeRow);
+    const QString comboStyle = QStringLiteral("QComboBox{min-height:30px;padding:2px 8px;} QComboBox::drop-down{width:24px;}");
+    measureModeCombo_->setStyleSheet(comboStyle);
+    partTypeCombo_->setStyleSheet(comboStyle);
+    plcModeCombo_->setStyleSheet(comboStyle);
+    measureModeCombo_->setMinimumWidth(120);
+    partTypeCombo_->setMinimumWidth(96);
+    plcModeCombo_->setMinimumWidth(96);
+
+    if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
+        while (QLayoutItem *item = vlRun->takeAt(0)) {
+            if (item->widget()) item->widget()->hide();
+            delete item;
+        }
+
+        auto makeTag = [this](const QString &text) {
+            auto *lb = new QLabel(text, this);
+            lb->setStyleSheet(QStringLiteral("QLabel{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-weight:600;}"));
+            return lb;
+        };
+        auto makeCmdBtn = [this](const QString &text) {
+            auto *btn = new QPushButton(text, this);
+            btn->setMinimumSize(92, 34);
+            btn->setMaximumHeight(36);
+            return btn;
+        };
+
+        auto *statusFrame = new QFrame(this);
+        auto *statusLay = new QHBoxLayout(statusFrame);
+        statusLay->setContentsMargins(0,0,0,0);
+        statusLay->setSpacing(8);
+        lbRuntimeConn_ = makeTag(QStringLiteral("连接：-"));
+        lbRuntimeMachine_ = makeTag(QStringLiteral("机器：-"));
+        lbRuntimeStep_ = makeTag(QStringLiteral("步骤：-"));
+        lbRuntimeMode_ = makeTag(QStringLiteral("当前PLC模式：-"));
+        statusLay->addWidget(lbRuntimeConn_);
+        statusLay->addWidget(lbRuntimeMachine_);
+        statusLay->addWidget(lbRuntimeStep_);
+        statusLay->addWidget(lbRuntimeMode_, 1);
+        vlRun->addWidget(statusFrame);
+
+        auto *selectRow = new QHBoxLayout();
+        selectRow->setSpacing(8);
+        selectRow->addWidget(new QLabel(QStringLiteral("控制模式"), this));
+        selectRow->addWidget(plcModeCombo_);
+        selectRow->addSpacing(8);
+        selectRow->addWidget(new QLabel(QStringLiteral("工件类型"), this));
+        selectRow->addWidget(partTypeCombo_);
+        selectRow->addSpacing(8);
+        selectRow->addWidget(new QLabel(QStringLiteral("业务模式"), this));
+        selectRow->addWidget(measureModeCombo_);
+        selectRow->addStretch(1);
+        vlRun->addLayout(selectRow);
+
+        auto *cmdGrid = new QGridLayout();
+        cmdGrid->setHorizontalSpacing(8);
+        cmdGrid->setVerticalSpacing(8);
+        auto *btnInit = makeCmdBtn(QStringLiteral("初始化"));
+        auto *btnStartMeasure = makeCmdBtn(QStringLiteral("开始测量"));
+        auto *btnStartCal = makeCmdBtn(QStringLiteral("开始标定"));
+        auto *btnStop2 = makeCmdBtn(QStringLiteral("停止"));
+        auto *btnReset2 = makeCmdBtn(QStringLiteral("报警复位"));
+        auto *btnRetest = makeCmdBtn(QStringLiteral("当前件复测"));
+        cmdGrid->addWidget(btnInit, 0, 0);
+        cmdGrid->addWidget(btnStartMeasure, 0, 1);
+        cmdGrid->addWidget(btnStartCal, 0, 2);
+        cmdGrid->addWidget(btnStop2, 1, 0);
+        cmdGrid->addWidget(btnReset2, 1, 1);
+        cmdGrid->addWidget(btnRetest, 1, 2);
+        vlRun->addLayout(cmdGrid);
+
+        auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), this);
+        auto *flowLay = new QHBoxLayout(flowBox);
+        auto *btnReadIds = makeCmdBtn(QStringLiteral("读取扫码ID"));
+        auto *btnContinue = makeCmdBtn(QStringLiteral("继续(ID核对通过)"));
+        auto *btnReadMb = makeCmdBtn(QStringLiteral("读取测量包"));
+        auto *btnAck = makeCmdBtn(QStringLiteral("写ACK(pc_ack)"));
+        btnContinue->setMinimumWidth(132);
+        btnReadIds->setMinimumWidth(110);
+        btnReadMb->setMinimumWidth(110);
+        btnAck->setMinimumWidth(110);
+        flowLay->addWidget(btnReadIds);
+        flowLay->addWidget(btnContinue);
+        flowLay->addWidget(btnReadMb);
+        flowLay->addWidget(btnAck);
+        flowLay->addStretch(1);
+        vlRun->addWidget(flowBox);
+
+        connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestSetPlcMode(selectedPlcModeValue()); });
+        connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg())); });
+        connect(btnInit, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("INITIALIZE"), args); });
+        connect(btnStartMeasure, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText())); });
+        connect(btnStartCal, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args); });
+        connect(btnStop2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("STOP"), args); });
+        connect(btnReset2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("RESET_ALARM"), args); });
+        connect(btnRetest, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_RETEST_CURRENT"), args); });
+        connect(btnReadIds, &QPushButton::clicked, this, &ProductionWidget::requestReloadSlotIds);
+        connect(btnContinue, &QPushButton::clicked, this, &ProductionWidget::requestContinueAfterIdCheck);
+        connect(btnReadMb, &QPushButton::clicked, this, &ProductionWidget::requestReadMailbox);
+        connect(btnAck, &QPushButton::clicked, this, &ProductionWidget::requestAckMailbox);
     }
 
-    // Mode buttons: 互斥
-    auto *bg = new QButtonGroup(this);
-    bg->setExclusive(true);
-    bg->addButton(ui_->btnModeAuto);
-    bg->addButton(ui_->btnModeManual);
-    ui_->btnModeAuto->setChecked(true);
-
-    connect(ui_->btnModeAuto, &QToolButton::clicked, this, [this]{
-        emit uiCommandRequested("SET_MODE_AUTO", {});
-    });
-    connect(ui_->btnModeManual, &QToolButton::clicked, this, [this]{
-        emit uiCommandRequested("SET_MODE_MANUAL", {});
-    });
-    connect(ui_->btnStart, &QPushButton::clicked, this, [this]{
-        QVariantMap args;
-        args.insert(QStringLiteral("measure_mode"), measureModeText());
-        args.insert(QStringLiteral("part_type"), selectedPartTypeText());
-        args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg()));
-        emit uiCommandRequested("START_AUTO", args);
-        ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText()));
-    });
-    connect(ui_->btnPause, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("PAUSE", {});
-    });
-    connect(ui_->btnResume, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("RESUME", {});
-    });
-    connect(ui_->btnStop, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("STOP", {});
-    });
-    connect(ui_->btnResetAlarm, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("RESET_ALARM", {});
-    });
-    connect(ui_->btnHomeAll, &QPushButton::clicked, this, [this]{
-        emit uiCommandRequested("HOME_ALL", {});
-    });
-
+    ui_->btnResetAlarm->hide();
     connect(ui_->btnWriteSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnWriteSlotIds);
-    connect(ui_->btnReloadSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnReloadSlotIds);
-    connect(ui_->btnReadMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnReadMailbox);
-    connect(ui_->btnAckMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnAckMailbox);
     connect(ui_->btnDevDemo, &QPushButton::clicked, this, &ProductionWidget::onBtnDevDemo);
 
     connect(ui_->btnOpenLastRaw, &QPushButton::clicked, this, [this]{
@@ -455,6 +512,16 @@ quint32 ProductionWidget::selectedPartTypeArg() const
     return selectedPartTypeTextInternal() == QStringLiteral("B") ? 1u : 2u;
 }
 
+int ProductionWidget::selectedPlcModeValue() const
+{
+    return plcModeCombo_ ? plcModeCombo_->currentData().toInt() : 1;
+}
+
+void ProductionWidget::setCurrentPlcMode(int mode)
+{
+    if (lbRuntimeMode_) lbRuntimeMode_->setText(QStringLiteral("当前PLC模式：%1").arg(mode == 1 ? QStringLiteral("手动") : mode == 2 ? QStringLiteral("自动") : mode == 3 ? QStringLiteral("单步") : QStringLiteral("模式(%1)").arg(mode)));
+}
+
 QString ProductionWidget::measureModeText() const
 {
     if (!measureModeCombo_) return QStringLiteral("NORMAL");
@@ -492,11 +559,13 @@ void ProductionWidget::setPlcConnected(bool ok)
     ui_->lblConnPlc->setProperty("connState", ok ? 1 : 0);
     ui_->lblConnPlc->style()->unpolish(ui_->lblConnPlc);
     ui_->lblConnPlc->style()->polish(ui_->lblConnPlc);
+    if (lbRuntimeConn_) lbRuntimeConn_->setText(QStringLiteral("连接：%1").arg(ok ? QStringLiteral("已连接") : QStringLiteral("未连接")));
 }
 
 void ProductionWidget::setMachineState(quint16 /*machine_state*/, const QString &text)
 {
     if (text.isEmpty()) return;
+    if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("机器：%1").arg(text));
     if (text == last_machine_state_text_) return;
     last_machine_state_text_ = text;
     ui_->listMessages->addItem(QStringLiteral("机器状态：%1").arg(text));
@@ -505,7 +574,9 @@ void ProductionWidget::setMachineState(quint16 /*machine_state*/, const QString 
 void ProductionWidget::setStepState(quint16 step_state)
 {
     step_state_ = step_state;
-    ui_->lblStepBig->setText(stepText(step_state));
+    const QString txt = stepText(step_state);
+    ui_->lblStepBig->setText(txt);
+    if (lbRuntimeStep_) lbRuntimeStep_->setText(QStringLiteral("步骤：%1").arg(txt));
     updateSlotEditability();
 }
 
