@@ -743,7 +743,7 @@ bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
   for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
 
   PlcMailboxSnapshot snapshot;
-  snapshot.meas_seq = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+  snapshot.meas_seq = 0;
   snapshot.part_type = pt;
   snapshot.raw_layout_ver = 24;
   snapshot.ring_count = 1;
@@ -920,7 +920,7 @@ bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
   if (!plcReadFloat32ArrayAbcd(mailboxRegs, keyenceOffset + 16, 576, &rawValues, err)) return false;
   for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
   PlcMailboxSnapshot snapshot;
-  snapshot.meas_seq = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+  snapshot.meas_seq = 0;
   snapshot.part_type = pt;
   snapshot.raw_layout_ver = 25;
   snapshot.ring_count = 1;

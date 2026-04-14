@@ -16,13 +16,10 @@ public:
 signals:
   void requestSetPlcMode(int mode);
   void requestPlcNamedCommand(const QString &cmd, const QVariantMap &args);
-  void requestPlcPollOnce();
   void requestPlcReloadSlotIds();
   void requestPlcReadMailbox();
   void requestPlcAckMailbox();
   void requestPlcContinueAfterIdCheck();
-  void requestPlcRequestRescanIds();
-  void plcFlowModeChanged(int mode);
   void requestAxisCommand(int axisIndex, const QString &action);
   void requestAxisJog(int axisIndex, const QString &direction, bool active);
   void requestAxisMove(int axisIndex, const QString &action,
@@ -31,7 +28,6 @@ signals:
 
 public slots:
   void setCurrentPlcMode(int mode);
-  void setPlcFlowMode(int mode);
   void setRuntimeSummary(bool connected, const QString &machineText, const QString &stepText);
   void setAxisStatesText(const QString &text);
   void setCylinderStatesText(const QString &text);

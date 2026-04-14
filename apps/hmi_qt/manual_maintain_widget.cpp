@@ -79,21 +79,28 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
     });
   };
   addCmdBtn(QStringLiteral("初始化"), QStringLiteral("INITIALIZE"), 0, 0);
-  addCmdBtn(QStringLiteral("报警复位"), QStringLiteral("RESET_ALARM"), 0, 1);
-  addCmdBtn(QStringLiteral("开始测量"), QStringLiteral("START_AUTO"), 0, 2);
-  addCmdBtn(QStringLiteral("开始标定"), QStringLiteral("START_CALIBRATION"), 0, 3);
-  addCmdBtn(QStringLiteral("停止"), QStringLiteral("STOP"), 1, 0);
-  addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 1, 1);
+  addCmdBtn(QStringLiteral("报警复位"), QStringLiteral("RESET_ALARM"), 0, 2);
+  addCmdBtn(QStringLiteral("开始测量"), QStringLiteral("START_AUTO"), 0, 3);
+  addCmdBtn(QStringLiteral("开始标定"), QStringLiteral("START_CALIBRATION"), 1, 0);
+  addCmdBtn(QStringLiteral("停止"), QStringLiteral("STOP"), 1, 1);
+  addCmdBtn(QStringLiteral("继续(ID核对通过)"), QStringLiteral("CONTINUE_AFTER_ID_CHECK"), 1, 2);
+  addCmdBtn(QStringLiteral("当前件复测"), QStringLiteral("START_RETEST_CURRENT"), 2, 1);
   manualLay->addLayout(cmdLay);
 
   auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), manualBox);
-  auto *flowLay = new QHBoxLayout(flowBox);
+  auto *flowLay = new QVBoxLayout(flowBox);
+
+  auto *flowBtnLay1 = new QHBoxLayout();
   auto *btnPlcReloadIds = new QPushButton(QStringLiteral("读取扫码ID"), flowBox);
+  auto *btnPlcContinue = new QPushButton(QStringLiteral("继续(ID核对通过)"), flowBox);
   auto *btnPlcReadMailbox = new QPushButton(QStringLiteral("读取测量包"), flowBox);
   auto *btnPlcAck = new QPushButton(QStringLiteral("写 ACK(pc_ack)"), flowBox);
-  flowLay->addWidget(btnPlcReloadIds);
-  flowLay->addWidget(btnPlcReadMailbox);
-  flowLay->addWidget(btnPlcAck);
+  flowBtnLay1->addWidget(btnPlcReloadIds);
+  flowBtnLay1->addWidget(btnPlcContinue);
+  flowBtnLay1->addWidget(btnPlcReadMailbox);
+  flowBtnLay1->addWidget(btnPlcAck);
+  flowLay->addLayout(flowBtnLay1);
+
   manualLay->addWidget(flowBox);
 
   auto *axisBox = new QGroupBox(QStringLiteral("单轴维护"), manualBox);
@@ -115,13 +122,11 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   auto *btnEnableOn = new QPushButton(QStringLiteral("使能ON"), axisBox);
   auto *btnEnableOff = new QPushButton(QStringLiteral("使能OFF"), axisBox);
   auto *btnReset = new QPushButton(QStringLiteral("复位"), axisBox);
-  auto *btnHome = new QPushButton(QStringLiteral("回零"), axisBox);
   auto *btnEStop = new QPushButton(QStringLiteral("EStop"), axisBox);
   auto *btnStop = new QPushButton(QStringLiteral("停止"), axisBox);
   axisTop->addWidget(btnEnableOn);
   axisTop->addWidget(btnEnableOff);
   axisTop->addWidget(btnReset);
-  axisTop->addWidget(btnHome);
   axisTop->addWidget(btnEStop);
   axisTop->addWidget(btnStop);
   axisRoot->addLayout(axisTop);
@@ -204,6 +209,7 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
 
   connect(btnWriteMode, &QPushButton::clicked, this, [this]() { emit requestSetPlcMode(selectedTargetMode()); });
   connect(btnPlcReloadIds, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReloadSlotIds);
+  connect(btnPlcContinue, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcContinueAfterIdCheck);
   connect(btnPlcReadMailbox, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcReadMailbox);
   connect(btnPlcAck, &QPushButton::clicked, this, &ManualMaintainWidget::requestPlcAckMailbox);
 
@@ -211,7 +217,6 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent) : QWidget(parent) {
   connect(btnEnableOn, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("ENABLE_ON")); });
   connect(btnEnableOff, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("ENABLE_OFF")); });
   connect(btnReset, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("RESET")); });
-  connect(btnHome, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("HOME")); });
   connect(btnEStop, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("ESTOP")); });
   connect(btnStop, &QPushButton::clicked, this, [=]() { emitAxis(QStringLiteral("STOP")); });
   connect(btnMoveAbs, &QPushButton::clicked, this, [this]() {
@@ -259,9 +264,6 @@ int ManualMaintainWidget::selectedPartType() const {
 
 int ManualMaintainWidget::selectedTargetMode() const {
   return targetModeCombo_ ? targetModeCombo_->currentData().toInt() : 1;
-}
-
-void ManualMaintainWidget::setPlcFlowMode(int) {
 }
 
 
