@@ -9,7 +9,7 @@
 
 #include "core/config.hpp"
 #include "core/measurement_pipeline.hpp"
-#include "core/plc_polling_v2.hpp"
+#include "core/plc_polling_v26.hpp"
 #include "core/plc_qt_modbus_v2.hpp"
 #include "core/plc_transport_v2.hpp"
 #include "core/plc_types_v26.hpp"
@@ -58,7 +58,7 @@ public:
 
   const AppConfig &config() const { return cfg_; }
   const PlcAddressLayoutV2 &addressLayout() const { return layout_; }
-  const PlcPollCacheV2 &pollCache() const { return cache_; }
+  const PlcPollCacheV26 &pollCache() const { return cache_; }
   const PlcRuntimeStatsV2 &stats() const { return stats_; }
 
 public slots:
@@ -102,7 +102,7 @@ signals:
   void statsUpdated(const core::PlcRuntimeStatsV2 &stats);
   void errorOccurred(const QString &message);
 
-  void plcEventsRaised(const core::PlcPollEventsV2 &events);
+  void plcEventsRaised(const core::PlcPollEventsV26 &events);
 
   void statusUpdated(const core::PlcStatusBlockV2 &status);
   void trayUpdated(const core::PlcTrayPartIdBlockV2 &tray);
@@ -122,7 +122,7 @@ private:
 private:
   AppConfig cfg_;
   PlcAddressLayoutV2 layout_;
-  PlcPollCacheV2 cache_;
+  PlcPollCacheV26 cache_;
   PlcRuntimeStatsV2 stats_;
 
   std::unique_ptr<IPlcRegisterClientV2> owned_client_;

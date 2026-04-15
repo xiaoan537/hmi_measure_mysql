@@ -42,7 +42,7 @@ bool PlcRuntimeServiceV2::applyConfig(const AppConfig &cfg, QString *err) {
   stats_.plc_enabled = cfg_.plc.enabled;
   stats_.poll_interval_ms = cfg_.plc.poll_interval_ms;
   poll_timer_.setInterval(cfg_.plc.poll_interval_ms > 0 ? cfg_.plc.poll_interval_ms : 100);
-  cache_ = PlcPollCacheV2{};
+  cache_ = PlcPollCacheV26{};
   stats_.last_error.clear();
   rebuildPlcServices();
   return true;
@@ -388,7 +388,7 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
   if (!repo_ptr_->readHolding(plc_v26::kRegMode, 1, &modeRegs, err)) return false;
   if (!modeRegs.isEmpty()) status.control_mode = static_cast<qint16>(modeRegs.at(0));
 
-  PlcPollEventsV2 events;
+  PlcPollEventsV26 events;
   events.scan_ready = (status.scan_done != 0 && cache_.last_scan_done == 0);
   events.mailbox_ready = (status.mailbox_ready != 0);
   events.new_mailbox = (status.mailbox_ready != 0 && cache_.last_mailbox_ready == 0);

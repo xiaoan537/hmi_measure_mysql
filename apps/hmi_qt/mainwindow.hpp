@@ -20,7 +20,7 @@ class ManualMaintainWidget;
 namespace core {
 class PlcRuntimeServiceV2;
 struct PlcMailboxSnapshot;
-struct PlcPollEventsV2;
+struct PlcPollEventsV26;
 struct PlcRuntimeStatsV2;
 struct PlcStatusBlockV2;
 struct PlcTrayPartIdBlockV2;
@@ -45,7 +45,7 @@ private:
     void onPlcStatusUpdated(const core::PlcStatusBlockV2 &status);
     void onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray);
     void onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot);
-    void onPlcEventsRaised(const core::PlcPollEventsV2 &events);
+    void onPlcEventsRaised(const core::PlcPollEventsV26 &events);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));

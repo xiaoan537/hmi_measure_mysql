@@ -68,7 +68,7 @@ QString stepStateText(quint16 stepState) {
 }
 
 
-QString plcModeTextV25(int mode) { return core::plc_codec_v26::plcModeText(static_cast<qint16>(mode)); }
+QString plcModeTextV26(int mode) { return core::plc_codec_v26::plcModeText(static_cast<qint16>(mode)); }
 
 QString axisNameByIndex(int axisIndex) { return core::plc_v26::axisName(axisIndex); }
 
@@ -284,7 +284,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestSetPlcMode, this, [this](int mode) {
       QString err;
       if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; }
-      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode)));
+      if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode)));
       plcRuntime_->pollOnce();
     });
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcReloadSlotIds,
@@ -364,7 +364,7 @@ void MainWindow::setupBusinessPageBindings() {
     connect(productionWidget_, &ProductionWidget::requestContinueAfterIdCheck,
             this, [this]{ handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), {}); });
     connect(productionWidget_, &ProductionWidget::requestSetPlcMode,
-            this, [this](int mode){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(mode))); plcRuntime_->pollOnce(); });
+            this, [this](int mode){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode))); plcRuntime_->pollOnce(); });
     connect(productionWidget_, &ProductionWidget::requestWriteCategoryMode,
             this, [this](int partTypeArg){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->setCategoryMode(static_cast<qint16>(partTypeArg), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写工件类型到 PLC：%1").arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型"))); });
     connect(productionWidget_, &ProductionWidget::requestWriteSlotIds,
@@ -650,7 +650,7 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
 
 }
 
-void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
+void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV26 &events) {
   if (productionWidget_) {
     if (events.scan_ready) {
       productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新扫码结果"));
@@ -685,7 +685,7 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   QString err;
   if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
   if (cmd == QStringLiteral("SET_MODE_MANUAL") || cmd == QStringLiteral("SET_MODE_AUTO")) {
-    if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV25(plcMode)));
+    if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(plcMode)));
     plcRuntime_->pollOnce();
     return;
   }

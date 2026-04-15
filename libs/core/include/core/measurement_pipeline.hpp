@@ -208,16 +208,16 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
                       RawLoopItemBuildResult *out,
                       QString *err = nullptr);
 
-bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
+bool buildPlcStatusBlockV26(const QVector<quint16> &statusRegs,
                             PlcStatusBlockV2 *out,
                             QString *err = nullptr);
-bool buildPlcCommandBlockV25(const QVector<quint16> &commandRegs,
+bool buildPlcCommandBlockV26(const QVector<quint16> &commandRegs,
                              PlcCommandBlockV2 *out,
                              QString *err = nullptr);
-bool buildPlcTrayAllCodingBlockV25(const QVector<quint16> &trayRegs,
+bool buildPlcTrayAllCodingBlockV26(const QVector<quint16> &trayRegs,
                                    PlcTrayPartIdBlockV2 *out,
                                    QString *err = nullptr);
-bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
+bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
                                         QChar partType,
                                         PlcMailboxSnapshot *out,
                                         QString *err = nullptr);

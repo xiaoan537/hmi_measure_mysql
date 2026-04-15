@@ -11,28 +11,28 @@ constexpr int kLogicalSlotCount = core::plc_v26::kLogicalSlotCount;
 constexpr int kCalibrationSlotIndex = core::plc_v26::kCalibrationSlotIndex;
 
 // v2.6 固定布局（地址和长度统一来自 plc_addresses_v26.hpp）
-constexpr int kStatusBlockRegsV25 = core::plc_v26::kStatusRegs;
-constexpr int kCommandBlockRegsV25 = core::plc_v26::kCommandRegs;
-constexpr int kTrayAllCodingBytesV25 = core::plc_v26::kTrayAllCodingBytes;
-constexpr int kTrayAllCodingRegsV25 = core::plc_v26::kTrayAllCodingRegs;
-constexpr int kMailboxHeaderRegsV25 = core::plc_v26::kMailboxHeaderRegs;
-constexpr int kMailboxDataRegsV25 =
+constexpr int kStatusBlockRegsV26 = core::plc_v26::kStatusRegs;
+constexpr int kCommandBlockRegsV26 = core::plc_v26::kCommandRegs;
+constexpr int kTrayAllCodingBytesV26 = core::plc_v26::kTrayAllCodingBytes;
+constexpr int kTrayAllCodingRegsV26 = core::plc_v26::kTrayAllCodingRegs;
+constexpr int kMailboxHeaderRegsV26 = core::plc_v26::kMailboxHeaderRegs;
+constexpr int kMailboxDataRegsV26 =
     core::plc_v26::kMailboxKeyenceRegs + core::plc_v26::kMailboxChuantecRegs;
-constexpr int kMailboxTotalRegsV25 = core::plc_v26::kMailboxTotalRegs;
-constexpr int kStatusOffsetMachineStateV25 = core::plc_v26::kStatusOffMachineState;
-constexpr int kStatusOffsetStepStateV25 = core::plc_v26::kStatusOffStepState;
-constexpr int kStatusOffsetInterlockMaskV25 = core::plc_v26::kStatusOffErrorMask; // DWORD，2 regs
-constexpr int kStatusOffsetAlarmCodeV25 = core::plc_v26::kStatusOffAlarmCode;
-constexpr int kStatusOffsetTrayPresentMaskV25 = core::plc_v26::kStatusOffTrayPresent;
-constexpr int kStatusOffsetScanDoneV25 = core::plc_v26::kStatusOffScanDone;
-constexpr int kStatusOffsetActiveItemCountV25 = core::plc_v26::kStatusOffActiveItemCount;
-constexpr int kStatusOffsetActiveSlotMaskV25 = core::plc_v26::kStatusOffActiveSlotMask;
-constexpr int kStatusOffsetMailboxReadyV25 = core::plc_v26::kStatusOffMailboxReady;
-constexpr int kStatusOffsetAfterMeasurementV25 = core::plc_v26::kStatusOffAfterMeasurement;
-constexpr int kCommandOffsetCategoryModeV25 = core::plc_v26::kCommandOffCategoryMode;
-constexpr int kCommandOffsetCmdCodeV25 = core::plc_v26::kCommandOffCmdCode;
-constexpr int kCommandOffsetCmdResultV25 = core::plc_v26::kCommandOffCmdResult;
-constexpr int kCommandOffsetCmdErrorCodeV25 = core::plc_v26::kCommandOffRejectInstruction;
+constexpr int kMailboxTotalRegsV26 = core::plc_v26::kMailboxTotalRegs;
+constexpr int kStatusOffsetMachineStateV26 = core::plc_v26::kStatusOffMachineState;
+constexpr int kStatusOffsetStepStateV26 = core::plc_v26::kStatusOffStepState;
+constexpr int kStatusOffsetInterlockMaskV26 = core::plc_v26::kStatusOffErrorMask; // DWORD，2 regs
+constexpr int kStatusOffsetAlarmCodeV26 = core::plc_v26::kStatusOffAlarmCode;
+constexpr int kStatusOffsetTrayPresentMaskV26 = core::plc_v26::kStatusOffTrayPresent;
+constexpr int kStatusOffsetScanDoneV26 = core::plc_v26::kStatusOffScanDone;
+constexpr int kStatusOffsetActiveItemCountV26 = core::plc_v26::kStatusOffActiveItemCount;
+constexpr int kStatusOffsetActiveSlotMaskV26 = core::plc_v26::kStatusOffActiveSlotMask;
+constexpr int kStatusOffsetMailboxReadyV26 = core::plc_v26::kStatusOffMailboxReady;
+constexpr int kStatusOffsetAfterMeasurementV26 = core::plc_v26::kStatusOffAfterMeasurement;
+constexpr int kCommandOffsetCategoryModeV26 = core::plc_v26::kCommandOffCategoryMode;
+constexpr int kCommandOffsetCmdCodeV26 = core::plc_v26::kCommandOffCmdCode;
+constexpr int kCommandOffsetCmdResultV26 = core::plc_v26::kCommandOffCmdResult;
+constexpr int kCommandOffsetCmdErrorCodeV26 = core::plc_v26::kCommandOffRejectInstruction;
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
 

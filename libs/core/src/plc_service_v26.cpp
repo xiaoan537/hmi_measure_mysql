@@ -4,16 +4,16 @@
 namespace core {
 
 bool PlcServiceV26::readStatus(PlcStatusBlockV2 *out, QString *err) const {
-  QVector<quint16> regs; if (!repo_.readStatusRaw(&regs, err)) return false; return buildPlcStatusBlockV25(regs, out, err);
+  QVector<quint16> regs; if (!repo_.readStatusRaw(&regs, err)) return false; return buildPlcStatusBlockV26(regs, out, err);
 }
 bool PlcServiceV26::readCommand(PlcCommandBlockV2 *out, QString *err) const {
-  QVector<quint16> regs; if (!repo_.readCommandRaw(&regs, err)) return false; return buildPlcCommandBlockV25(regs, out, err);
+  QVector<quint16> regs; if (!repo_.readCommandRaw(&regs, err)) return false; return buildPlcCommandBlockV26(regs, out, err);
 }
 bool PlcServiceV26::readTrayCoding(PlcTrayPartIdBlockV2 *out, QString *err) const {
-  QVector<quint16> regs; if (!repo_.readTrayCodingRaw(&regs, err)) return false; return buildPlcTrayAllCodingBlockV25(regs, out, err);
+  QVector<quint16> regs; if (!repo_.readTrayCodingRaw(&regs, err)) return false; return buildPlcTrayAllCodingBlockV26(regs, out, err);
 }
 bool PlcServiceV26::readMailbox(QChar preferredPartType, PlcMailboxSnapshot *out, QString *err) const {
-  QVector<quint16> regs; if (!repo_.readMailboxRaw(&regs, err)) return false; return buildSecondStageMailboxSnapshotV25(regs, preferredPartType, out, err);
+  QVector<quint16> regs; if (!repo_.readMailboxRaw(&regs, err)) return false; return buildSecondStageMailboxSnapshotV26(regs, preferredPartType, out, err);
 }
 
 bool PlcServiceV26::setControlMode(qint16 mode, QString *err) const { return repo_.writeMode(mode, err); }

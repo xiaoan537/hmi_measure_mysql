@@ -4,7 +4,7 @@
 
 namespace core {
 
-struct PlcPollCacheV2 {
+struct PlcPollCacheV26 {
   bool has_status = false;
   bool has_command = false;
 
@@ -17,7 +17,7 @@ struct PlcPollCacheV2 {
   quint16 last_mailbox_ready = 0;
 };
 
-struct PlcPollEventsV2 {
+struct PlcPollEventsV26 {
   bool state_seq_advanced = false;
   bool scan_ready = false;
   bool mailbox_ready = false;
