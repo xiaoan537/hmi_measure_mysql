@@ -1,3 +1,4 @@
+#include "core/plc_addresses_v26.hpp"
 #include "core/plc_transport_v2.hpp"
 
 #include <cstring>
@@ -73,27 +74,27 @@ bool PlcAddressLayoutV2::isValid(QString *err) const {
     return false;
   }
 
-  if (status.reg_count != kStatusBlockRegsV25) {
+  if (status.reg_count != core::plc_v26::kStatusRegs) {
     failWith(err, QStringLiteral("Status Block reg_count 应为 %1，当前为 %2")
-                      .arg(kStatusBlockRegsV25)
+                      .arg(core::plc_v26::kStatusRegs)
                       .arg(status.reg_count));
     return false;
   }
-  if (tray.reg_count != kTrayAllCodingRegsV25) {
+  if (tray.reg_count != core::plc_v26::kTrayAllCodingRegs) {
     failWith(err, QStringLiteral("Tray Part-ID Block reg_count 应为 %1，当前为 %2")
-                      .arg(kTrayAllCodingRegsV25)
+                      .arg(core::plc_v26::kTrayAllCodingRegs)
                       .arg(tray.reg_count));
     return false;
   }
-  if (command.reg_count != kCommandBlockRegsV25) {
+  if (command.reg_count != core::plc_v26::kCommandRegs) {
     failWith(err, QStringLiteral("Command Block reg_count 应为 %1，当前为 %2")
-                      .arg(kCommandBlockRegsV25)
+                      .arg(core::plc_v26::kCommandRegs)
                       .arg(command.reg_count));
     return false;
   }
-  if (mailbox.reg_count != kMailboxTotalRegsV25) {
+  if (mailbox.reg_count != core::plc_v26::kMailboxTotalRegs) {
     failWith(err, QStringLiteral("Mailbox Block reg_count 应为 %1，当前为 %2")
-                      .arg(kMailboxTotalRegsV25)
+                      .arg(core::plc_v26::kMailboxTotalRegs)
                       .arg(mailbox.reg_count));
     return false;
   }

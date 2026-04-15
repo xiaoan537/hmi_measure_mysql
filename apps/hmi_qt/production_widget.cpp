@@ -313,7 +313,7 @@ void ProductionWidget::initSlotCards()
         btn->setMinimumSize(140, 90);
         btn->setProperty("slotState", 0);
         btn->setProperty("slotSelected", 0);
-        btn->setText(QStringLiteral("槽位 %1\n—\n空\n—").arg(i));
+        btn->setText(QStringLiteral("槽位%1\n—\n空\n—").arg(i + 1));
         btn->setToolTip(QStringLiteral("点击查看槽位详情"));
         btn->setCursor(Qt::PointingHandCursor);
 
@@ -385,7 +385,7 @@ bool ProductionWidget::isPartIdEditableStep() const
 
 void ProductionWidget::refreshSelectedDetail()
 {
-    ui_->lblSelectedSlot->setText(QString::number(selected_slot_));
+    ui_->lblSelectedSlot->setText(QString::number(selected_slot_ + 1));
 
     const QString id = (slot_part_ids_.size() == 16) ? slot_part_ids_[selected_slot_] : QString();
     ui_->editSlotId->setText(id);
@@ -467,7 +467,7 @@ void ProductionWidget::updateSlotCard(int slot)
     }
     if (summary.isEmpty()) summary = QStringLiteral("—");
 
-    QString title = QStringLiteral("槽位 %1").arg(slot);
+    QString title = QStringLiteral("槽位%1").arg(slot + 1);
     if (slot == reserved_cal_slot_) {
         title += QStringLiteral("*");
     }

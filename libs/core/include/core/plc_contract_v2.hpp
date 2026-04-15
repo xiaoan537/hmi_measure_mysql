@@ -2,13 +2,14 @@
 
 #include <QString>
 #include <QtGlobal>
+#include "core/plc_addresses_v26.hpp"
+#include "core/plc_types_v26.hpp"
 
 namespace core {
 
-constexpr int kLogicalSlotCount = 16;
-constexpr int kAutoSlotCount = 15;
-// UI / DB / 本地内存仍使用 0..15 的逻辑槽位索引；协议层槽位号使用 1..16。
-constexpr int kCalibrationSlotIndex = 15;      // 本地逻辑索引，对应协议槽位 16
+constexpr int kLogicalSlotCount = core::plc_v26::kLogicalSlotCount;
+constexpr int kAutoSlotCount = core::plc_v26::kAutoSlotCount;
+constexpr int kCalibrationSlotIndex = core::plc_v26::kCalibrationSlotIndex;
 constexpr int kProtocolSlotMinV24 = 1;
 constexpr int kProtocolSlotMaxV24 = 16;
 constexpr int kProtocolCalibrationSlotV24 = 16;
@@ -119,11 +120,7 @@ constexpr int kMailboxOffsetReservedTail3 = 57;    // uint16 reserved
 // 6) Mailbox Header 当前有效字段长度为 54 regs，但物理头块固定预留 58 regs；
 //    尾部 4 regs 作为 reserved，Arrays 起始偏移保持在 58，便于后续扩展且不打乱数组区。
 
-enum class PlcControlModeV25 : qint16 {
-  Manual = 1,
-  Auto = 2,
-  SingleStep = 3,
-};
+enum class PlcControlModeV25 : qint16 { Manual = core::plc_v26::kModeManual, Auto = core::plc_v26::kModeAuto, SingleStep = core::plc_v26::kModeSingleStep, };
 
 enum class PlcMachineState : quint16 {
   Idle = 0,

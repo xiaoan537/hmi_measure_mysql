@@ -11,6 +11,8 @@
 #include "core/config.hpp"
 #include "core/plc_qt_modbus_v2.hpp"
 #include "core/plc_transport_v2.hpp"
+#include "core/plc_types_v26.hpp"
+
 
 namespace core {
 
@@ -74,13 +76,20 @@ public slots:
                                 QString *err = nullptr);
   bool readMbBytesRaw(quint32 mbByteAddress, quint16 byteCount, QByteArray *out, QString *err = nullptr);
   bool writeMbBytesRaw(quint32 mbByteAddress, const QByteArray &bytes, QString *err = nullptr);
-  bool readFirstStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
-                                     QString *err = nullptr);
   bool readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
                                       QString *err = nullptr);
   bool readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err = nullptr);
   bool writePlcMode(qint16 mode, QString *err = nullptr);
   bool writeJudgeResult(quint16 judgeResult, QString *err = nullptr);
+  bool setCategoryMode(qint16 categoryMode, QString *err = nullptr);
+  bool writeScanDone(quint16 value, QString *err = nullptr);
+  bool readAxisState(int axisIndex, PlcAxisStateV26 *out, QString *err = nullptr);
+  bool readCylinderState(const QString &group, int index, PlcCylinderStateV26 *out, QString *err = nullptr);
+  bool axisSetEnable(int axisIndex, bool on, QString *err = nullptr);
+  bool axisPulseAction(int axisIndex, const QString &action, QString *err = nullptr);
+  bool axisJog(int axisIndex, bool forward, bool active, QString *err = nullptr);
+  bool axisMove(int axisIndex, bool relative, double acc, double dec, double pos, double vel, QString *err = nullptr);
+  bool cylinderAction(const QString &group, int index, const QString &action, QString *err = nullptr);
 
 signals:
   void runningChanged(bool running);
@@ -102,6 +111,7 @@ private slots:
 private:
   bool ensureClientReady(QString *err = nullptr);
   bool pollSecondStage(QString *err = nullptr);
+  void rebuildPlcServices();
   bool refreshConnectionState();
   void updateStatsFromCache();
   void publishError(const QString &message);
@@ -117,6 +127,11 @@ private:
 
   QTimer poll_timer_;
   bool poll_in_progress_ = false;
+
+  class PlcRepositoryV26 *repo_ptr_ = nullptr;
+  class PlcServiceV26 *service_ptr_ = nullptr;
+  std::unique_ptr<class PlcRepositoryV26> repo_owner_;
+  std::unique_ptr<class PlcServiceV26> service_owner_;
 };
 
 } // namespace core

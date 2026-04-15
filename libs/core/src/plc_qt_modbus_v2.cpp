@@ -9,6 +9,7 @@
 #include <QTimer>
 
 #include "core/plc_contract_v2.hpp"
+#include "core/plc_addresses_v26.hpp"
 
 namespace core {
 namespace {
@@ -41,10 +42,10 @@ bool buildPlcAddressLayoutV2(const PlcConfig &cfg,
   }
 
   PlcAddressLayoutV2 layout;
-  layout.status = {cfg.status_start_address, static_cast<quint16>(kStatusBlockRegsV25), QStringLiteral("status")};
-  layout.tray = {cfg.tray_start_address, static_cast<quint16>(kTrayAllCodingRegsV25), QStringLiteral("tray")};
-  layout.command = {cfg.command_start_address, static_cast<quint16>(kCommandBlockRegsV25), QStringLiteral("command")};
-  layout.mailbox = {cfg.mailbox_start_address, static_cast<quint16>(kMailboxTotalRegsV25), QStringLiteral("mailbox")};
+  layout.status = {cfg.status_start_address, static_cast<quint16>(core::plc_v26::kStatusRegs), QStringLiteral("status")};
+  layout.tray = {cfg.tray_start_address, static_cast<quint16>(core::plc_v26::kTrayAllCodingRegs), QStringLiteral("tray")};
+  layout.command = {cfg.command_start_address, static_cast<quint16>(core::plc_v26::kCommandRegs), QStringLiteral("command")};
+  layout.mailbox = {cfg.mailbox_start_address, static_cast<quint16>(core::plc_v26::kMailboxTotalRegs), QStringLiteral("mailbox")};
   layout.pc_ack = {cfg.pc_ack_start_address, static_cast<quint16>(kPcAckWriteRegsV2), QStringLiteral("pc_ack")};
 
   if (!layout.isValid(err)) {
@@ -205,6 +206,7 @@ bool QtModbusTcpRegisterClientV2::waitForReadReply(quint32 start_address,
                       .arg(reg_count)
                       .arg(reply->errorString()));
     reply->deleteLater();
+    disconnectFromPlc();
     return false;
   }
 
@@ -254,6 +256,7 @@ bool QtModbusTcpRegisterClientV2::waitForWriteReply(quint32 start_address,
                       .arg(values.size())
                       .arg(reply->errorString()));
     reply->deleteLater();
+    disconnectFromPlc();
     return false;
   }
 
