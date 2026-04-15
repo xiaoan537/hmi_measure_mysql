@@ -19,19 +19,13 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVariantMap>
-#include <QByteArray>
-#include <QThread>
 #include <QStringList>
-
-#include <cstring>
 
 #include <QSizePolicy>
 
 #include "ui_mainwindow.h"
 
-#include <cmath>
 #include <memory>
-#include <array>
 
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
@@ -76,28 +70,6 @@ QString stepStateText(quint16 stepState) {
 
 QString plcModeTextV25(int mode) { return core::plc_codec_v26::plcModeText(static_cast<qint16>(mode)); }
 
-
-QByteArray mbBytesFromRegsUi(const QVector<quint16> &regs) {
-  QByteArray bytes;
-  bytes.reserve(regs.size() * 2);
-  for (quint16 reg : regs) {
-    bytes.append(static_cast<char>(reg & 0x00FFu));
-    bytes.append(static_cast<char>((reg >> 8) & 0x00FFu));
-  }
-  return bytes;
-}
-
-QByteArray float64ToMbBytes(double value) {
-  QByteArray bytes(8, '\0');
-  quint64 bits = 0;
-  static_assert(sizeof(double) == sizeof(quint64), "double size");
-  std::memcpy(&bits, &value, sizeof(bits));
-  for (int i = 0; i < 8; ++i) {
-    bytes[i] = static_cast<char>((bits >> (8 * i)) & 0xFFu);
-  }
-  return bytes;
-}
-
 QString axisNameByIndex(int axisIndex) { return core::plc_v26::axisName(axisIndex); }
 
 QString machineStateText(quint16 machineState) { return core::plc_codec_v26::decodeMachineState(machineState).text; }
@@ -128,24 +100,6 @@ QVector<QString> trayToVector(const core::PlcTrayPartIdBlockV2 &tray) {
   return ids;
 }
 
-core::PlcCommandCodeV2 uiCommandToCode(const QString &cmd, bool *ok) {
-  if (ok) *ok = true;
-  if (cmd == QStringLiteral("INITIALIZE")) return core::PlcCommandCodeV2::Initialize;
-  if (cmd == QStringLiteral("START_AUTO")) return core::PlcCommandCodeV2::StartAuto;
-  if (cmd == QStringLiteral("START_CALIBRATION")) return core::PlcCommandCodeV2::StartCalibration;
-  if (cmd == QStringLiteral("STOP")) return core::PlcCommandCodeV2::Stop;
-  if (cmd == QStringLiteral("RESET_ALARM")) return core::PlcCommandCodeV2::ResetAlarm;
-  if (cmd == QStringLiteral("HOME_ALL")) return core::PlcCommandCodeV2::HomeAll;
-  if (cmd == QStringLiteral("PAUSE")) return core::PlcCommandCodeV2::Pause;
-  if (cmd == QStringLiteral("RESUME")) return core::PlcCommandCodeV2::Resume;
-  if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) return core::PlcCommandCodeV2::ContinueAfterIdCheck;
-  if (cmd == QStringLiteral("REQUEST_RESCAN_IDS")) return core::PlcCommandCodeV2::RequestRescanIds;
-  if (cmd == QStringLiteral("CONTINUE_AFTER_NG_CONFIRM")) return core::PlcCommandCodeV2::ContinueAfterNgConfirm;
-  if (cmd == QStringLiteral("START_RETEST_CURRENT")) return core::PlcCommandCodeV2::StartRetestCurrent;
-  if (ok) *ok = false;
-  return core::PlcCommandCodeV2::Stop;
-}
-
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
   const QVariant v = args.value(key);
   if (!v.isValid()) return def;
@@ -154,25 +108,6 @@ quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
   return ok ? out : def;
 }
 
-QVector<float> makeDemoMailboxArray(const core::PlcMailboxHeaderV2 &header) {
-  const int total = static_cast<int>(header.item_count) * static_cast<int>(header.ring_count) *
-                    static_cast<int>(header.point_count) * static_cast<int>(header.channel_count);
-  QVector<float> values;
-  values.reserve(total);
-  for (int item = 0; item < static_cast<int>(header.item_count); ++item) {
-    for (int ring = 0; ring < static_cast<int>(header.ring_count); ++ring) {
-      Q_UNUSED(ring);
-      for (int ch = 0; ch < static_cast<int>(header.channel_count); ++ch) {
-        for (int pt = 0; pt < static_cast<int>(header.point_count); ++pt) {
-          const double angle = (static_cast<double>(pt) / qMax(1, static_cast<int>(header.point_count))) * 6.28318530718;
-          const double base = (item == 0 ? 1000.0 : 1200.0) + ch * 35.0;
-          values.push_back(static_cast<float>(base + 25.0 * std::sin(angle) + 5.0 * std::cos(angle * 2.0)));
-        }
-      }
-    }
-  }
-  return values;
-}
 } // namespace
 
 MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
@@ -526,10 +461,6 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   lastStatus_ = status;
   hasLastStatus_ = true;
-  if (status.scan_done == 0) {
-    // scan_done 已被 PC 清零，允许下一轮扫码完成后再次触发自动继续。
-    lastAutoContinueScanSeq_ = 0;
-  }
   if (manualMaintainWidget_) {
     manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
                                              machineStateText(status.machine_state),
@@ -730,10 +661,6 @@ void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV2 &events) {
   }
 }
 
-void MainWindow::onPlcFlowModeChanged(int mode) {
-  plcFlowMode_ = mode;
-}
-
 void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap &args) {
   if (!plcRuntime_) {
     return;
@@ -746,17 +673,6 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     }
     if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
     plcRuntime_->pollOnce();
-    return;
-  }
-
-  quint16 cmdBits = 0;
-  if (cmd == QStringLiteral("INITIALIZE")) cmdBits = core::plc_v26::kCmdInitializeBit;
-  else if (cmd == QStringLiteral("START_AUTO")) cmdBits = core::plc_v26::kCmdStartMeasureBit;
-  else if (cmd == QStringLiteral("START_CALIBRATION")) cmdBits = core::plc_v26::kCmdStartCalibrationBit;
-  else if (cmd == QStringLiteral("STOP")) cmdBits = core::plc_v26::kCmdStopBit;
-  else if (cmd == QStringLiteral("RESET_ALARM") || cmd == QStringLiteral("HOME_ALL")) cmdBits = core::plc_v26::kCmdResetBit;
-  else {
-    handlePlcRuntimeError(QStringLiteral("暂未映射的 PLC 命令：%1").arg(cmd));
     return;
   }
 
@@ -774,20 +690,42 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
 
-  core::PlcCommandBlockV2 command;
-  command.cmd_code = cmdBits;
-  command.category_mode = categoryMode;
-  if (!plcRuntime_->sendCommand(command, &err)) { handlePlcRuntimeError(err); return; }
+  quint16 cmdBits = 0;
+  bool ok = false;
+  if (cmd == QStringLiteral("INITIALIZE")) {
+    cmdBits = core::plc_v26::kCmdInitializeBit;
+    ok = plcRuntime_->sendInitialize(categoryMode, &err);
+  } else if (cmd == QStringLiteral("START_AUTO")) {
+    cmdBits = core::plc_v26::kCmdStartMeasureBit;
+    ok = plcRuntime_->sendStartMeasure(categoryMode, &err);
+  } else if (cmd == QStringLiteral("START_CALIBRATION")) {
+    cmdBits = core::plc_v26::kCmdStartCalibrationBit;
+    ok = plcRuntime_->sendStartCalibration(categoryMode, &err);
+  } else if (cmd == QStringLiteral("STOP")) {
+    cmdBits = core::plc_v26::kCmdStopBit;
+    ok = plcRuntime_->sendStop(categoryMode, &err);
+  } else if (cmd == QStringLiteral("RESET_ALARM") || cmd == QStringLiteral("HOME_ALL")) {
+    cmdBits = core::plc_v26::kCmdResetBit;
+    ok = plcRuntime_->sendReset(categoryMode, &err);
+  } else if (cmd == QStringLiteral("START_RETEST_CURRENT")) {
+    cmdBits = core::plc_v26::kCmdRetestCurrentBit;
+    ok = plcRuntime_->sendRetestCurrent(categoryMode, &err);
+  } else {
+    handlePlcRuntimeError(QStringLiteral("暂未映射的 PLC 命令：%1").arg(cmd));
+    return;
+  }
+  if (!ok) { handlePlcRuntimeError(err); return; }
+
   appendProductionLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
                           .arg(cmd)
                           .arg(plcMode)
-                          .arg(command.category_mode)
-                          .arg(QString::number(command.cmd_code, 16).toUpper()));
+                          .arg(categoryMode)
+                          .arg(QString::number(cmdBits, 16).toUpper()));
   if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
                           .arg(cmd)
                           .arg(plcMode)
-                          .arg(command.category_mode)
-                          .arg(QString::number(command.cmd_code, 16).toUpper()));
+                          .arg(categoryMode)
+                          .arg(QString::number(cmdBits, 16).toUpper()));
 }
 
 void MainWindow::handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds) {

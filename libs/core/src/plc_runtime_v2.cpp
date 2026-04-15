@@ -1,7 +1,6 @@
 #include "core/plc_runtime_v2.hpp"
 
 #include <QElapsedTimer>
-#include <QByteArray>
 #include <QTimer>
 
 #include "core/measurement_pipeline.hpp"
@@ -133,13 +132,77 @@ void PlcRuntimeServiceV2::disconnectNow() {
   emit statsUpdated(stats_);
 }
 
-bool PlcRuntimeServiceV2::sendCommand(const PlcCommandBlockV2 &command, QString *err) {
+bool PlcRuntimeServiceV2::sendInitialize(qint16 partType, QString *err) {
   if (!ensureClientReady(err)) return false;
-  const qint16 category = command.category_mode;
-  if (!service_ptr_->sendCommandBitmap(command.cmd_code, category, err)) {
+  if (!service_ptr_->sendInitialize(partType, err)) {
     if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
     refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写命令失败"));
+    publishError(err ? *err : QStringLiteral("写初始化命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendStartMeasure(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendStartMeasure(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写开始测量命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendStartCalibration(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendStartCalibration(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写开始标定命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendStop(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendStop(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写停止命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendReset(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendReset(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写复位命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendRetestCurrent(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendRetestCurrent(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写当前件复测命令失败"));
     return false;
   }
   refreshConnectionState();
@@ -153,58 +216,6 @@ bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
     if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
     refreshConnectionState();
     publishError(err ? *err : QStringLiteral("写 ACK 失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
-}
-
-bool PlcRuntimeServiceV2::readHoldingRegistersRaw(quint32 startAddress, quint16 regCount, QVector<quint16> *out, QString *err) {
-  if (!ensureClientReady(err)) return false;
-  if (!repo_ptr_->readHolding(startAddress, regCount, out, err)) {
-    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("读取原始寄存器失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
-}
-
-bool PlcRuntimeServiceV2::writeHoldingRegistersRaw(quint32 startAddress, const QVector<quint16> &values, QString *err) {
-  if (!ensureClientReady(err)) return false;
-  if (!repo_ptr_->writeHolding(startAddress, values, err)) {
-    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写原始寄存器失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
-}
-
-bool PlcRuntimeServiceV2::readMbBytesRaw(quint32 mbByteAddress, quint16 byteCount, QByteArray *out, QString *err) {
-  if (!ensureClientReady(err)) return false;
-  if (!repo_ptr_->readMbBytes(mbByteAddress, byteCount, out, err)) {
-    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("读取字节区失败"));
-    return false;
-  }
-  refreshConnectionState();
-  emit statsUpdated(stats_);
-  return true;
-}
-
-bool PlcRuntimeServiceV2::writeMbBytesRaw(quint32 mbByteAddress, const QByteArray &bytes, QString *err) {
-  if (!ensureClientReady(err)) return false;
-  if (!repo_ptr_->writeMbBytes(mbByteAddress, bytes, err)) {
-    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
-    refreshConnectionState();
-    publishError(err ? *err : QStringLiteral("写字节区失败"));
     return false;
   }
   refreshConnectionState();
@@ -243,6 +254,18 @@ bool PlcRuntimeServiceV2::writePlcMode(qint16 mode, QString *err) {
   return true;
 }
 
+bool PlcRuntimeServiceV2::setModeManual(QString *err) {
+  return writePlcMode(plc_v26::kModeManual, err);
+}
+
+bool PlcRuntimeServiceV2::setModeAuto(QString *err) {
+  return writePlcMode(plc_v26::kModeAuto, err);
+}
+
+bool PlcRuntimeServiceV2::setModeSingleStep(QString *err) {
+  return writePlcMode(plc_v26::kModeSingleStep, err);
+}
+
 bool PlcRuntimeServiceV2::setCategoryMode(qint16 categoryMode, QString *err) {
   if (!ensureClientReady(err)) return false;
   if (!service_ptr_->setPartType(categoryMode, err)) {
@@ -253,6 +276,14 @@ bool PlcRuntimeServiceV2::setCategoryMode(qint16 categoryMode, QString *err) {
   }
   refreshConnectionState();
   return true;
+}
+
+bool PlcRuntimeServiceV2::setPartTypeA(QString *err) {
+  return setCategoryMode(plc_v26::kPartTypeA, err);
+}
+
+bool PlcRuntimeServiceV2::setPartTypeB(QString *err) {
+  return setCategoryMode(plc_v26::kPartTypeB, err);
 }
 
 bool PlcRuntimeServiceV2::writeScanDone(quint16 value, QString *err) {
@@ -350,11 +381,9 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
     return false;
   }
 
-  if (cfg_.plc.mode_start_address > 0) {
-    QVector<quint16> modeRegs;
-    if (!repo_ptr_->readHolding(cfg_.plc.mode_start_address, 1, &modeRegs, err)) return false;
-    if (!modeRegs.isEmpty()) status.control_mode = static_cast<qint16>(modeRegs.at(0));
-  }
+  QVector<quint16> modeRegs;
+  if (!repo_ptr_->readHolding(plc_v26::kRegMode, 1, &modeRegs, err)) return false;
+  if (!modeRegs.isEmpty()) status.control_mode = static_cast<qint16>(modeRegs.at(0));
 
   PlcPollEventsV2 events;
   events.scan_ready = (status.scan_done != 0 && cache_.last_scan_done == 0);
@@ -399,13 +428,6 @@ bool PlcRuntimeServiceV2::refreshConnectionState() {
   stats_.connected = now;
   if (old != now) emit connectionChanged(now);
   return now;
-}
-
-void PlcRuntimeServiceV2::updateStatsFromCache() {
-  stats_.last_state_seq = cache_.last_state_seq;
-  stats_.last_scan_seq = cache_.last_scan_seq;
-  stats_.last_meas_seq = cache_.last_meas_seq;
-  stats_.last_cmd_ack_seq = cache_.last_cmd_ack_seq;
 }
 
 void PlcRuntimeServiceV2::publishError(const QString &message) {

@@ -8,7 +8,6 @@
 
 #include "core/config.hpp"
 #include "core/plc_contract_v2.hpp"
-#include "core/plc_polling_v2.hpp"
 
 class QLabel;
 class DiagnosticsWidget;
@@ -21,6 +20,7 @@ class ManualMaintainWidget;
 namespace core {
 class PlcRuntimeServiceV2;
 struct PlcMailboxSnapshot;
+struct PlcPollEventsV2;
 struct PlcRuntimeStatsV2;
 struct PlcStatusBlockV2;
 struct PlcTrayPartIdBlockV2;
@@ -46,7 +46,6 @@ private:
     void onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray);
     void onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot);
     void onPlcEventsRaised(const core::PlcPollEventsV2 &events);
-    void onPlcFlowModeChanged(int mode);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
@@ -67,12 +66,7 @@ private:
     QLabel *lbPlc_ = nullptr;
     QLabel *lbMes_ = nullptr;
     std::unique_ptr<core::PlcRuntimeServiceV2> plcRuntime_;
-    quint32 plcCommandSeq_ = 1;
     quint16 lastMailboxReady_ = 0;
-    quint32 lastMailboxSeq_ = 0;
-    int plcFlowMode_ = 0;
-    quint32 lastAutoContinueScanSeq_ = 0;
-    quint32 lastAutoAckMeasSeq_ = 0;
     core::PlcStatusBlockV2 lastStatus_{};
     bool hasLastStatus_ = false;
     bool lastPlcConnectedKnown_ = false;

@@ -7,6 +7,7 @@
 #include <QModbusTcpClient>
 #include <QPointer>
 #include <QTimer>
+#include <QVariant>
 
 #include "core/plc_contract_v2.hpp"
 #include "core/plc_addresses_v26.hpp"
@@ -42,11 +43,11 @@ bool buildPlcAddressLayoutV2(const PlcConfig &cfg,
   }
 
   PlcAddressLayoutV2 layout;
-  layout.status = {cfg.status_start_address, static_cast<quint16>(core::plc_v26::kStatusRegs), QStringLiteral("status")};
-  layout.tray = {cfg.tray_start_address, static_cast<quint16>(core::plc_v26::kTrayAllCodingRegs), QStringLiteral("tray")};
-  layout.command = {cfg.command_start_address, static_cast<quint16>(core::plc_v26::kCommandRegs), QStringLiteral("command")};
-  layout.mailbox = {cfg.mailbox_start_address, static_cast<quint16>(core::plc_v26::kMailboxTotalRegs), QStringLiteral("mailbox")};
-  layout.pc_ack = {cfg.pc_ack_start_address, static_cast<quint16>(kPcAckWriteRegsV2), QStringLiteral("pc_ack")};
+  layout.status = {core::plc_v26::kRegStatusStart, static_cast<quint16>(core::plc_v26::kStatusRegs), QStringLiteral("status")};
+  layout.tray = {core::plc_v26::kRegTrayAllCoding, static_cast<quint16>(core::plc_v26::kTrayAllCodingRegs), QStringLiteral("tray")};
+  layout.command = {core::plc_v26::kRegCommandStart, static_cast<quint16>(core::plc_v26::kCommandRegs), QStringLiteral("command")};
+  layout.mailbox = {core::plc_v26::kRegMailboxStart, static_cast<quint16>(core::plc_v26::kMailboxTotalRegs), QStringLiteral("mailbox")};
+  layout.pc_ack = {core::plc_v26::kRegPcAck, static_cast<quint16>(kPcAckWriteRegsV2), QStringLiteral("pc_ack")};
 
   if (!layout.isValid(err)) {
     return false;

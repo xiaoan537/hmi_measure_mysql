@@ -2,7 +2,7 @@
 #include <QString>
 #include <QVector>
 #include "core/plc_repository_v26.hpp"
-#include "core/plc_polling_v2.hpp"
+#include "core/plc_contract_v2.hpp"
 
 namespace core {
 
@@ -19,6 +19,12 @@ public:
   bool setControlMode(qint16 mode, QString *err = nullptr) const;
   bool setPartType(qint16 partType, QString *err = nullptr) const;
   bool sendCommandBitmap(quint16 cmdBits, qint16 partType, QString *err = nullptr) const;
+  bool sendInitialize(qint16 partType, QString *err = nullptr) const;
+  bool sendStartMeasure(qint16 partType, QString *err = nullptr) const;
+  bool sendStartCalibration(qint16 partType, QString *err = nullptr) const;
+  bool sendStop(qint16 partType, QString *err = nullptr) const;
+  bool sendReset(qint16 partType, QString *err = nullptr) const;
+  bool sendRetestCurrent(qint16 partType, QString *err = nullptr) const;
   bool confirmIdCheckPassed(QString *err = nullptr) const;
   bool writePcAck(QString *err = nullptr) const;
   bool writeJudgeResult(quint16 result, QString *err = nullptr) const;

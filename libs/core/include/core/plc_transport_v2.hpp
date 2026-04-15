@@ -4,7 +4,7 @@
 #include <QtGlobal>
 #include <QVector>
 
-#include "core/plc_polling_v2.hpp"
+#include "core/plc_contract_v2.hpp"
 
 namespace core {
 
@@ -48,24 +48,6 @@ public:
                                      QString *err = nullptr) = 0;
 };
 
-struct PlcPollRunResultV2 {
-  PlcPollPlanV2 bootstrap_plan; // 第一阶段：固定读取 Status + Command
-  PlcPollPlanV2 final_plan;     // 第二阶段：按当前状态决定是否补读 Tray / Mailbox
-  PlcRegisterWindowV2 window;
-  PlcPollStepResultV2 step;
-};
-
-bool readPlcRegisterSpanV2(IPlcRegisterClientV2 *client,
-                           const PlcRegisterSpanV2 &span,
-                           QVector<quint16> *out,
-                           QString *err = nullptr);
-
-bool readPlcRegisterWindowByPlanV2(IPlcRegisterClientV2 *client,
-                                   const PlcAddressLayoutV2 &layout,
-                                   const PlcPollPlanV2 &plan,
-                                   PlcRegisterWindowV2 *out,
-                                   QString *err = nullptr);
-
 bool encodePlcCommandWriteRegsV2(const PlcCommandBlockV2 &command,
                                  QVector<quint16> *out,
                                  QString *err = nullptr);
@@ -89,15 +71,5 @@ bool writePlcTrayPartIdSlotV2(IPlcRegisterClientV2 *client,
                               int slotIndex,
                               const QString &partId,
                               QString *err = nullptr);
-
-// 执行“一拍完整轮询”的骨架：
-// 1) 先读 Status + Command
-// 2) 根据当前 Status 决定是否补读 Tray / Mailbox
-// 3) 解码并做事件去重
-bool runPlcPollCycleV2(IPlcRegisterClientV2 *client,
-                       const PlcAddressLayoutV2 &layout,
-                       PlcPollCacheV2 *cache,
-                       PlcPollRunResultV2 *out,
-                       QString *err = nullptr);
 
 } // namespace core

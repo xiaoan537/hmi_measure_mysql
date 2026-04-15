@@ -125,25 +125,7 @@ namespace core
         c.plc.number_of_retries = s.value("number_of_retries", 1).toInt();
         c.plc.poll_interval_ms = s.value("poll_interval_ms", 100).toInt();
         c.plc.auto_reconnect = (s.value("auto_reconnect", 1).toInt() != 0);
-        c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();        c.plc.mode_start_address = s.value("mode_start_address", 0).toULongLong();
-        c.plc.status_start_address = s.value("status_start_address", 0).toULongLong();
-        c.plc.tray_start_address = s.value("tray_start_address", 0).toULongLong();
-        c.plc.command_start_address = s.value("command_start_address", 0).toULongLong();
-        c.plc.mailbox_start_address = s.value("mailbox_start_address", 0).toULongLong();
-        c.plc.pc_ack_start_address = s.value("pc_ack_start_address", 0).toULongLong();
-        c.plc.judge_result_start_address = s.value("judge_result_start_address", 0).toULongLong();
-        c.plc.axis_ctrl_start_address = s.value("axis_ctrl_start_address", 0).toULongLong();
-        c.plc.axis_sta_start_address = s.value("axis_sta_start_address", 0).toULongLong();
-        c.plc.lm_ctrl_start_address = s.value("lm_ctrl_start_address", 0).toULongLong();
-        c.plc.cl_ctrl_start_address = s.value("cl_ctrl_start_address", 0).toULongLong();
-        c.plc.gt2_ctrl_start_address = s.value("gt2_ctrl_start_address", 0).toULongLong();
-        c.plc.lm_sta_start_address = s.value("lm_sta_start_address", 0).toULongLong();
-        c.plc.cl_sta_start_address = s.value("cl_sta_start_address", 0).toULongLong();
-        c.plc.gt2_sta_start_address = s.value("gt2_sta_start_address", 0).toULongLong();
-        c.plc.coding_start_address = s.value("coding_start_address", 0).toULongLong();
-        c.plc.keyence_result_start_address = s.value("keyence_result_start_address", 0).toULongLong();
-        c.plc.chuantec_result_start_address = s.value("chuantec_result_start_address", 0).toULongLong();
-        c.plc.r_pos_start_address = s.value("r_pos_start_address", 0).toULongLong();
+        c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();
         s.endGroup();
 
         return c;

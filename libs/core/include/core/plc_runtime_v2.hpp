@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QObject>
-#include <QByteArray>
 #include <QTimer>
 #include <QString>
 #include <QtGlobal>
@@ -9,6 +8,8 @@
 #include <memory>
 
 #include "core/config.hpp"
+#include "core/measurement_pipeline.hpp"
+#include "core/plc_polling_v2.hpp"
 #include "core/plc_qt_modbus_v2.hpp"
 #include "core/plc_transport_v2.hpp"
 #include "core/plc_types_v26.hpp"
@@ -66,20 +67,24 @@ public slots:
   bool connectNow(QString *err = nullptr);
   void disconnectNow();
 
-  bool sendCommand(const PlcCommandBlockV2 &command, QString *err = nullptr);
+  bool sendInitialize(qint16 partType, QString *err = nullptr);
+  bool sendStartMeasure(qint16 partType, QString *err = nullptr);
+  bool sendStartCalibration(qint16 partType, QString *err = nullptr);
+  bool sendStop(qint16 partType, QString *err = nullptr);
+  bool sendReset(qint16 partType, QString *err = nullptr);
+  bool sendRetestCurrent(qint16 partType, QString *err = nullptr);
   bool sendPcAck(quint16 pc_ack, QString *err = nullptr);
   bool writeTrayPartIdSlot(int slotIndex, const QString &partId,
                            QString *err = nullptr);
-  bool readHoldingRegistersRaw(quint32 startAddress, quint16 regCount,
-                               QVector<quint16> *out, QString *err = nullptr);
-  bool writeHoldingRegistersRaw(quint32 startAddress, const QVector<quint16> &values,
-                                QString *err = nullptr);
-  bool readMbBytesRaw(quint32 mbByteAddress, quint16 byteCount, QByteArray *out, QString *err = nullptr);
-  bool writeMbBytesRaw(quint32 mbByteAddress, const QByteArray &bytes, QString *err = nullptr);
   bool readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
                                       QString *err = nullptr);
   bool readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err = nullptr);
+  bool setModeManual(QString *err = nullptr);
+  bool setModeAuto(QString *err = nullptr);
+  bool setModeSingleStep(QString *err = nullptr);
   bool writePlcMode(qint16 mode, QString *err = nullptr);
+  bool setPartTypeA(QString *err = nullptr);
+  bool setPartTypeB(QString *err = nullptr);
   bool writeJudgeResult(quint16 judgeResult, QString *err = nullptr);
   bool setCategoryMode(qint16 categoryMode, QString *err = nullptr);
   bool writeScanDone(quint16 value, QString *err = nullptr);
@@ -97,7 +102,6 @@ signals:
   void statsUpdated(const core::PlcRuntimeStatsV2 &stats);
   void errorOccurred(const QString &message);
 
-  void pollCycleCompleted(const core::PlcPollRunResultV2 &result);
   void plcEventsRaised(const core::PlcPollEventsV2 &events);
 
   void statusUpdated(const core::PlcStatusBlockV2 &status);
@@ -113,7 +117,6 @@ private:
   bool pollSecondStage(QString *err = nullptr);
   void rebuildPlcServices();
   bool refreshConnectionState();
-  void updateStatsFromCache();
   void publishError(const QString &message);
 
 private:
@@ -135,4 +138,3 @@ private:
 };
 
 } // namespace core
-

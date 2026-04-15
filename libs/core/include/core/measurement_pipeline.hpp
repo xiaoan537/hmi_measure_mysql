@@ -107,21 +107,6 @@ struct MeasurementContext {
 
 // 计算层统一输入：PLC 原始测量事实 + PC 已知业务事实。
 
-
-struct PlcMailboxRegisterBlock {
-  // header_regs 按物理头块保留完整 58 regs（54 有效 + 4 预留）。
-  QVector<quint16> header_regs;
-  QVector<quint16> array_regs;
-};
-
-// 对应 PLC Mailbox 的“逻辑原始块”：header + 线性展开 arrays。
-// arrays_um 的顺序约定：item0 完整块，再 item1 完整块，不交织；
-// item 内顺序：ring -> channel -> point。
-struct PlcMailboxRawFrame {
-  PlcMailboxHeaderV2 header;
-  QVector<float> arrays_um;
-};
-
 struct MeasurementComputeInput {
   PlcMailboxSnapshot snapshot;
   MeasurementContext context;
@@ -223,10 +208,6 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
                       RawLoopItemBuildResult *out,
                       QString *err = nullptr);
 
-QChar mailboxPartTypeFromHeader(quint16 plcPartType);
-int expectedMailboxPointCountPerItem(const PlcMailboxHeaderV2 &header);
-int expectedMailboxUsedPointCount(const PlcMailboxHeaderV2 &header);
-
 bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
                      quint16 *out, QString *err = nullptr);
 bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
@@ -243,8 +224,6 @@ bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
 bool plcWriteAsciiRegs(const QString &text, int regCount,
                        QVector<quint16> *out, QString *err = nullptr);
 
-// 第一阶段联调：直接由 g_aCoding / g_aKeyence_Result / g_aChuantec_Result 组装 v2.4 Mailbox 语义快照。
-
 QVector<int> logicalSlotsFromMaskV25(quint16 slotMask);
 
 bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
@@ -260,51 +239,9 @@ bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
                                         QChar partType,
                                         PlcMailboxSnapshot *out,
                                         QString *err = nullptr);
-
-bool buildFirstStageMailboxSnapshotV24(const QVector<quint16> &codingRegs,
-                                       const QVector<quint16> &keyenceRegs,
-                                       const QVector<quint16> &chuantecRegs,
-                                       QChar partType,
-                                       PlcMailboxSnapshot *out,
-                                       QString *err = nullptr);
-
-bool buildPlcStatusBlockV2(const QVector<quint16> &statusRegs,
-                           PlcStatusBlockV2 *out,
-                           QString *err = nullptr);
-bool buildPlcTrayPartIdBlockV2(const QVector<quint16> &trayRegs,
-                               PlcTrayPartIdBlockV2 *out,
-                               QString *err = nullptr);
-bool buildPlcCommandBlockV2(const QVector<quint16> &commandRegs,
-                            PlcCommandBlockV2 *out,
-                            QString *err = nullptr);
-bool encodePlcTrayPartIdBlockV2(const PlcTrayPartIdBlockV2 &block,
-                                QVector<quint16> *out,
-                                QString *err = nullptr);
 bool encodePlcTrayPartIdSlotRegs(const QString &partId,
                                  QVector<quint16> *out,
                                  QString *err = nullptr);
-
-bool splitPlcMailboxRegisters(const QVector<quint16> &mailboxRegs,
-                              PlcMailboxRegisterBlock *out,
-                              QString *err = nullptr);
-bool buildPlcMailboxHeaderV2(const QVector<quint16> &headerRegs,
-                             PlcMailboxHeaderV2 *out,
-                             QString *err = nullptr);
-bool buildPlcMailboxRawFrame(const QVector<quint16> &headerRegs,
-                             const QVector<quint16> &arrayRegs,
-                             PlcMailboxRawFrame *out,
-                             QString *err = nullptr);
-bool buildPlcMailboxRawFrame(const PlcMailboxRegisterBlock &regBlock,
-                             PlcMailboxRawFrame *out,
-                             QString *err = nullptr);
-
-bool buildPlcMailboxSnapshot(const PlcMailboxHeaderV2 &header,
-                             const QVector<float> &arrays_um,
-                             PlcMailboxSnapshot *out,
-                             QString *err = nullptr);
-bool buildPlcMailboxSnapshot(const PlcMailboxRawFrame &frame,
-                             PlcMailboxSnapshot *out,
-                             QString *err = nullptr);
 
 QJsonObject toJson(const PlcStatusBlockV2 &status);
 QJsonObject toJson(const PlcTrayPartIdBlockV2 &tray);
