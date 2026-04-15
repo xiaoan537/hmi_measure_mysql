@@ -230,8 +230,8 @@ bool MeasurementComputeInput::isValid(QString *err) const {
   return true;
 }
 
-bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
-                     quint16 *out, QString *err) {
+static bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
+                            quint16 *out, QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadUint16At.out 不能为空"));
     return false;
@@ -243,8 +243,8 @@ bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
-bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
-                         quint32 *out, QString *err) {
+static bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                                quint32 *out, QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadUint32AbcdAt.out 不能为空"));
     return false;
@@ -258,8 +258,8 @@ bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
-bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
-                          float *out, QString *err) {
+static bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
+                                 float *out, QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadFloat32AbcdAt.out 不能为空"));
     return false;
@@ -272,8 +272,8 @@ bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
-bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
-                                 double *out, QString *err) {
+static bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
+                                        double *out, QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadFloat64WordSwappedAt.out 不能为空"));
     return false;
@@ -290,8 +290,8 @@ bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
-bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
-                    QString *out, QString *err) {
+static bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
+                           QString *out, QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadAsciiAt.out 不能为空"));
     return false;
@@ -310,9 +310,9 @@ bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
   return true;
 }
 
-bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
-                             int floatCount, QVector<float> *out,
-                             QString *err) {
+static bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
+                                    int floatCount, QVector<float> *out,
+                                    QString *err) {
   if (!out) {
     failWith(err, QStringLiteral("plcReadFloat32ArrayAbcd.out 不能为空"));
     return false;
@@ -338,43 +338,7 @@ bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
   return true;
 }
 
-bool plcWriteAsciiRegs(const QString &text, int regCount,
-                       QVector<quint16> *out, QString *err) {
-  if (!out) {
-    failWith(err, QStringLiteral("plcWriteAsciiRegs.out 不能为空"));
-    return false;
-  }
-  if (regCount < 0) {
-    failWith(err, QStringLiteral("regCount 不能小于 0"));
-    return false;
-  }
-
-  QString normalized = text;
-  if (normalized.size() > regCount * 2) {
-    normalized = normalized.left(regCount * 2);
-  }
-  while (normalized.size() < regCount * 2) {
-    normalized.append(QChar('\0'));
-  }
-
-  QVector<quint16> regs;
-  regs.reserve(regCount);
-  for (int i = 0; i < regCount; ++i) {
-    const ushort lo = static_cast<ushort>(normalized.at(i * 2).unicode() & 0x00FFu);
-    const ushort hi = static_cast<ushort>(normalized.at(i * 2 + 1).unicode() & 0x00FFu);
-    regs.push_back(static_cast<quint16>((hi << 8) | lo));
-  }
-  *out = regs;
-  return true;
-}
-
-bool encodePlcTrayPartIdSlotRegs(const QString &partId,
-                                 QVector<quint16> *out,
-                                 QString *err) {
-  return plcWriteAsciiRegs(partId, kTrayPartIdRegsPerSlot, out, err);
-}
-
-QVector<int> logicalSlotsFromMaskV25(quint16 slotMask) {
+static QVector<int> logicalSlotsFromMaskV25(quint16 slotMask) {
   QVector<int> slotList;
   for (int bit = 0; bit < 16; ++bit) {
     if (((slotMask >> bit) & 0x1u) != 0) {

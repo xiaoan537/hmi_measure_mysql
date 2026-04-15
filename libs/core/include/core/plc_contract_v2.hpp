@@ -9,7 +9,6 @@ namespace core {
 
 constexpr int kLogicalSlotCount = core::plc_v26::kLogicalSlotCount;
 constexpr int kCalibrationSlotIndex = core::plc_v26::kCalibrationSlotIndex;
-constexpr int kTrayPartIdRegsPerSlot = 16;
 
 // v2.6 固定布局（地址和长度统一来自 plc_addresses_v26.hpp）
 constexpr int kStatusBlockRegsV25 = core::plc_v26::kStatusRegs;

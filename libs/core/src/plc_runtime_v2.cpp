@@ -6,6 +6,7 @@
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_addresses_v26.hpp"
 #include "core/plc_codec_v26.hpp"
+#include "core/plc_motion_service_v26.hpp"
 #include "core/plc_repository_v26.hpp"
 #include "core/plc_service_v26.hpp"
 
@@ -27,8 +28,10 @@ PlcRuntimeServiceV2::~PlcRuntimeServiceV2() { stop(); }
 void PlcRuntimeServiceV2::rebuildPlcServices() {
   repo_owner_ = std::make_unique<PlcRepositoryV26>(client_);
   service_owner_ = std::make_unique<PlcServiceV26>(client_);
+  motion_service_owner_ = std::make_unique<PlcMotionServiceV26>(client_);
   repo_ptr_ = repo_owner_.get();
   service_ptr_ = service_owner_.get();
+  motion_service_ptr_ = motion_service_owner_.get();
 }
 
 bool PlcRuntimeServiceV2::applyConfig(const AppConfig &cfg, QString *err) {
@@ -305,37 +308,37 @@ bool PlcRuntimeServiceV2::writeJudgeResult(quint16 judgeResult, QString *err) {
 
 bool PlcRuntimeServiceV2::readAxisState(int axisIndex, PlcAxisStateV26 *out, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->readAxisState(axisIndex, out, err);
+  return motion_service_ptr_->readAxisState(axisIndex, out, err);
 }
 
 bool PlcRuntimeServiceV2::readCylinderState(const QString &group, int index, PlcCylinderStateV26 *out, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->readCylinderState(group, index, out, err);
+  return motion_service_ptr_->readCylinderState(group, index, out, err);
 }
 
 bool PlcRuntimeServiceV2::axisSetEnable(int axisIndex, bool on, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->axisSetEnable(axisIndex, on, err);
+  return motion_service_ptr_->axisSetEnable(axisIndex, on, err);
 }
 
 bool PlcRuntimeServiceV2::axisPulseAction(int axisIndex, const QString &action, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->axisPulseAction(axisIndex, action, err);
+  return motion_service_ptr_->axisPulseAction(axisIndex, action, err);
 }
 
 bool PlcRuntimeServiceV2::axisJog(int axisIndex, bool forward, bool active, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->axisJog(axisIndex, forward, active, err);
+  return motion_service_ptr_->axisJog(axisIndex, forward, active, err);
 }
 
 bool PlcRuntimeServiceV2::axisMove(int axisIndex, bool relative, double acc, double dec, double pos, double vel, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->axisMove(axisIndex, relative, acc, dec, pos, vel, err);
+  return motion_service_ptr_->axisMove(axisIndex, relative, acc, dec, pos, vel, err);
 }
 
 bool PlcRuntimeServiceV2::cylinderAction(const QString &group, int index, const QString &action, QString *err) {
   if (!ensureClientReady(err)) return false;
-  return service_ptr_->cylinderAction(group, index, action, err);
+  return motion_service_ptr_->cylinderAction(group, index, action, err);
 }
 
 void PlcRuntimeServiceV2::onPollTimerTimeout() { pollOnce(); }

@@ -133,8 +133,10 @@ private:
 
   class PlcRepositoryV26 *repo_ptr_ = nullptr;
   class PlcServiceV26 *service_ptr_ = nullptr;
+  class PlcMotionServiceV26 *motion_service_ptr_ = nullptr;
   std::unique_ptr<class PlcRepositoryV26> repo_owner_;
   std::unique_ptr<class PlcServiceV26> service_owner_;
+  std::unique_ptr<class PlcMotionServiceV26> motion_service_owner_;
 };
 
 } // namespace core

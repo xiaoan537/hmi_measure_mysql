@@ -30,15 +30,6 @@ public:
   bool writeJudgeResult(quint16 result, QString *err = nullptr) const;
   bool writeTrayPartIdSlot(int slotIndex, const QString &partId, QString *err = nullptr) const;
 
-  bool readAxisState(int axisIndex, PlcAxisStateV26 *out, QString *err = nullptr) const;
-  bool axisSetEnable(int axisIndex, bool on, QString *err = nullptr) const;
-  bool axisPulseAction(int axisIndex, const QString &action, QString *err = nullptr) const;
-  bool axisJog(int axisIndex, bool forward, bool active, QString *err = nullptr) const;
-  bool axisMove(int axisIndex, bool relative, double acc, double dec, double pos, double vel, QString *err = nullptr) const;
-
-  bool readCylinderState(const QString &group, int index, PlcCylinderStateV26 *out, QString *err = nullptr) const;
-  bool cylinderAction(const QString &group, int index, const QString &action, QString *err = nullptr) const;
-
   bool pollStatusAndCommand(PlcStatusBlockV2 *status, PlcCommandBlockV2 *command, QString *err = nullptr) const;
 
 private:

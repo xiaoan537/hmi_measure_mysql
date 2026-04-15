@@ -9,7 +9,6 @@
 #include <QTimer>
 #include <QVariant>
 
-#include "core/plc_contract_v2.hpp"
 #include "core/plc_addresses_v26.hpp"
 
 namespace core {
@@ -47,7 +46,7 @@ bool buildPlcAddressLayoutV2(const PlcConfig &cfg,
   layout.tray = {core::plc_v26::kRegTrayAllCoding, static_cast<quint16>(core::plc_v26::kTrayAllCodingRegs), QStringLiteral("tray")};
   layout.command = {core::plc_v26::kRegCommandStart, static_cast<quint16>(core::plc_v26::kCommandRegs), QStringLiteral("command")};
   layout.mailbox = {core::plc_v26::kRegMailboxStart, static_cast<quint16>(core::plc_v26::kMailboxTotalRegs), QStringLiteral("mailbox")};
-  layout.pc_ack = {core::plc_v26::kRegPcAck, static_cast<quint16>(kPcAckWriteRegsV2), QStringLiteral("pc_ack")};
+  layout.pc_ack = {core::plc_v26::kRegPcAck, static_cast<quint16>(core::plc_v26::kPcAckRegs), QStringLiteral("pc_ack")};
 
   if (!layout.isValid(err)) {
     return false;

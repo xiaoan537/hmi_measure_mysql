@@ -208,24 +208,6 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
                       RawLoopItemBuildResult *out,
                       QString *err = nullptr);
 
-bool plcReadUint16At(const QVector<quint16> &regs, int offsetRegs,
-                     quint16 *out, QString *err = nullptr);
-bool plcReadUint32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
-                         quint32 *out, QString *err = nullptr);
-bool plcReadFloat32AbcdAt(const QVector<quint16> &regs, int offsetRegs,
-                          float *out, QString *err = nullptr);
-bool plcReadFloat64WordSwappedAt(const QVector<quint16> &regs, int offsetRegs,
-                                 double *out, QString *err = nullptr);
-bool plcReadAsciiAt(const QVector<quint16> &regs, int offsetRegs, int regCount,
-                    QString *out, QString *err = nullptr);
-bool plcReadFloat32ArrayAbcd(const QVector<quint16> &regs, int offsetRegs,
-                             int floatCount, QVector<float> *out,
-                             QString *err = nullptr);
-bool plcWriteAsciiRegs(const QString &text, int regCount,
-                       QVector<quint16> *out, QString *err = nullptr);
-
-QVector<int> logicalSlotsFromMaskV25(quint16 slotMask);
-
 bool buildPlcStatusBlockV25(const QVector<quint16> &statusRegs,
                             PlcStatusBlockV2 *out,
                             QString *err = nullptr);
@@ -239,9 +221,6 @@ bool buildSecondStageMailboxSnapshotV25(const QVector<quint16> &mailboxRegs,
                                         QChar partType,
                                         PlcMailboxSnapshot *out,
                                         QString *err = nullptr);
-bool encodePlcTrayPartIdSlotRegs(const QString &partId,
-                                 QVector<quint16> *out,
-                                 QString *err = nullptr);
 
 QJsonObject toJson(const PlcStatusBlockV2 &status);
 QJsonObject toJson(const PlcTrayPartIdBlockV2 &tray);
