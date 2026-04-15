@@ -395,13 +395,6 @@ void ProductionWidget::refreshSelectedDetail()
     ui_->lblPart1->setText(QStringLiteral("—"));
     ui_->lblFail->setText(QStringLiteral("—"));
 
-    if (mb_meas_seq_ != 0) {
-        if (selected_slot_ == static_cast<int>(mb_slot0_)) {
-            ui_->lblPart1->setText(QStringLiteral("meas=%1, item0=%2").arg(mb_meas_seq_).arg(mb_part_id0_.isEmpty() ? QStringLiteral("—") : mb_part_id0_));
-        } else if (selected_slot_ == static_cast<int>(mb_slot1_)) {
-            ui_->lblPart1->setText(QStringLiteral("meas=%1, item1=%2").arg(mb_meas_seq_).arg(mb_part_id1_.isEmpty() ? QStringLiteral("—") : mb_part_id1_));
-        }
-    }
 
     SlotMeasureSummary ms;
     if (slot_meas_.size() == 16) ms = slot_meas_[selected_slot_];
@@ -704,7 +697,6 @@ void ProductionWidget::setSlotSummaries(const QVector<core::ProductionSlotSummar
 void ProductionWidget::clearCurrentBatch()
 {
     tray_present_ = 0;
-    mb_meas_seq_ = 0;
     mb_slot0_ = 0;
     mb_slot1_ = 0xFFFF;
     mb_part_id0_.clear();
@@ -763,7 +755,7 @@ void ProductionWidget::setMailboxPreview(quint32 meas_seq,
                                          float /*total_len0_mm*/,
                                          float /*total_len1_mm*/)
 {
-    mb_meas_seq_ = meas_seq;
+    Q_UNUSED(meas_seq);
     mb_part_type_ = part_type;
     mb_slot0_ = slot0;
     mb_slot1_ = slot1;

@@ -157,7 +157,6 @@ private:
     int selected_slot_ = 0;
 
     // mailbox preview cache（仅用于展示）
-    quint32 mb_meas_seq_ = 0;
     QString last_machine_state_text_;
     QChar mb_part_type_ = QChar('A');
     quint16 mb_slot0_ = 0;

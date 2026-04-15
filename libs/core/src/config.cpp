@@ -125,10 +125,7 @@ namespace core
         c.plc.number_of_retries = s.value("number_of_retries", 1).toInt();
         c.plc.poll_interval_ms = s.value("poll_interval_ms", 100).toInt();
         c.plc.auto_reconnect = (s.value("auto_reconnect", 1).toInt() != 0);
-        c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();
-        c.plc.use_fake_client = (s.value("use_fake_client", 0).toInt() != 0);
-        c.plc.first_stage_enabled = (s.value("first_stage_enabled", 0).toInt() != 0);
-        c.plc.mode_start_address = s.value("mode_start_address", 0).toULongLong();
+        c.plc.reconnect_interval_ms = s.value("reconnect_interval_ms", 2000).toInt();        c.plc.mode_start_address = s.value("mode_start_address", 0).toULongLong();
         c.plc.status_start_address = s.value("status_start_address", 0).toULongLong();
         c.plc.tray_start_address = s.value("tray_start_address", 0).toULongLong();
         c.plc.command_start_address = s.value("command_start_address", 0).toULongLong();

@@ -35,7 +35,6 @@
 
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
-#include "core/plc_fake_client_v2.hpp"
 #include "core/plc_runtime_v2.hpp"
 #include "core/plc_addresses_v26.hpp"
 #include "core/plc_codec_v26.hpp"
@@ -131,8 +130,6 @@ QVector<QString> trayToVector(const core::PlcTrayPartIdBlockV2 &tray) {
 
 core::PlcCommandCodeV2 uiCommandToCode(const QString &cmd, bool *ok) {
   if (ok) *ok = true;
-  if (cmd == QStringLiteral("SET_MODE_AUTO")) return core::PlcCommandCodeV2::SetModeAuto;
-  if (cmd == QStringLiteral("SET_MODE_MANUAL")) return core::PlcCommandCodeV2::SetModeManual;
   if (cmd == QStringLiteral("INITIALIZE")) return core::PlcCommandCodeV2::Initialize;
   if (cmd == QStringLiteral("START_AUTO")) return core::PlcCommandCodeV2::StartAuto;
   if (cmd == QStringLiteral("START_CALIBRATION")) return core::PlcCommandCodeV2::StartCalibration;
@@ -320,12 +317,6 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
     return;
   }
 
-  if (cfg.plc.use_fake_client) {
-    fakePlcClient_ = new core::FakePlcRegisterClientV2(this);
-    plcRuntime_->setRegisterClient(fakePlcClient_, false);
-    seedFakePlcDemoData();
-  }
-
   QString err;
   if (!plcRuntime_->start(&err)) {
     handlePlcRuntimeError(err);
@@ -333,11 +324,9 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
     return;
   }
 
-  if (!cfg.plc.use_fake_client) {
-    appendProductionLog(QStringLiteral("正在连接 PLC..."));
-    if (!plcRuntime_->connectNow(&err)) {
-      handlePlcRuntimeError(err);
-    }
+  appendProductionLog(QStringLiteral("正在连接 PLC..."));
+  if (!plcRuntime_->connectNow(&err)) {
+    handlePlcRuntimeError(err);
   }
   updatePlcStatusLabel();
 }
@@ -461,6 +450,28 @@ void MainWindow::setupBusinessPageBindings() {
   }
 }
 
+
+void MainWindow::appendProductionLog(const QString &text) {
+  const QString trimmed = text.trimmed();
+  if (trimmed.isEmpty()) return;
+  if (productionWidget_) productionWidget_->appendPlcLogMessage(trimmed);
+}
+
+void MainWindow::attemptReconnectPlc(bool manual) {
+  if (!plcRuntime_) return;
+  if (manual) appendProductionLog(QStringLiteral("手动重连 PLC..."));
+  QString err;
+  plcRuntime_->disconnectNow();
+  if (!plcRuntime_->connectNow(&err)) {
+    handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("PLC 重连失败") : err);
+    return;
+  }
+  reconnectAttemptLogged_ = false;
+  updatePlcStatusLabel();
+  appendProductionLog(QStringLiteral("PLC 连接成功"));
+  plcRuntime_->pollOnce();
+}
+
 void MainWindow::updatePlcStatusLabel() {
   if (!lbPlc_) {
     return;
@@ -474,77 +485,9 @@ void MainWindow::updatePlcStatusLabel() {
     lbPlc_->setText(QStringLiteral("PLC: 未启用"));
     return;
   }
-  const QString mode = cfg.use_fake_client ? QStringLiteral("Fake") : QStringLiteral("Real");
+  const QString mode = QStringLiteral("Real");
   const QString conn = plcRuntime_->isConnected() ? QStringLiteral("已连接") : QStringLiteral("未连接");
   lbPlc_->setText(QStringLiteral("PLC: %1 / %2").arg(mode, conn));
-}
-
-void MainWindow::seedFakePlcDemoData() {
-  if (!plcRuntime_ || !fakePlcClient_) {
-    return;
-  }
-
-  const auto &layout = plcRuntime_->addressLayout();
-  QString err;
-
-  core::PlcStatusBlockV2 status;
-  status.machine_state = static_cast<quint16>(core::PlcMachineState::Auto);
-  status.step_state = static_cast<quint16>(core::PlcStepStateV2::WaitPcRead);
-  status.state_seq = 1;
-  status.tray_present_mask = 0x0006; // slot1 + slot2
-  status.scan_done = 1;
-  status.scan_seq = 1;
-  status.active_item_count = 2;
-  status.active_slot_index[0] = 1;
-  status.active_slot_index[1] = 2;
-  status.mailbox_ready = 1;
-  status.meas_seq = 1;
-  fakePlcClient_->loadStatusBlock(layout, status, &err);
-
-  core::PlcTrayPartIdBlockV2 tray;
-  tray.part_ids[1] = QStringLiteral("DEMO-A-0001");
-  tray.part_ids[2] = QStringLiteral("DEMO-A-0002");
-  fakePlcClient_->loadTrayPartIdBlock(layout, tray, &err);
-
-  core::PlcCommandBlockV2 command;
-  fakePlcClient_->loadCommandBlock(layout, command, &err);
-
-  core::PlcMailboxRawFrame frame;
-  frame.header.meas_seq = 1;
-  frame.header.part_type = 1; // A
-  frame.header.item_count = 2;
-  frame.header.slot_index[0] = 1;
-  frame.header.slot_index[1] = 2;
-  frame.header.part_id_ascii[0] = tray.part_ids[1];
-  frame.header.part_id_ascii[1] = tray.part_ids[2];
-  frame.header.total_len_mm[0] = 12.34f;
-  frame.header.total_len_mm[1] = 12.29f;
-  frame.header.ad_len_mm[0] = 0.0f;
-  frame.header.ad_len_mm[1] = 0.0f;
-  frame.header.bc_len_mm[0] = 0.0f;
-  frame.header.bc_len_mm[1] = 0.0f;
-  frame.header.raw_layout_ver = 1;
-  frame.header.ring_count = static_cast<quint16>(qMax(1, plcRuntime_->config().scan_a.rings));
-  frame.header.point_count = static_cast<quint16>(qMax(1, plcRuntime_->config().scan_a.points_per_ring));
-  frame.header.channel_count = 4;
-  frame.arrays_um = makeDemoMailboxArray(frame.header);
-  fakePlcClient_->loadMailboxRawFrame(layout, frame, &err);
-}
-
-void MainWindow::appendProductionLog(const QString &text) {
-  if (productionWidget_) productionWidget_->appendPlcLogMessage(text);
-}
-
-void MainWindow::attemptReconnectPlc(bool manual) {
-  if (!plcRuntime_) return;
-  QString err;
-  if (manual) appendProductionLog(QStringLiteral("尝试重新连接 PLC..."));
-  plcRuntime_->disconnectNow();
-  if (!plcRuntime_->connectNow(&err)) {
-    handlePlcRuntimeError(err);
-    return;
-  }
-  plcRuntime_->pollOnce();
 }
 
 void MainWindow::handlePlcRuntimeError(const QString &message) {

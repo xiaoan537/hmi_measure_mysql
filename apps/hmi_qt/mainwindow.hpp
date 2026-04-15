@@ -20,7 +20,6 @@ class ManualMaintainWidget;
 
 namespace core {
 class PlcRuntimeServiceV2;
-class FakePlcRegisterClientV2;
 struct PlcMailboxSnapshot;
 struct PlcRuntimeStatsV2;
 struct PlcStatusBlockV2;
@@ -41,7 +40,6 @@ private:
     void setupDiagnosticsBindings();
     void setupBusinessPageBindings();
     void updatePlcStatusLabel();
-    void seedFakePlcDemoData();
     void handlePlcRuntimeError(const QString &message);
     void onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats);
     void onPlcStatusUpdated(const core::PlcStatusBlockV2 &status);
@@ -69,7 +67,6 @@ private:
     QLabel *lbPlc_ = nullptr;
     QLabel *lbMes_ = nullptr;
     std::unique_ptr<core::PlcRuntimeServiceV2> plcRuntime_;
-    core::FakePlcRegisterClientV2 *fakePlcClient_ = nullptr;
     quint32 plcCommandSeq_ = 1;
     quint16 lastMailboxReady_ = 0;
     quint32 lastMailboxSeq_ = 0;
