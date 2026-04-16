@@ -1,11 +1,11 @@
 #include "production_widget.hpp"
+#include "production_widget_logic.hpp"
 #include "ui_production_widget.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDesktopServices>
 #include <QDir>
-#include <QHBoxLayout>
 #include <QFileInfo>
 #include <QLabel>
 #include <QFont>
@@ -13,59 +13,6 @@
 #include <QStyle>
 #include <QVBoxLayout>
 #include <QUrl>
-
-namespace {
-
-inline QString formatFloat(float v, int prec = 3)
-{
-    if (qIsNaN(v) || qIsInf(v)) return QStringLiteral("--");
-    return QString::number(v, 'f', prec);
-}
-
-inline QString shortId(const QString &id32)
-{
-    if (id32.isEmpty()) return QStringLiteral("—");
-    if (id32.size() <= 10) return id32;
-    return id32.left(6) + QStringLiteral("…") + id32.right(3);
-}
-
-inline QString machineStateMaskText(quint16 mask)
-{
-    QStringList parts;
-    if (mask & (1u << 0)) parts << QStringLiteral("空闲");
-    if (mask & (1u << 1)) parts << QStringLiteral("自动");
-    if (mask & (1u << 2)) parts << QStringLiteral("手动");
-    if (mask & (1u << 3)) parts << QStringLiteral("暂停");
-    if (mask & (1u << 4)) parts << QStringLiteral("错误");
-    if (mask & (1u << 5)) parts << QStringLiteral("急停");
-    if (!parts.isEmpty()) return parts.join(QStringLiteral(" | "));
-    return QStringLiteral("状态(%1)").arg(mask);
-}
-
-SlotMeasureSummary toWidgetSummary(const core::ProductionSlotSummary &src)
-{
-    SlotMeasureSummary out;
-    out.part_type = src.part_type;
-    out.valid = src.valid || src.compute.valid;
-    out.judgement_known = src.judgement_known;
-    out.judgement_ok = src.judgement_ok;
-    out.fail_reason_text = !src.fail_reason_text.isEmpty() ? src.fail_reason_text
-                                                           : src.compute.fail_reason_text;
-
-    out.a_total_len_mm = src.compute.values.total_len_mm;
-    out.a_id_left_mm = src.compute.values.id_left_mm;
-    out.a_od_left_mm = src.compute.values.od_left_mm;
-    out.a_id_right_mm = src.compute.values.id_right_mm;
-    out.a_od_right_mm = src.compute.values.od_right_mm;
-
-    out.b_ad_len_mm = src.compute.values.ad_len_mm;
-    out.b_bc_len_mm = src.compute.values.bc_len_mm;
-    out.b_runout_left_mm = src.compute.values.runout_left_mm;
-    out.b_runout_right_mm = src.compute.values.runout_right_mm;
-    return out;
-}
-
-} // namespace
 
 ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     : QWidget(parent), cfg_(cfg), ui_(new Ui::ProductionWidget)
@@ -124,49 +71,23 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->btnDevDemo->hide();
     ui_->btnOpenLastRaw->setMinimumHeight(32);
     ui_->btnWriteSlotIds->setMinimumHeight(32);
-    ui_->btnModeAuto->hide();
-    ui_->btnModeManual->hide();
-    ui_->btnHomeAll->hide();
-    ui_->btnStart->hide();
-    ui_->btnPause->hide();
-    ui_->btnResume->hide();
-    ui_->btnStop->hide();
-
-    auto *btnReconnectPlc = new QPushButton(QStringLiteral("重连PLC"), this);
-    btnReconnectPlc->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    btnReconnectPlc->setMinimumHeight(30);
-    if (auto *hlConn = ui_->frameTop->findChild<QHBoxLayout*>(QStringLiteral("hlConn"))) {
-        hlConn->addWidget(btnReconnectPlc);
-    }
-    connect(btnReconnectPlc, &QPushButton::clicked, this, [this]{ emit requestReconnectPlc(); });
-
-    auto makeTopTag = [this](const QString &text) {
-        auto *lb = new QLabel(text, this);
-        lb->setStyleSheet(QStringLiteral("QLabel{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-weight:600;}"));
-        return lb;
-    };
-    auto *statusTopFrame = new QFrame(this);
-    auto *statusTopLay = new QHBoxLayout(statusTopFrame);
-    statusTopLay->setContentsMargins(0, 0, 0, 0);
-    statusTopLay->setSpacing(8);
-    lbRuntimeMachine_ = makeTopTag(QStringLiteral("设备主状态：-"));
-    lbRuntimeMachine_->setMinimumWidth(180);
-    statusTopLay->addWidget(lbRuntimeMachine_);
-    statusTopFrame->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    if (auto *topLayout = qobject_cast<QHBoxLayout*>(ui_->frameTop->layout())) {
-        topLayout->insertWidget(1, statusTopFrame, 0, Qt::AlignVCenter);
-    }
+    lbRuntimeMachine_ = ui_->lblRuntimeMachine;
+    measureModeCombo_ = ui_->comboMeasureMode;
+    partTypeCombo_ = ui_->comboPartType;
+    plcModeCombo_ = ui_->comboPlcMode;
 
     // 生产业务模式：普通 / 第二次 / 第三次 / 军检（仅 PC 侧业务语义）
-    measureModeCombo_ = new QComboBox(this);
+    measureModeCombo_->clear();
     measureModeCombo_->addItem(QStringLiteral("普通测量"), static_cast<int>(ProductionMeasureMode::Normal));
     measureModeCombo_->addItem(QStringLiteral("第二次测量"), static_cast<int>(ProductionMeasureMode::Second));
     measureModeCombo_->addItem(QStringLiteral("第三次测量"), static_cast<int>(ProductionMeasureMode::Third));
     measureModeCombo_->addItem(QStringLiteral("军检"), static_cast<int>(ProductionMeasureMode::Mil));
-    partTypeCombo_ = new QComboBox(this);
+
+    partTypeCombo_->clear();
     partTypeCombo_->addItem(QStringLiteral("B型"), QStringLiteral("B"));
     partTypeCombo_->addItem(QStringLiteral("A型"), QStringLiteral("A"));
-    plcModeCombo_ = new QComboBox(this);
+
+    plcModeCombo_->clear();
     plcModeCombo_->addItem(QStringLiteral("手动"), 1);
     plcModeCombo_->addItem(QStringLiteral("自动"), 2);
     plcModeCombo_->addItem(QStringLiteral("单步"), 3);
@@ -179,80 +100,24 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     partTypeCombo_->setMinimumWidth(96);
     plcModeCombo_->setMinimumWidth(96);
 
-    if (auto *vlRun = qobject_cast<QVBoxLayout *>(ui_->groupRun->layout())) {
-        while (QLayoutItem *item = vlRun->takeAt(0)) {
-            if (item->widget()) item->widget()->hide();
-            delete item;
-        }
-
-        auto makeCmdBtn = [this](const QString &text) {
-            auto *btn = new QPushButton(text, this);
-            btn->setMinimumSize(96, 34);
-            btn->setMaximumSize(160, 36);
-            return btn;
-        };
-
-        auto *selectRow = new QHBoxLayout();
-        selectRow->setSpacing(8);
-        selectRow->addWidget(new QLabel(QStringLiteral("控制模式"), this));
-        selectRow->addWidget(plcModeCombo_);
-        selectRow->addSpacing(8);
-        selectRow->addWidget(new QLabel(QStringLiteral("工件类型"), this));
-        selectRow->addWidget(partTypeCombo_);
-        selectRow->addSpacing(8);
-        selectRow->addWidget(new QLabel(QStringLiteral("业务模式"), this));
-        selectRow->addWidget(measureModeCombo_);
-        selectRow->addStretch(1);
-        vlRun->addLayout(selectRow);
-
-        auto *cmdGrid = new QGridLayout();
-        cmdGrid->setHorizontalSpacing(8);
-        cmdGrid->setVerticalSpacing(8);
-        auto *btnInit = makeCmdBtn(QStringLiteral("初始化"));
-        auto *btnStartMeasure = makeCmdBtn(QStringLiteral("开始测量"));
-        auto *btnStartCal = makeCmdBtn(QStringLiteral("开始标定"));
-        auto *btnStop2 = makeCmdBtn(QStringLiteral("停止"));
-        auto *btnReset2 = makeCmdBtn(QStringLiteral("报警复位"));
-        auto *btnRetest = makeCmdBtn(QStringLiteral("当前件复测"));
-        cmdGrid->addWidget(btnInit, 0, 0);
-        cmdGrid->addWidget(btnStartMeasure, 0, 1);
-        cmdGrid->addWidget(btnStartCal, 0, 2);
-        cmdGrid->addWidget(btnStop2, 1, 0);
-        cmdGrid->addWidget(btnReset2, 1, 1);
-        cmdGrid->addWidget(btnRetest, 1, 2);
-        vlRun->addLayout(cmdGrid);
-
-        auto *flowBox = new QGroupBox(QStringLiteral("PLC联调 / 自动流程"), this);
-        auto *flowLay = new QGridLayout(flowBox);
-        flowLay->setHorizontalSpacing(8);
-        flowLay->setVerticalSpacing(8);
-        auto *btnReadIds = makeCmdBtn(QStringLiteral("读取扫码ID"));
-        auto *btnContinue = makeCmdBtn(QStringLiteral("继续(ID核对通过)"));
-        auto *btnReadMb = makeCmdBtn(QStringLiteral("读取测量包"));
-        auto *btnAck = makeCmdBtn(QStringLiteral("写ACK"));
-        btnContinue->setMinimumWidth(144);
-        flowLay->addWidget(btnReadIds, 0, 0);
-        flowLay->addWidget(btnContinue, 0, 1);
-        flowLay->addWidget(btnReadMb, 1, 0);
-        flowLay->addWidget(btnAck, 1, 1);
-        flowLay->setColumnStretch(2, 1);
-        vlRun->addWidget(flowBox);
-
-        connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestSetPlcMode(selectedPlcModeValue()); });
-        connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg())); });
-        connect(btnInit, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("INITIALIZE"), args); });
-        connect(btnStartMeasure, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText())); });
-        connect(btnStartCal, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args); });
-        connect(btnStop2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("STOP"), args); });
-        connect(btnReset2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("RESET_ALARM"), args); });
-        connect(btnRetest, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_RETEST_CURRENT"), args); });
-        connect(btnReadIds, &QPushButton::clicked, this, &ProductionWidget::requestReloadSlotIds);
-        connect(btnContinue, &QPushButton::clicked, this, &ProductionWidget::requestContinueAfterIdCheck);
-        connect(btnReadMb, &QPushButton::clicked, this, &ProductionWidget::requestReadMailbox);
-        connect(btnAck, &QPushButton::clicked, this, &ProductionWidget::requestAckMailbox);
-    }
+    connect(ui_->btnReconnectPlc, &QPushButton::clicked, this, [this]{ emit requestReconnectPlc(); });
+    connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestSetPlcMode(selectedPlcModeValue()); });
+    connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg())); });
+    connect(ui_->btnInit, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("INITIALIZE"), args); });
+    connect(ui_->btnStartMeasure, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText())); });
+    connect(ui_->btnStartCal, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args); });
+    connect(ui_->btnStop2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("STOP"), args); });
+    connect(ui_->btnReset2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); emit uiCommandRequested(QStringLiteral("RESET_ALARM"), args); });
+    connect(ui_->btnRetest, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_RETEST_CURRENT"), args); });
+    connect(ui_->btnReadIds, &QPushButton::clicked, this, &ProductionWidget::requestReloadSlotIds);
+    connect(ui_->btnContinue, &QPushButton::clicked, this, &ProductionWidget::requestContinueAfterIdCheck);
+    connect(ui_->btnReadMb, &QPushButton::clicked, this, &ProductionWidget::requestReadMailbox);
+    connect(ui_->btnAck, &QPushButton::clicked, this, &ProductionWidget::requestAckMailbox);
 
     connect(ui_->btnWriteSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnWriteSlotIds);
+    connect(ui_->btnReloadSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnReloadSlotIds);
+    connect(ui_->btnReadMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnReadMailbox);
+    connect(ui_->btnAckMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnAckMailbox);
     connect(ui_->btnDevDemo, &QPushButton::clicked, this, &ProductionWidget::onBtnDevDemo);
 
     connect(ui_->btnOpenLastRaw, &QPushButton::clicked, this, [this]{
@@ -345,42 +210,18 @@ void ProductionWidget::selectSlot(int slot)
 QString ProductionWidget::runtimeStateText(int slot) const
 {
     if (slot < 0 || slot >= slot_states_.size()) return QStringLiteral("—");
-    switch (slot_states_[slot]) {
-    case SlotRuntimeState::Empty: return QStringLiteral("空");
-    case SlotRuntimeState::Loaded: return QStringLiteral("已上料");
-    case SlotRuntimeState::WaitingIdCheck: return QStringLiteral("待核对ID");
-    case SlotRuntimeState::ScanMismatch: return QStringLiteral("ID不一致");
-    case SlotRuntimeState::Measuring: return QStringLiteral("测量中");
-    case SlotRuntimeState::WaitingPcRead: return QStringLiteral("待读取");
-    case SlotRuntimeState::Ok: return QStringLiteral("OK");
-    case SlotRuntimeState::Ng: return QStringLiteral("NG");
-    case SlotRuntimeState::Calibration: return QStringLiteral("标定槽");
-    case SlotRuntimeState::Unknown:
-    default: return QStringLiteral("未知");
-    }
+    return production_widget_logic::runtimeStateText(slot_states_[slot]);
 }
 
 int ProductionWidget::runtimeStateStyleCode(int slot) const
 {
     if (slot < 0 || slot >= slot_states_.size()) return 0;
-    switch (slot_states_[slot]) {
-    case SlotRuntimeState::Ok: return 1;
-    case SlotRuntimeState::Ng:
-    case SlotRuntimeState::ScanMismatch: return 2;
-    case SlotRuntimeState::Loaded:
-    case SlotRuntimeState::WaitingIdCheck:
-    case SlotRuntimeState::Measuring:
-    case SlotRuntimeState::Unknown: return 3;
-    case SlotRuntimeState::Calibration: return 4;
-    case SlotRuntimeState::WaitingPcRead: return 5;
-    case SlotRuntimeState::Empty:
-    default: return 0;
-    }
+    return production_widget_logic::runtimeStateStyleCode(slot_states_[slot]);
 }
 
 bool ProductionWidget::isPartIdEditableStep() const
 {
-    return (step_state_ == 0 || step_state_ == 10 || step_state_ == 30);
+    return production_widget_logic::isPartIdEditableStep(step_state_);
 }
 
 void ProductionWidget::refreshSelectedDetail()
@@ -414,15 +255,15 @@ void ProductionWidget::refreshSelectedDetail()
         ui_->lblB_RunoutR->setText(QStringLiteral("--"));
     } else if (ms.part_type.toUpper() == QChar('B')) {
         ui_->stackMeasure->setCurrentIndex(1);
-        ui_->lblB_AD->setText(formatFloat(ms.b_ad_len_mm));
-        ui_->lblB_BC->setText(formatFloat(ms.b_bc_len_mm));
-        ui_->lblB_RunoutL->setText(formatFloat(ms.b_runout_left_mm));
-        ui_->lblB_RunoutR->setText(formatFloat(ms.b_runout_right_mm));
+        ui_->lblB_AD->setText(production_widget_logic::formatFloat(ms.b_ad_len_mm));
+        ui_->lblB_BC->setText(production_widget_logic::formatFloat(ms.b_bc_len_mm));
+        ui_->lblB_RunoutL->setText(production_widget_logic::formatFloat(ms.b_runout_left_mm));
+        ui_->lblB_RunoutR->setText(production_widget_logic::formatFloat(ms.b_runout_right_mm));
     } else {
         ui_->stackMeasure->setCurrentIndex(0);
-        ui_->lblA_Total->setText(formatFloat(ms.a_total_len_mm));
-        ui_->lblA_Left->setText(QStringLiteral("%1 / %2").arg(formatFloat(ms.a_id_left_mm)).arg(formatFloat(ms.a_od_left_mm)));
-        ui_->lblA_Right->setText(QStringLiteral("%1 / %2").arg(formatFloat(ms.a_id_right_mm)).arg(formatFloat(ms.a_od_right_mm)));
+        ui_->lblA_Total->setText(production_widget_logic::formatFloat(ms.a_total_len_mm));
+        ui_->lblA_Left->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_left_mm)).arg(production_widget_logic::formatFloat(ms.a_od_left_mm)));
+        ui_->lblA_Right->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_right_mm)).arg(production_widget_logic::formatFloat(ms.a_od_right_mm)));
     }
 
     updateSlotEditability();
@@ -449,9 +290,9 @@ void ProductionWidget::updateSlotCard(int slot)
         const auto &ms = slot_meas_[slot];
         if (ms.valid) {
             if (ms.part_type.toUpper() == QChar('B')) {
-                summary = QStringLiteral("AD=%1  BC=%2").arg(formatFloat(ms.b_ad_len_mm, 2)).arg(formatFloat(ms.b_bc_len_mm, 2));
+                summary = QStringLiteral("AD=%1  BC=%2").arg(production_widget_logic::formatFloat(ms.b_ad_len_mm, 2)).arg(production_widget_logic::formatFloat(ms.b_bc_len_mm, 2));
             } else {
-                summary = QStringLiteral("L=%1").arg(formatFloat(ms.a_total_len_mm, 2));
+                summary = QStringLiteral("L=%1").arg(production_widget_logic::formatFloat(ms.a_total_len_mm, 2));
             }
         }
     }
@@ -467,7 +308,7 @@ void ProductionWidget::updateSlotCard(int slot)
 
     btn->setText(QStringLiteral("%1\n%2\n%3\n%4")
                  .arg(title)
-                 .arg(shortId(id))
+                 .arg(production_widget_logic::shortId(id))
                  .arg(stateText)
                  .arg(summary));
     btn->setProperty("slotState", slotState);
@@ -480,36 +321,14 @@ void ProductionWidget::updateSlotCard(int slot)
 
 QString ProductionWidget::stepText(quint16 step) const
 {
-    switch (step) {
-    case 0: return QStringLiteral("待机");
-    case 10: return QStringLiteral("等待上料");
-    case 20: return QStringLiteral("PLC扫码中");
-    case 30: return QStringLiteral("等待PC核对ID");
-    case 40: return QStringLiteral("抓取工件");
-    case 50: return QStringLiteral("移载到工位");
-    case 60: return QStringLiteral("夹紧/准备");
-    case 70: return QStringLiteral("测量中");
-    case 80: return QStringLiteral("整理测量包");
-    case 90: return QStringLiteral("等待PC读取");
-    case 100: return QStringLiteral("放回料架");
-    case 110: return QStringLiteral("循环完成");
-    case 200: return QStringLiteral("标定待上料(16号槽)");
-    case 210: return QStringLiteral("标定等待PC确认");
-    case 220: return QStringLiteral("标定测量中");
-    case 230: return QStringLiteral("标定等待PC读取");
-    case 240: return QStringLiteral("标定完成");
-    case 900: return QStringLiteral("报警");
-    case 910: return QStringLiteral("急停");
-    default: return QStringLiteral("运行(%1)").arg(step);
-    }
+    return production_widget_logic::stepText(step);
 }
 
 
 QString ProductionWidget::selectedPartTypeTextInternal() const
 {
     if (!partTypeCombo_) return QStringLiteral("A");
-    const QString t = partTypeCombo_->currentData().toString().trimmed().toUpper();
-    return (t == QStringLiteral("B")) ? QStringLiteral("B") : QStringLiteral("A");
+    return production_widget_logic::partTypeTextFromData(partTypeCombo_->currentData().toString());
 }
 
 QString ProductionWidget::selectedPartTypeText() const
@@ -533,26 +352,16 @@ void ProductionWidget::setCurrentPlcMode(int /*mode*/)
 
 QString ProductionWidget::measureModeText() const
 {
-    if (!measureModeCombo_) return QStringLiteral("NORMAL");
-    switch (static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt())) {
-    case ProductionMeasureMode::Second: return QStringLiteral("SECOND");
-    case ProductionMeasureMode::Third: return QStringLiteral("THIRD");
-    case ProductionMeasureMode::Mil: return QStringLiteral("MIL");
-    case ProductionMeasureMode::Normal:
-    default: return QStringLiteral("NORMAL");
-    }
+    if (!measureModeCombo_) return production_widget_logic::measureModeText(ProductionMeasureMode::Normal);
+    const auto mode = static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt());
+    return production_widget_logic::measureModeText(mode);
 }
 
 quint32 ProductionWidget::measureModeCommandArg() const
 {
-    if (!measureModeCombo_) return 0;
-    switch (static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt())) {
-    case ProductionMeasureMode::Second: return 2;
-    case ProductionMeasureMode::Third: return 3;
-    case ProductionMeasureMode::Mil: return 9;
-    case ProductionMeasureMode::Normal:
-    default: return 1;
-    }
+    if (!measureModeCombo_) return production_widget_logic::measureModeCommandArg(ProductionMeasureMode::Normal);
+    const auto mode = static_cast<ProductionMeasureMode>(measureModeCombo_->currentData().toInt());
+    return production_widget_logic::measureModeCommandArg(mode);
 }
 
 void ProductionWidget::appendPlcLogMessage(const QString &text)
@@ -572,7 +381,7 @@ void ProductionWidget::setPlcConnected(bool ok)
 
 void ProductionWidget::setMachineState(quint16 machine_state, const QString &text)
 {
-    const QString display = machine_state != 0 ? machineStateMaskText(machine_state)
+    const QString display = machine_state != 0 ? production_widget_logic::machineStateMaskText(machine_state)
                                                : (text.isEmpty() ? QStringLiteral("-") : text);
     if (lbRuntimeMachine_) lbRuntimeMachine_->setText(QStringLiteral("设备主状态：%1").arg(display));
     if (display == last_machine_state_text_) return;
@@ -684,7 +493,7 @@ void ProductionWidget::setSlotSummary(int slot, const core::ProductionSlotSummar
         if (slot_part_ids_.size() != 16) slot_part_ids_.resize(16);
         slot_part_ids_[slot] = s.part_id;
     }
-    setSlotComputedResult(slot, toWidgetSummary(s));
+    setSlotComputedResult(slot, production_widget_logic::toWidgetSummary(s));
 }
 
 void ProductionWidget::setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries)

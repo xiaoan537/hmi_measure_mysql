@@ -690,6 +690,15 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
 
+  const bool needRewriteModeAndCategory =
+      (cmd == QStringLiteral("INITIALIZE") ||
+       cmd == QStringLiteral("START_AUTO") ||
+       cmd == QStringLiteral("START_CALIBRATION"));
+  if (needRewriteModeAndCategory) {
+    if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
+    if (!plcRuntime_->setCategoryMode(categoryMode, &err)) { handlePlcRuntimeError(err); return; }
+  }
+
   quint16 cmdBits = 0;
   bool ok = false;
   if (cmd == QStringLiteral("INITIALIZE")) {

@@ -35,10 +35,7 @@ signals:
     void requestAckMailbox();
 
 private:
-    QString selectedMasterTypeTextInternal() const;
-    quint32 selectedMasterTypeArgInternal() const;
     void refreshSlot15State();
-    QString stepText(quint16 step) const;
 
     core::AppConfig cfg_;
     QLabel *lblConnPlc_ = nullptr;

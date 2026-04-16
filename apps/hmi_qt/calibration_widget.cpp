@@ -1,4 +1,5 @@
 #include "calibration_widget.hpp"
+#include "calibration_widget_logic.hpp"
 
 #include <QFont>
 #include <QGroupBox>
@@ -102,14 +103,12 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
 
 void CalibrationWidget::setPlcConnected(bool ok)
 {
-    lblConnPlc_->setStyleSheet(ok ?
-        "background:#22c55e;color:white;border-radius:10px;padding:4px 10px;font-weight:600;" :
-        "background:#9ca3af;color:white;border-radius:10px;padding:4px 10px;font-weight:600;");
+    lblConnPlc_->setStyleSheet(calibration_widget_logic::plcConnStyle(ok));
 }
 
 void CalibrationWidget::setStepState(quint16 step)
 {
-    lblStep_->setText(stepText(step));
+    lblStep_->setText(calibration_widget_logic::stepText(step));
 }
 
 void CalibrationWidget::setTrayPresentMask(quint16 mask)
@@ -132,27 +131,7 @@ void CalibrationWidget::setMasterPartIds(const QString &aPartId, const QString &
 
 void CalibrationWidget::setSlotSummary(const core::CalibrationSlotSummary &s)
 {
-    const QString who = s.calibration_master_part_id.isEmpty()
-                            ? QStringLiteral("未配置标定件")
-                            : s.calibration_master_part_id;
-    const QString measured = s.measured_part_id.isEmpty() ? QStringLiteral("--")
-                                                          : s.measured_part_id;
-    QString summary = QStringLiteral("结果摘要: 类型=%1, 主数据=%2, MailboxID=%3")
-                          .arg(s.calibration_type.isEmpty() ? QStringLiteral("--") : s.calibration_type)
-                          .arg(who)
-                          .arg(measured);
-    if (s.valid) {
-        if (s.compute.judgement == core::MeasurementJudgement::Ok) {
-            summary += QStringLiteral("，判定=OK");
-        } else if (s.compute.judgement == core::MeasurementJudgement::Ng) {
-            summary += QStringLiteral("，判定=NG");
-        } else {
-            summary += QStringLiteral("，判定=待算法");
-        }
-        if (!s.fail_reason_text.isEmpty()) {
-            summary += QStringLiteral("，原因=%1").arg(s.fail_reason_text);
-        }
-    }
+    const QString summary = calibration_widget_logic::buildSummaryText(s);
     if (lblSummary_) lblSummary_->setText(summary);
     if (s.valid) listMessages_->addItem(summary);
 }
@@ -167,42 +146,17 @@ void CalibrationWidget::setSlotSummaries(const QVector<core::CalibrationSlotSumm
     }
 }
 
-QString CalibrationWidget::selectedMasterTypeTextInternal() const
-{
-    return rbB_ && rbB_->isChecked() ? QStringLiteral("B") : QStringLiteral("A");
-}
-
-quint32 CalibrationWidget::selectedMasterTypeArgInternal() const
-{
-    return rbB_ && rbB_->isChecked() ? 1u : 2u;
-}
-
 QString CalibrationWidget::selectedPartTypeText() const
 {
-    return selectedMasterTypeTextInternal();
+    return calibration_widget_logic::selectedMasterTypeText(rbB_ && rbB_->isChecked());
 }
 
 quint32 CalibrationWidget::selectedPartTypeArg() const
 {
-    return selectedMasterTypeArgInternal();
+    return calibration_widget_logic::selectedMasterTypeArg(rbB_ && rbB_->isChecked());
 }
 
 void CalibrationWidget::refreshSlot15State()
 {
-    const bool loaded = ((trayPresentMask_ >> 15) & 0x1) != 0;
-    lblSlot15_->setText(loaded ? QStringLiteral("16 号槽位: 有料") : QStringLiteral("16 号槽位: 空"));
-}
-
-QString CalibrationWidget::stepText(quint16 step) const
-{
-    switch (step) {
-    case 200: return QStringLiteral("标定待上料(16号槽)");
-    case 210: return QStringLiteral("等待 PC 确认");
-    case 220: return QStringLiteral("标定测量中");
-    case 230: return QStringLiteral("等待 PC 读取");
-    case 240: return QStringLiteral("标定完成");
-    case 900: return QStringLiteral("报警");
-    case 910: return QStringLiteral("急停");
-    default: return QStringLiteral("标定流程(%1)").arg(step);
-    }
+    lblSlot15_->setText(calibration_widget_logic::slot15StateText(trayPresentMask_));
 }

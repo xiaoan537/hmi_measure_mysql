@@ -71,6 +71,29 @@
        </layout>
       </item>
       <item>
+       <widget class="QLabel" name="lblRuntimeMachine">
+        <property name="minimumWidth">
+         <number>180</number>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QLabel{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-weight:600;}</string>
+        </property>
+        <property name="text">
+         <string>设备主状态：-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnReconnectPlc">
+        <property name="minimumHeight">
+         <number>30</number>
+        </property>
+        <property name="text">
+         <string>重连PLC</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="spTop1">
         <property name="orientation">
          <enum>Qt::Horizontal</enum>
@@ -424,33 +447,55 @@
         <item>
          <widget class="QGroupBox" name="groupRun">
           <property name="title">
-           <string>运行控制</string>
+           <string>生产控制 / 自动流程</string>
           </property>
           <layout class="QVBoxLayout" name="vlRun">
            <item>
-            <layout class="QHBoxLayout" name="hlMode">
+            <layout class="QHBoxLayout" name="hlRunSelect">
              <item>
-              <widget class="QToolButton" name="btnModeAuto">
+              <widget class="QLabel" name="lblPlcModeCaption">
                <property name="text">
-                <string>AUTO</string>
-               </property>
-               <property name="checkable">
-                <bool>true</bool>
+                <string>控制模式</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QToolButton" name="btnModeManual">
-               <property name="text">
-                <string>MANUAL</string>
-               </property>
-               <property name="checkable">
-                <bool>true</bool>
+              <widget class="QComboBox" name="comboPlcMode">
+               <property name="minimumWidth">
+                <number>96</number>
                </property>
               </widget>
              </item>
              <item>
-              <spacer name="spMode">
+              <widget class="QLabel" name="lblPartTypeCaption">
+               <property name="text">
+                <string>工件类型</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="comboPartType">
+               <property name="minimumWidth">
+                <number>96</number>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblMeasureModeCaption">
+               <property name="text">
+                <string>业务模式</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="comboMeasureMode">
+               <property name="minimumWidth">
+                <number>120</number>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spRunSelect">
                <property name="orientation">
                 <enum>Qt::Horizontal</enum>
                </property>
@@ -462,46 +507,120 @@
                </property>
               </spacer>
              </item>
-             <item>
-              <widget class="QPushButton" name="btnHomeAll">
+            </layout>
+           </item>
+           <item>
+            <layout class="QGridLayout" name="gridRunCmd">
+             <item row="0" column="0">
+              <widget class="QPushButton" name="btnInit">
                <property name="text">
-                <string>回零</string>
+                <string>初始化</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QPushButton" name="btnStartMeasure">
+               <property name="text">
+                <string>开始测量</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QPushButton" name="btnStartCal">
+               <property name="text">
+                <string>开始标定</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QPushButton" name="btnStop2">
+               <property name="text">
+                <string>停止</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QPushButton" name="btnReset2">
+               <property name="text">
+                <string>报警复位</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="2">
+              <widget class="QPushButton" name="btnRetest">
+               <property name="text">
+                <string>当前件复测</string>
+               </property>
+               <property name="minimumHeight">
+                <number>34</number>
                </property>
               </widget>
              </item>
             </layout>
            </item>
            <item>
-            <layout class="QGridLayout" name="gridRunBtns">
-             <item row="0" column="0">
-              <widget class="QPushButton" name="btnStart">
-               <property name="text">
-                <string>开始</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QPushButton" name="btnPause">
-               <property name="text">
-                <string>暂停</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="2">
-              <widget class="QPushButton" name="btnResume">
-               <property name="text">
-                <string>继续</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="3">
-              <widget class="QPushButton" name="btnStop">
-               <property name="text">
-                <string>停止</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="groupFlowDebug">
+             <property name="title">
+              <string>PLC联调 / 自动流程</string>
+             </property>
+             <layout class="QGridLayout" name="gridFlowDebug">
+              <item row="0" column="0">
+               <widget class="QPushButton" name="btnReadIds">
+                <property name="text">
+                 <string>读取扫码ID</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QPushButton" name="btnContinue">
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+                <property name="text">
+                 <string>继续(ID核对通过)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QPushButton" name="btnReadMb">
+                <property name="text">
+                 <string>读取测量包</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QPushButton" name="btnAck">
+                <property name="text">
+                 <string>写ACK</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
           </layout>
          </widget>

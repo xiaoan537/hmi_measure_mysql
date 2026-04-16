@@ -1,0 +1,587 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ManualMaintainWidget</class>
+ <widget class="QWidget" name="ManualMaintainWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1784</width>
+    <height>1099</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>手动维护</string>
+  </property>
+  <layout class="QVBoxLayout" name="vlRoot">
+   <property name="spacing">
+    <number>10</number>
+   </property>
+   <property name="leftMargin">
+    <number>10</number>
+   </property>
+   <property name="topMargin">
+    <number>10</number>
+   </property>
+   <property name="rightMargin">
+    <number>10</number>
+   </property>
+   <property name="bottomMargin">
+    <number>10</number>
+   </property>
+   <item>
+    <widget class="QGroupBox" name="groupStatus">
+     <property name="title">
+      <string>当前状态</string>
+     </property>
+     <layout class="QHBoxLayout" name="hlStatus">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="lbConn">
+        <property name="text">
+         <string>连接：-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbMachine">
+        <property name="text">
+         <string>机器：-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbStep">
+        <property name="text">
+         <string>步骤：-</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="lbCurrentMode">
+        <property name="text">
+         <string>当前PLC模式：-</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupManual">
+     <property name="title">
+      <string>手动控制 / 维护</string>
+     </property>
+     <layout class="QVBoxLayout" name="vlManualRoot">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="manualTip">
+        <property name="text">
+         <string>本页用于轴与气缸的维护调试。生产流程命令、模式选择、A/B型选择与PLC联调按钮已迁移到生产页。</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QGridLayout" name="gridMaintain">
+        <property name="horizontalSpacing">
+         <number>12</number>
+        </property>
+        <property name="verticalSpacing">
+         <number>10</number>
+        </property>
+        <item row="0" column="0">
+         <widget class="QGroupBox" name="groupAxis">
+          <property name="title">
+           <string>单轴维护</string>
+          </property>
+          <layout class="QVBoxLayout" name="vlAxisRoot">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <item>
+            <layout class="QFormLayout" name="formAxisSelect">
+             <property name="labelAlignment">
+              <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblAxisSelect">
+               <property name="text">
+                <string>选择轴：</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="axisCombo">
+               <property name="minimumWidth">
+                <number>260</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="hlAxisParamRow1">
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lblAcc">
+               <property name="text">
+                <string>加速度</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="spAcc">
+               <property name="minimumSize">
+                <size>
+                 <width>120</width>
+                 <height>30</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spAxisParamMid1">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>24</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblDec">
+               <property name="text">
+                <string>减速度</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="spDec">
+               <property name="minimumSize">
+                <size>
+                 <width>120</width>
+                 <height>30</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spAxisParamRight1">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="hlAxisParamRow2">
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lblPos">
+               <property name="text">
+                <string>目标位置</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="spPos">
+               <property name="minimumSize">
+                <size>
+                 <width>120</width>
+                 <height>30</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spAxisParamMid2">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>24</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QLabel" name="lblVel">
+               <property name="text">
+                <string>目标速度</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="spVel">
+               <property name="minimumSize">
+                <size>
+                 <width>120</width>
+                 <height>30</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="spAxisParamRight2">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QGridLayout" name="gridAxisBtns">
+             <property name="horizontalSpacing">
+              <number>8</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>8</number>
+             </property>
+             <item row="0" column="0">
+              <widget class="QPushButton" name="btnEnableOn">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>使能开</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QPushButton" name="btnEnableOff">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>使能关</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="2">
+              <widget class="QPushButton" name="btnReset">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>复位</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0">
+              <widget class="QPushButton" name="btnEStop">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>急停</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QPushButton" name="btnStop">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>停止</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="2">
+              <widget class="QPushButton" name="btnMoveAbs">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>绝对定位</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QPushButton" name="btnMoveRel">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>相对定位</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QPushButton" name="btnJogFwd">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>正向点动</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="2">
+              <widget class="QPushButton" name="btnJogBwd">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>反向点动</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QGroupBox" name="groupCylinder">
+          <property name="title">
+           <string>气缸维护</string>
+          </property>
+          <layout class="QVBoxLayout" name="vlCylinderRoot">
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <item>
+            <layout class="QFormLayout" name="formCylinderSelect">
+             <property name="labelAlignment">
+              <set>Qt::AlignLeft|Qt::AlignVCenter</set>
+             </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblCylinderSelect">
+               <property name="text">
+                <string>选择气缸：</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QComboBox" name="cylCombo">
+               <property name="minimumWidth">
+                <number>200</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="hlCylinderBtns">
+             <property name="spacing">
+              <number>8</number>
+             </property>
+             <item>
+              <widget class="QPushButton" name="btnCylP">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>伸出</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnCylN">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>缩回</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btnCylReset">
+               <property name="minimumSize">
+                <size>
+                 <width>96</width>
+                 <height>34</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>复位</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <spacer name="spCylinderBottom">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupSingleStep">
+     <property name="title">
+      <string>单步控制（待做）</string>
+     </property>
+     <layout class="QVBoxLayout" name="vlSingleStep">
+      <item>
+       <widget class="QLabel" name="singleStepTip">
+        <property name="text">
+         <string>后续将在这里接入 PLC 单步命令。当前先保留页面与边界，不在手动维护区混用。</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupLive">
+     <property name="title">
+      <string>实时状态</string>
+     </property>
+     <layout class="QHBoxLayout" name="hlLive">
+      <item>
+       <widget class="QGroupBox" name="groupAxisState">
+        <property name="title">
+         <string>轴状态</string>
+        </property>
+        <layout class="QVBoxLayout" name="vlAxisState">
+         <item>
+          <widget class="QTableWidget" name="axisStateTable">
+           <property name="rowCount">
+            <number>0</number>
+           </property>
+           <property name="columnCount">
+            <number>9</number>
+           </property>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupCylinderState">
+        <property name="title">
+         <string>气缸状态</string>
+        </property>
+        <layout class="QVBoxLayout" name="vlCylinderState">
+         <item>
+          <widget class="QTableWidget" name="cylStateTable">
+           <property name="rowCount">
+            <number>0</number>
+           </property>
+           <property name="columnCount">
+            <number>5</number>
+           </property>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+           <column/>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="groupLog">
+     <property name="title">
+      <string>维护日志</string>
+     </property>
+     <layout class="QVBoxLayout" name="vlLog">
+      <item>
+       <widget class="QPlainTextEdit" name="logEdit">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
