@@ -144,7 +144,14 @@
         <item>
          <widget class="QPushButton" name="btnResetAlarm">
           <property name="text">
-           <string>复位报警</string>
+           <string>报警复位</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="btnAlarmMute">
+          <property name="text">
+           <string>报警静音</string>
           </property>
          </widget>
         </item>
@@ -511,10 +518,19 @@
            </item>
            <item>
             <layout class="QGridLayout" name="gridRunCmd">
+             <property name="horizontalSpacing">
+              <number>8</number>
+             </property>
+             <property name="verticalSpacing">
+              <number>8</number>
+             </property>
              <item row="0" column="0">
               <widget class="QPushButton" name="btnInit">
                <property name="text">
                 <string>初始化</string>
+               </property>
+               <property name="minimumWidth">
+                <number>120</number>
                </property>
                <property name="minimumHeight">
                 <number>34</number>
@@ -526,6 +542,9 @@
                <property name="text">
                 <string>开始测量</string>
                </property>
+               <property name="minimumWidth">
+                <number>120</number>
+               </property>
                <property name="minimumHeight">
                 <number>34</number>
                </property>
@@ -536,35 +555,21 @@
                <property name="text">
                 <string>开始标定</string>
                </property>
+               <property name="minimumWidth">
+                <number>120</number>
+               </property>
                <property name="minimumHeight">
                 <number>34</number>
                </property>
               </widget>
              </item>
-             <item row="1" column="0">
+             <item row="0" column="3">
               <widget class="QPushButton" name="btnStop2">
                <property name="text">
                 <string>停止</string>
                </property>
-               <property name="minimumHeight">
-                <number>34</number>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QPushButton" name="btnReset2">
-               <property name="text">
-                <string>报警复位</string>
-               </property>
-               <property name="minimumHeight">
-                <number>34</number>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="2">
-              <widget class="QPushButton" name="btnRetest">
-               <property name="text">
-                <string>当前件复测</string>
+               <property name="minimumWidth">
+                <number>120</number>
                </property>
                <property name="minimumHeight">
                 <number>34</number>
@@ -613,6 +618,26 @@
                <widget class="QPushButton" name="btnAck">
                 <property name="text">
                  <string>写ACK</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QPushButton" name="btnRetest">
+                <property name="text">
+                 <string>当前件复测</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QPushButton" name="btnContinueNoRetest">
+                <property name="text">
+                 <string>继续（不复测）</string>
                 </property>
                 <property name="minimumHeight">
                  <number>34</number>

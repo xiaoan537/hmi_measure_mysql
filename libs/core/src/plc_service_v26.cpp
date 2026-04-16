@@ -34,6 +34,8 @@ bool PlcServiceV26::sendStartCalibration(qint16 partType, QString *err) const { 
 bool PlcServiceV26::sendStop(qint16 partType, QString *err) const { return sendCommandBitmap(plc_v26::kCmdStopBit, partType, err); }
 bool PlcServiceV26::sendReset(qint16 partType, QString *err) const { return sendCommandBitmap(plc_v26::kCmdResetBit, partType, err); }
 bool PlcServiceV26::sendRetestCurrent(qint16 partType, QString *err) const { return sendCommandBitmap(plc_v26::kCmdRetestCurrentBit, partType, err); }
+bool PlcServiceV26::sendContinueWithoutRetest(qint16 partType, QString *err) const { return sendCommandBitmap(plc_v26::kCmdContinueWithoutRetestBit, partType, err); }
+bool PlcServiceV26::sendAlarmMute(qint16 partType, QString *err) const { return sendCommandBitmap(plc_v26::kCmdAlarmMuteBit, partType, err); }
 bool PlcServiceV26::confirmIdCheckPassed(QString *err) const { return repo_.writeScanDone(0, err); }
 bool PlcServiceV26::writePcAck(QString *err) const { return repo_.writePcAck(plc_v26::kJudgeOk, err); }
 bool PlcServiceV26::writeJudgeResult(quint16 result, QString *err) const { return repo_.writeJudgeResult(result, err); }

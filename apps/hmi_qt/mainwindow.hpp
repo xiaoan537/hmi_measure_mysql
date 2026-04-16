@@ -43,6 +43,7 @@ private:
     void handlePlcRuntimeError(const QString &message);
     void onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats);
     void onPlcStatusUpdated(const core::PlcStatusBlockV2 &status);
+    void onPlcCommandUpdated(const core::PlcCommandBlockV2 &command);
     void onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray);
     void onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot);
     void onPlcEventsRaised(const core::PlcPollEventsV26 &events);
@@ -72,4 +73,9 @@ private:
     bool lastPlcConnectedKnown_ = false;
     bool lastPlcConnected_ = false;
     bool reconnectAttemptLogged_ = false;
+    bool awaitingCmdReply_ = false;
+    quint16 pendingCmdBits_ = 0;
+    quint16 lastCmdResult_ = 0;
+    quint16 lastRejectInstruction_ = 0;
+    bool hasLastCommandSample_ = false;
 };

@@ -213,6 +213,32 @@ bool PlcRuntimeServiceV2::sendRetestCurrent(qint16 partType, QString *err) {
   return true;
 }
 
+bool PlcRuntimeServiceV2::sendContinueWithoutRetest(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendContinueWithoutRetest(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写继续（不复测）命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
+bool PlcRuntimeServiceV2::sendAlarmMute(qint16 partType, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->sendAlarmMute(partType, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写报警静音命令失败"));
+    return false;
+  }
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
 bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
   if (!ensureClientReady(err)) return false;
   if (!repo_ptr_->writePcAck(pc_ack, err)) {

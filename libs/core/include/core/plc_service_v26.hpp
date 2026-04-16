@@ -25,6 +25,8 @@ public:
   bool sendStop(qint16 partType, QString *err = nullptr) const;
   bool sendReset(qint16 partType, QString *err = nullptr) const;
   bool sendRetestCurrent(qint16 partType, QString *err = nullptr) const;
+  bool sendContinueWithoutRetest(qint16 partType, QString *err = nullptr) const;
+  bool sendAlarmMute(qint16 partType, QString *err = nullptr) const;
   bool confirmIdCheckPassed(QString *err = nullptr) const;
   bool writePcAck(QString *err = nullptr) const;
   bool writeJudgeResult(quint16 result, QString *err = nullptr) const;

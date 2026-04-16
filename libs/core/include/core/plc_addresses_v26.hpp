@@ -27,6 +27,7 @@ constexpr quint16 kCmdStopBit = 0x0008;
 constexpr quint16 kCmdResetBit = 0x0010;
 constexpr quint16 kCmdRetestCurrentBit = 0x0020;
 constexpr quint16 kCmdContinueWithoutRetestBit = 0x0040;
+constexpr quint16 kCmdAlarmMuteBit = 0x4000;
 constexpr quint16 kCmdRejectMask = 0x8000;
 
 constexpr quint16 kJudgeUnknown = 0;

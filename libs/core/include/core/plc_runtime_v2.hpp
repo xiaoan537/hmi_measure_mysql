@@ -73,6 +73,8 @@ public slots:
   bool sendStop(qint16 partType, QString *err = nullptr);
   bool sendReset(qint16 partType, QString *err = nullptr);
   bool sendRetestCurrent(qint16 partType, QString *err = nullptr);
+  bool sendContinueWithoutRetest(qint16 partType, QString *err = nullptr);
+  bool sendAlarmMute(qint16 partType, QString *err = nullptr);
   bool sendPcAck(quint16 pc_ack, QString *err = nullptr);
   bool writeTrayPartIdSlot(int slotIndex, const QString &partId,
                            QString *err = nullptr);

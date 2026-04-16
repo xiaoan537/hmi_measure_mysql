@@ -108,6 +108,33 @@ quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
   return ok ? out : def;
 }
 
+QString cmdBitsText(quint16 bits) {
+  QStringList names;
+  if (bits & core::plc_v26::kCmdInitializeBit) names << QStringLiteral("初始化");
+  if (bits & core::plc_v26::kCmdStartMeasureBit) names << QStringLiteral("开始测量");
+  if (bits & core::plc_v26::kCmdStartCalibrationBit) names << QStringLiteral("开始标定");
+  if (bits & core::plc_v26::kCmdStopBit) names << QStringLiteral("停止");
+  if (bits & core::plc_v26::kCmdResetBit) names << QStringLiteral("复位");
+  if (bits & core::plc_v26::kCmdRetestCurrentBit) names << QStringLiteral("当前件复测");
+  if (bits & core::plc_v26::kCmdContinueWithoutRetestBit) names << QStringLiteral("继续(不复测)");
+  if (bits & core::plc_v26::kCmdAlarmMuteBit) names << QStringLiteral("报警静音");
+  if (bits & core::plc_v26::kCmdRejectMask) names << QStringLiteral("拒绝标志");
+  if (names.isEmpty()) return QStringLiteral("NONE");
+  return names.join(QStringLiteral("|"));
+}
+
+QString rejectInstructionText(quint16 bits) {
+  QStringList reasons;
+  if (bits & 0x0001u) reasons << QStringLiteral("已在执行(请勿重复操作)");
+  if (bits & 0x0002u) reasons << QStringLiteral("存在错误,请先复位");
+  const quint16 unknown = static_cast<quint16>(bits & ~0x0003u);
+  if (unknown != 0) {
+    reasons << QStringLiteral("其他位=0x%1").arg(QString::number(unknown, 16).toUpper());
+  }
+  if (reasons.isEmpty()) return QStringLiteral("无");
+  return reasons.join(QStringLiteral("|"));
+}
+
 } // namespace
 
 MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
@@ -223,6 +250,10 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
             updatePlcStatusLabel();
             if (productionWidget_) productionWidget_->setPlcConnected(connected);
             if (calibrationWidget_) calibrationWidget_->setPlcConnected(connected);
+            if (!connected) {
+              awaitingCmdReply_ = false;
+              pendingCmdBits_ = 0;
+            }
             if (manualMaintainWidget_) {
               manualMaintainWidget_->setRuntimeSummary(connected,
                                                        hasLastStatus_ ? machineStateText(lastStatus_.machine_state) : QStringLiteral("-"),
@@ -241,6 +272,8 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
           this, &MainWindow::onPlcStatsUpdated);
   connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::statusUpdated,
           this, &MainWindow::onPlcStatusUpdated);
+  connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::commandUpdated,
+          this, &MainWindow::onPlcCommandUpdated);
   connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::trayUpdated,
           this, &MainWindow::onPlcTrayUpdated);
   connect(plcRuntime_.get(), &core::PlcRuntimeServiceV2::mailboxSnapshotUpdated,
@@ -252,6 +285,7 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
     return;
   }
 
+  appendProductionLog(QStringLiteral("正在连接 PLC..."));
   QString err;
   if (!plcRuntime_->start(&err)) {
     handlePlcRuntimeError(err);
@@ -259,7 +293,6 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
     return;
   }
 
-  appendProductionLog(QStringLiteral("正在连接 PLC..."));
   if (!plcRuntime_->connectNow(&err)) {
     handlePlcRuntimeError(err);
   }
@@ -403,7 +436,6 @@ void MainWindow::attemptReconnectPlc(bool manual) {
   }
   reconnectAttemptLogged_ = false;
   updatePlcStatusLabel();
-  appendProductionLog(QStringLiteral("PLC 连接成功"));
   plcRuntime_->pollOnce();
 }
 
@@ -531,6 +563,49 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
       lastMailboxReady_ = status.mailbox_ready;
     }
   }
+}
+
+void MainWindow::onPlcCommandUpdated(const core::PlcCommandBlockV2 &command) {
+  const bool unchanged = hasLastCommandSample_
+                      && lastCmdResult_ == command.cmd_result
+                      && lastRejectInstruction_ == command.cmd_error_code;
+  if (unchanged && !awaitingCmdReply_) {
+    return;
+  }
+  hasLastCommandSample_ = true;
+  lastCmdResult_ = command.cmd_result;
+  lastRejectInstruction_ = command.cmd_error_code;
+
+  if (!awaitingCmdReply_) {
+    return;
+  }
+  if (command.cmd_result == 0) {
+    return;
+  }
+
+  const QString resultHex = QStringLiteral("0x%1").arg(QString::number(command.cmd_result, 16).toUpper());
+  const QString pendingHex = QStringLiteral("0x%1").arg(QString::number(pendingCmdBits_, 16).toUpper());
+  const bool rejected = (command.cmd_result & core::plc_v26::kCmdRejectMask) != 0;
+
+  QString line;
+  if (rejected) {
+    line = QStringLiteral("PLC 命令回复：拒绝 result=%1 pending=%2 reject=0x%3 reason=%4")
+               .arg(resultHex)
+               .arg(pendingHex)
+               .arg(QString::number(command.cmd_error_code, 16).toUpper())
+               .arg(rejectInstructionText(command.cmd_error_code));
+  } else if ((command.cmd_result & pendingCmdBits_) == pendingCmdBits_) {
+    line = QStringLiteral("PLC 命令回复：接收成功 result=%1 (%2)")
+               .arg(resultHex)
+               .arg(cmdBitsText(command.cmd_result));
+  } else {
+    return;
+  }
+
+  appendProductionLog(line);
+  if (manualMaintainWidget_) manualMaintainWidget_->appendLog(line);
+  awaitingCmdReply_ = false;
+  pendingCmdBits_ = 0;
 }
 
 
@@ -719,11 +794,19 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   } else if (cmd == QStringLiteral("START_RETEST_CURRENT")) {
     cmdBits = core::plc_v26::kCmdRetestCurrentBit;
     ok = plcRuntime_->sendRetestCurrent(categoryMode, &err);
+  } else if (cmd == QStringLiteral("CONTINUE_NO_RETEST")) {
+    cmdBits = core::plc_v26::kCmdContinueWithoutRetestBit;
+    ok = plcRuntime_->sendContinueWithoutRetest(categoryMode, &err);
+  } else if (cmd == QStringLiteral("ALARM_MUTE")) {
+    cmdBits = core::plc_v26::kCmdAlarmMuteBit;
+    ok = plcRuntime_->sendAlarmMute(categoryMode, &err);
   } else {
     handlePlcRuntimeError(QStringLiteral("暂未映射的 PLC 命令：%1").arg(cmd));
     return;
   }
   if (!ok) { handlePlcRuntimeError(err); return; }
+  awaitingCmdReply_ = true;
+  pendingCmdBits_ = cmdBits;
 
   appendProductionLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
                           .arg(cmd)
