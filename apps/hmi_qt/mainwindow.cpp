@@ -25,8 +25,10 @@
 
 #include "ui_mainwindow.h"
 
+#include <cmath>
 #include <memory>
 
+#include "core/measurement_geometry_algorithms.hpp"
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
 #include "core/plc_runtime_v2.hpp"
@@ -135,11 +137,79 @@ QString rejectInstructionText(quint16 bits) {
   return reasons.join(QStringLiteral("|"));
 }
 
+struct Channel72Series {
+  QVector<double> values_mm;
+  QVector<bool> valid_mask;
+  int invalid_points = 0;
+  bool invalid_too_many = false;
+};
+
+QString formatNumber(double v, int prec = 6) {
+  return std::isfinite(v) ? QString::number(v, 'f', prec) : QStringLiteral("--");
+}
+
+QString slotTextByIndex(int slotIndex) {
+  return (slotIndex >= 0) ? QString::number(slotIndex + 1) : QStringLiteral("-");
+}
+
+int countValidMask(const QVector<bool> &mask) {
+  int n = 0;
+  for (bool v : mask) {
+    if (v) ++n;
+  }
+  return n;
+}
+
+Channel72Series buildChannel72Series(const QVector<float> &all, int offset, int invalidLimit) {
+  Channel72Series s;
+  s.values_mm.reserve(72);
+  s.valid_mask.reserve(72);
+  for (int i = 0; i < 72; ++i) {
+    const int idx = offset + i;
+    const double v = (idx >= 0 && idx < all.size()) ? static_cast<double>(all.at(idx)) : qQNaN();
+    const bool valid = std::isfinite(v);
+    s.values_mm.push_back(v);
+    s.valid_mask.push_back(valid);
+    if (!valid) ++s.invalid_points;
+  }
+  s.invalid_too_many = (s.invalid_points > invalidLimit);
+  if (s.invalid_too_many) {
+    for (int i = 0; i < s.valid_mask.size(); ++i) s.valid_mask[i] = false;
+  }
+  return s;
+}
+
+core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cfg) {
+  core::DiameterAlgoParams p;
+  p.k_in_mm = cfg.a_k_in_mm;
+  p.k_out_mm = cfg.a_k_out_mm;
+  p.use_explicit_k_out = cfg.a_use_explicit_k_out;
+  p.probe_base_mm = cfg.a_probe_base_mm;
+  p.angle_offset_deg = cfg.a_angle_offset_deg;
+  p.inner_fit.residual_threshold_mm = cfg.a_residual_threshold_in_mm;
+  p.outer_fit.residual_threshold_mm = cfg.a_residual_threshold_out_mm;
+  p.harmonic.max_order = 8;
+  p.harmonic.remove_mean = false;
+  return p;
+}
+
+core::RunoutAlgoParams buildRunoutAlgoParams(const core::AlgorithmConfig &cfg) {
+  core::RunoutAlgoParams p;
+  p.k_runout_mm = cfg.b_k_runout_mm;
+  p.angle_offset_deg = cfg.b_angle_offset_deg;
+  p.fit_options.residual_threshold_mm = cfg.b_residual_threshold_mm;
+  p.v_block_angle_deg = cfg.b_v_block_angle_deg;
+  p.interpolation_factor = cfg.b_interpolation_factor;
+  p.harmonic.max_order = 8;
+  p.harmonic.remove_mean = false;
+  return p;
+}
+
 } // namespace
 
 MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
                        MesWorker *worker, QWidget *parent)
-    : QMainWindow(parent), ui_(new Ui::MainWindow), iniPath_(iniPath) {
+    : QMainWindow(parent), ui_(new Ui::MainWindow), iniPath_(iniPath), appCfg_(cfg) {
   ui_->setupUi(this);
 
   setMinimumSize(800, 500);
@@ -177,8 +247,15 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   ui_->stackedWidget->addWidget(new DataWidget(cfg, ui_->stackedWidget));
   ui_->stackedWidget->addWidget(
       new MesUploadWidget(cfg, worker, ui_->stackedWidget));
-  ui_->stackedWidget->addWidget(
-      new SettingsWidget(cfg, iniPath_, ui_->stackedWidget));
+  settingsWidget_ = new SettingsWidget(cfg, iniPath_, ui_->stackedWidget);
+  ui_->stackedWidget->addWidget(settingsWidget_);
+  connect(settingsWidget_, &SettingsWidget::configApplied, this, [this](const core::AppConfig &newCfg){
+    appCfg_ = newCfg;
+    appendProductionLog(QStringLiteral("设置已应用：算法参数已更新（后续“计算结果”按新参数计算）"));
+  });
+  connect(settingsWidget_, &SettingsWidget::configSaved, this, [this](const QString &path){
+    appendProductionLog(QStringLiteral("配置已保存：%1").arg(path));
+  });
   ui_->stackedWidget->addWidget(new AlarmWidget(cfg, ui_->stackedWidget));
   diagnosticsWidget_ = new DiagnosticsWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(diagnosticsWidget_);
@@ -253,6 +330,8 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
             if (!connected) {
               awaitingCmdReply_ = false;
               pendingCmdBits_ = 0;
+              hasLastMailboxSnapshot_ = false;
+              lastMailboxSnapshot_.reset();
             }
             if (manualMaintainWidget_) {
               manualMaintainWidget_->setRuntimeSummary(connected,
@@ -659,6 +738,10 @@ void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
 }
 
 void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot) {
+  if (!lastMailboxSnapshot_) lastMailboxSnapshot_ = std::make_unique<core::PlcMailboxSnapshot>();
+  *lastMailboxSnapshot_ = snapshot;
+  hasLastMailboxSnapshot_ = true;
+
   QString slot0 = QStringLiteral("-");
   QString slot1 = QStringLiteral("-");
   QString partId0;
@@ -738,6 +821,15 @@ void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV26 &events) {
 
 void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap &args) {
   if (!plcRuntime_) {
+    return;
+  }
+  if (cmd == QStringLiteral("COMPUTE_RESULT")) {
+    QChar preferredPartType = QChar('A');
+    const QString partTypeText = args.value(QStringLiteral("part_type")).toString().trimmed().toUpper();
+    if (!partTypeText.isEmpty() && (partTypeText.at(0) == QChar('A') || partTypeText.at(0) == QChar('B'))) {
+      preferredPartType = partTypeText.at(0);
+    }
+    handleComputeResultRequested(preferredPartType);
     return;
   }
   if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) {
@@ -844,6 +936,9 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
     handlePlcRuntimeError(err);
     return;
   }
+  if (!lastMailboxSnapshot_) lastMailboxSnapshot_ = std::make_unique<core::PlcMailboxSnapshot>();
+  *lastMailboxSnapshot_ = snapshot;
+  hasLastMailboxSnapshot_ = true;
 
   if (productionWidget_) {
     productionWidget_->appendPlcLogMessage(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
@@ -876,6 +971,160 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
       }
     }
   }
+}
+
+void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
+  if (!plcRuntime_) return;
+
+  core::PlcMailboxSnapshot snapshot;
+  if (hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
+    snapshot = *lastMailboxSnapshot_;
+  } else {
+    QString err;
+    if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+      handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("读取测量包失败，无法计算结果") : err);
+      return;
+    }
+    if (!lastMailboxSnapshot_) lastMailboxSnapshot_ = std::make_unique<core::PlcMailboxSnapshot>();
+    *lastMailboxSnapshot_ = snapshot;
+    hasLastMailboxSnapshot_ = true;
+  }
+
+  QString validErr;
+  if (!snapshot.isValid(&validErr)) {
+    handlePlcRuntimeError(QStringLiteral("测量包校验失败，无法计算：%1").arg(validErr));
+    return;
+  }
+
+  const int invalidLimit = qBound(0, appCfg_.algo.invalid_point_limit, 72);
+  const core::DiameterAlgoParams diameterParams = buildDiameterAlgoParams(appCfg_.algo);
+  const core::RunoutAlgoParams runoutParams = buildRunoutAlgoParams(appCfg_.algo);
+
+  appendProductionLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3")
+                          .arg(QString(snapshot.part_type))
+                          .arg(snapshot.item_count)
+                          .arg(invalidLimit));
+
+  for (const auto &item : snapshot.items) {
+    if (!item.present) continue;
+    const QString slotText = slotTextByIndex(item.slot_index);
+    const QString idText = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
+
+    core::ProductionSlotSummary slotSummary;
+    slotSummary.slot_index = item.slot_index;
+    slotSummary.part_id = idText;
+    slotSummary.part_type = snapshot.part_type.toUpper();
+    slotSummary.valid = true;
+    slotSummary.compute.valid = true;
+
+    if (snapshot.part_type.toUpper() == QChar('A')) {
+      if (item.raw_points_um.size() < 72 * 4) {
+        appendProductionLog(QStringLiteral("计算失败：A型 item%1 raw点数不足，期望>=288，实际=%2")
+                                .arg(item.item_index)
+                                .arg(item.raw_points_um.size()));
+        continue;
+      }
+
+      const Channel72Series bInner = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
+      const Channel72Series bOuter = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
+      const Channel72Series cInner = buildChannel72Series(item.raw_points_um, 144, invalidLimit);
+      const Channel72Series cOuter = buildChannel72Series(item.raw_points_um, 216, invalidLimit);
+
+      auto runInner = [&](const Channel72Series &ch) -> core::DiameterChannelResult {
+        if (ch.invalid_too_many) return core::DiameterChannelResult{};
+        return core::computeInnerDiameter(ch.values_mm, ch.valid_mask, diameterParams);
+      };
+      auto runOuter = [&](const Channel72Series &ch) -> core::DiameterChannelResult {
+        if (ch.invalid_too_many) return core::DiameterChannelResult{};
+        return core::computeOuterDiameter(ch.values_mm, ch.valid_mask, diameterParams);
+      };
+
+      const core::DiameterChannelResult rBInner = runInner(bInner);
+      const core::DiameterChannelResult rBOuter = runOuter(bOuter);
+      const core::DiameterChannelResult rCInner = runInner(cInner);
+      const core::DiameterChannelResult rCOuter = runOuter(cOuter);
+
+      slotSummary.compute.values.total_len_mm = item.total_len_mm;
+      slotSummary.compute.values.id_left_mm = rBInner.success ? static_cast<float>(rBInner.circle_fit.diameter_mm) : qQNaN();
+      slotSummary.compute.values.od_left_mm = rBOuter.success ? static_cast<float>(rBOuter.circle_fit.diameter_mm) : qQNaN();
+      slotSummary.compute.values.id_right_mm = rCInner.success ? static_cast<float>(rCInner.circle_fit.diameter_mm) : qQNaN();
+      slotSummary.compute.values.od_right_mm = rCOuter.success ? static_cast<float>(rCOuter.circle_fit.diameter_mm) : qQNaN();
+      slotSummary.compute.valid = rBInner.success && rBOuter.success && rCInner.success && rCOuter.success;
+
+      appendProductionLog(QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
+                              .arg(item.item_index)
+                              .arg(slotText)
+                              .arg(idText)
+                              .arg(formatNumber(item.total_len_mm))
+                              .arg(formatNumber(slotSummary.compute.values.id_left_mm))
+                              .arg(formatNumber(slotSummary.compute.values.od_left_mm))
+                              .arg(formatNumber(slotSummary.compute.values.id_right_mm))
+                              .arg(formatNumber(slotSummary.compute.values.od_right_mm)));
+      appendProductionLog(QStringLiteral("  A型通道有效点: B内=%1/72 B外=%2/72 C内=%3/72 C外=%4/72")
+                              .arg(countValidMask(bInner.valid_mask))
+                              .arg(countValidMask(bOuter.valid_mask))
+                              .arg(countValidMask(cInner.valid_mask))
+                              .arg(countValidMask(cOuter.valid_mask)));
+
+      if (bInner.invalid_too_many || bOuter.invalid_too_many || cInner.invalid_too_many || cOuter.invalid_too_many) {
+        appendProductionLog(QStringLiteral("  A型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
+      } else if (!slotSummary.compute.valid) {
+        appendProductionLog(QStringLiteral("  A型拟合失败：B内[%1] B外[%2] C内[%3] C外[%4]")
+                                .arg(rBInner.error, rBOuter.error, rCInner.error, rCOuter.error));
+      }
+    } else if (snapshot.part_type.toUpper() == QChar('B')) {
+      if (item.raw_points_um.size() < 72 * 2) {
+        appendProductionLog(QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=144，实际=%2")
+                                .arg(item.item_index)
+                                .arg(item.raw_points_um.size()));
+        continue;
+      }
+
+      const Channel72Series aRunout = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
+      const Channel72Series dRunout = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
+
+      auto runRunout = [&](const Channel72Series &ch) -> core::RunoutResult {
+        if (ch.invalid_too_many) return core::RunoutResult{};
+        return core::computeRunoutAnalysis(ch.values_mm, ch.valid_mask, runoutParams);
+      };
+
+      const core::RunoutResult rA = runRunout(aRunout);
+      const core::RunoutResult rD = runRunout(dRunout);
+
+      slotSummary.compute.values.ad_len_mm = item.ad_len_mm;
+      slotSummary.compute.values.bc_len_mm = item.bc_len_mm;
+      slotSummary.compute.values.runout_left_mm = rA.success ? static_cast<float>(rA.tir_axis_mm) : qQNaN();
+      slotSummary.compute.values.runout_right_mm = rD.success ? static_cast<float>(rD.tir_axis_mm) : qQNaN();
+      slotSummary.compute.valid = rA.success && rD.success;
+
+      appendProductionLog(QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
+                              .arg(item.item_index)
+                              .arg(slotText)
+                              .arg(idText)
+                              .arg(formatNumber(item.ad_len_mm))
+                              .arg(formatNumber(item.bc_len_mm))
+                              .arg(formatNumber(slotSummary.compute.values.runout_left_mm))
+                              .arg(formatNumber(slotSummary.compute.values.runout_right_mm)));
+      appendProductionLog(QStringLiteral("  B型通道有效点: A点=%1/72 D点=%2/72")
+                              .arg(countValidMask(aRunout.valid_mask))
+                              .arg(countValidMask(dRunout.valid_mask)));
+
+      if (aRunout.invalid_too_many || dRunout.invalid_too_many) {
+        appendProductionLog(QStringLiteral("  B型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
+      } else if (!slotSummary.compute.valid) {
+        appendProductionLog(QStringLiteral("  B型拟合失败：A点[%1] D点[%2]").arg(rA.error, rD.error));
+      }
+    } else {
+      appendProductionLog(QStringLiteral("计算失败：未知part_type=%1").arg(QString(snapshot.part_type)));
+      continue;
+    }
+
+    if (productionWidget_ && item.slot_index >= 0 && item.slot_index < core::kLogicalSlotCount) {
+      productionWidget_->setSlotSummary(item.slot_index, slotSummary);
+    }
+  }
+
+  appendProductionLog(QStringLiteral("计算结束"));
 }
 
 

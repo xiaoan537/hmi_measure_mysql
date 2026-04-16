@@ -1,5 +1,6 @@
 #include "settings_widget.hpp"
 
+#include <QCheckBox>
 #include <QMessageBox>
 #include <QSettings>
 
@@ -17,6 +18,8 @@ SettingsWidget::SettingsWidget(const core::AppConfig& cfg, const QString& iniPat
   connect(ui_->btnApply, &QPushButton::clicked, this, &SettingsWidget::onApplyClicked);
   connect(ui_->btnSave, &QPushButton::clicked, this, &SettingsWidget::onSaveClicked);
   connect(ui_->btnTestDb, &QPushButton::clicked, this, &SettingsWidget::onTestDbClicked);
+  connect(ui_->checkAlgoAUseExplicitKOut, &QCheckBox::toggled,
+          ui_->doubleAlgoAKOut, &QWidget::setEnabled);
 
   ui_->lblIniPath->setText(iniPath_.isEmpty() ? "(unknown)" : iniPath_);
 }
@@ -64,6 +67,23 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->spinBPoints->setValue(c.scan_b.points_per_ring);
   ui_->doubleBAngle->setValue(c.scan_b.angle_step_deg);
   ui_->spinBOrder->setValue(c.scan_b.order_code);
+
+  // Algorithm
+  ui_->doubleAlgoAKIn->setValue(c.algo.a_k_in_mm);
+  ui_->doubleAlgoAKOut->setValue(c.algo.a_k_out_mm);
+  ui_->checkAlgoAUseExplicitKOut->setChecked(c.algo.a_use_explicit_k_out);
+  ui_->doubleAlgoAKOut->setEnabled(c.algo.a_use_explicit_k_out);
+  ui_->doubleAlgoAProbeBase->setValue(c.algo.a_probe_base_mm);
+  ui_->doubleAlgoAAngleOffset->setValue(c.algo.a_angle_offset_deg);
+  ui_->doubleAlgoAResidualIn->setValue(c.algo.a_residual_threshold_in_mm);
+  ui_->doubleAlgoAResidualOut->setValue(c.algo.a_residual_threshold_out_mm);
+
+  ui_->doubleAlgoBKRunout->setValue(c.algo.b_k_runout_mm);
+  ui_->doubleAlgoBAngleOffset->setValue(c.algo.b_angle_offset_deg);
+  ui_->doubleAlgoBResidual->setValue(c.algo.b_residual_threshold_mm);
+  ui_->doubleAlgoBVAngle->setValue(c.algo.b_v_block_angle_deg);
+  ui_->spinAlgoBInterp->setValue(c.algo.b_interpolation_factor);
+  ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
 }
 
 core::AppConfig SettingsWidget::readFromUi() const
@@ -101,6 +121,21 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.scan_b.points_per_ring = ui_->spinBPoints->value();
   c.scan_b.angle_step_deg = ui_->doubleBAngle->value();
   c.scan_b.order_code = (quint16)ui_->spinBOrder->value();
+
+  c.algo.a_k_in_mm = ui_->doubleAlgoAKIn->value();
+  c.algo.a_k_out_mm = ui_->doubleAlgoAKOut->value();
+  c.algo.a_use_explicit_k_out = ui_->checkAlgoAUseExplicitKOut->isChecked();
+  c.algo.a_probe_base_mm = ui_->doubleAlgoAProbeBase->value();
+  c.algo.a_angle_offset_deg = ui_->doubleAlgoAAngleOffset->value();
+  c.algo.a_residual_threshold_in_mm = ui_->doubleAlgoAResidualIn->value();
+  c.algo.a_residual_threshold_out_mm = ui_->doubleAlgoAResidualOut->value();
+
+  c.algo.b_k_runout_mm = ui_->doubleAlgoBKRunout->value();
+  c.algo.b_angle_offset_deg = ui_->doubleAlgoBAngleOffset->value();
+  c.algo.b_residual_threshold_mm = ui_->doubleAlgoBResidual->value();
+  c.algo.b_v_block_angle_deg = ui_->doubleAlgoBVAngle->value();
+  c.algo.b_interpolation_factor = ui_->spinAlgoBInterp->value();
+  c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
 
   return c;
 }
@@ -166,6 +201,22 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("points_per_ring", c.scan_b.points_per_ring);
   s.setValue("angle_step_deg", c.scan_b.angle_step_deg);
   s.setValue("order_code", (int)c.scan_b.order_code);
+  s.endGroup();
+
+  s.beginGroup("algorithm");
+  s.setValue("a_k_in_mm", c.algo.a_k_in_mm);
+  s.setValue("a_k_out_mm", c.algo.a_k_out_mm);
+  s.setValue("a_use_explicit_k_out", c.algo.a_use_explicit_k_out ? 1 : 0);
+  s.setValue("a_probe_base_mm", c.algo.a_probe_base_mm);
+  s.setValue("a_angle_offset_deg", c.algo.a_angle_offset_deg);
+  s.setValue("a_residual_threshold_in_mm", c.algo.a_residual_threshold_in_mm);
+  s.setValue("a_residual_threshold_out_mm", c.algo.a_residual_threshold_out_mm);
+  s.setValue("b_k_runout_mm", c.algo.b_k_runout_mm);
+  s.setValue("b_angle_offset_deg", c.algo.b_angle_offset_deg);
+  s.setValue("b_residual_threshold_mm", c.algo.b_residual_threshold_mm);
+  s.setValue("b_v_block_angle_deg", c.algo.b_v_block_angle_deg);
+  s.setValue("b_interpolation_factor", c.algo.b_interpolation_factor);
+  s.setValue("invalid_point_limit", c.algo.invalid_point_limit);
   s.endGroup();
 
   s.sync();

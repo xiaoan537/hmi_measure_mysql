@@ -137,6 +137,50 @@
         <item row="3" column="0"><widget class="QLabel" name="labelBOrder"><property name="text"><string>订单码</string></property></widget></item>
         <item row="3" column="1"><widget class="QSpinBox" name="spinBOrder"><property name="maximum"><number>65535</number></property></widget></item>
        </layout></item>
+       <item row="2" column="0">
+        <widget class="QGroupBox" name="groupAlgoA">
+         <property name="title"><string>A型算法参数（内外径）</string></property>
+         <layout class="QFormLayout" name="formAlgoA">
+          <item row="0" column="0"><widget class="QLabel" name="labelAlgoAKIn"><property name="text"><string>K_in(mm)</string></property></widget></item>
+          <item row="0" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAKIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelAlgoAKOut"><property name="text"><string>K_out(mm)</string></property></widget></item>
+          <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAKOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="labelAlgoAUseExplicit"><property name="text"><string>显式K_out</string></property></widget></item>
+          <item row="2" column="1"><widget class="QCheckBox" name="checkAlgoAUseExplicitKOut"/></item>
+          <item row="3" column="0"><widget class="QLabel" name="labelAlgoAProbeBase"><property name="text"><string>探头基距L(mm)</string></property></widget></item>
+          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAProbeBase"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="4" column="0"><widget class="QLabel" name="labelAlgoAAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
+          <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+          <item row="5" column="0"><widget class="QLabel" name="labelAlgoAResidualIn"><property name="text"><string>内径残差阈值(mm)</string></property></widget></item>
+          <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+          <item row="6" column="0"><widget class="QLabel" name="labelAlgoAResidualOut"><property name="text"><string>外径残差阈值(mm)</string></property></widget></item>
+          <item row="6" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QGroupBox" name="groupAlgoB">
+         <property name="title"><string>B型算法参数（跳动）</string></property>
+         <layout class="QFormLayout" name="formAlgoB">
+          <item row="0" column="0"><widget class="QLabel" name="labelAlgoBKRunout"><property name="text"><string>K_runout(mm)</string></property></widget></item>
+          <item row="0" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBKRunout"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelAlgoBAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
+          <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="labelAlgoBResidual"><property name="text"><string>拟合残差阈值(mm)</string></property></widget></item>
+          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBResidual"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+          <item row="3" column="0"><widget class="QLabel" name="labelAlgoBVAngle"><property name="text"><string>V型块夹角(°)</string></property></widget></item>
+          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBVAngle"><property name="decimals"><number>3</number></property><property name="minimum"><double>1.000000000000000</double></property><property name="maximum"><double>179.000000000000000</double></property></widget></item>
+          <item row="4" column="0"><widget class="QLabel" name="labelAlgoBInterp"><property name="text"><string>轮廓插值倍率</string></property></widget></item>
+          <item row="4" column="1"><widget class="QSpinBox" name="spinAlgoBInterp"><property name="minimum"><number>1</number></property><property name="maximum"><number>50</number></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item row="3" column="0" colspan="2">
+        <layout class="QFormLayout" name="formAlgoCommon">
+         <item row="0" column="0"><widget class="QLabel" name="labelInvalidPointLimit"><property name="text"><string>无效点个数阈值</string></property></widget></item>
+         <item row="0" column="1"><widget class="QSpinBox" name="spinInvalidPointLimit"><property name="minimum"><number>0</number></property><property name="maximum"><number>72</number></property><property name="value"><number>8</number></property></widget></item>
+        </layout>
+       </item>
       </layout>
      </widget>
     </widget>

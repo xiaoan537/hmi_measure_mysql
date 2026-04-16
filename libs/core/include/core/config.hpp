@@ -73,6 +73,28 @@ struct MesConfig
         quint16 order_code = 1;
     };
 
+    struct AlgorithmConfig
+    {
+        // A型（内外径）参数
+        double a_k_in_mm = 8.0;
+        double a_k_out_mm = 23.0;
+        bool a_use_explicit_k_out = true;
+        double a_probe_base_mm = 15.0;
+        double a_angle_offset_deg = 0.0;
+        double a_residual_threshold_in_mm = 0.03;
+        double a_residual_threshold_out_mm = 0.03;
+
+        // B型（跳动）参数
+        double b_k_runout_mm = 20.0;
+        double b_angle_offset_deg = 0.0;
+        double b_residual_threshold_mm = 0.03;
+        double b_v_block_angle_deg = 90.0;
+        int b_interpolation_factor = 5;
+
+        // 72点通道中，超过该无效点个数则判该通道无效
+        int invalid_point_limit = 8;
+    };
+
     // PLC 运行配置：
     // 1) 连接参数；
     // 2) 轮询节拍；
@@ -103,6 +125,8 @@ struct MesConfig
         ScanConfig scan_a;
         // B 型：RUNO 2ch
         ScanConfig scan_b;
+        // 算法参数
+        AlgorithmConfig algo;
 
         // PLC 通讯配置
         PlcConfig plc;

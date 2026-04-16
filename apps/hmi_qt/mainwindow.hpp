@@ -16,6 +16,7 @@ class ProductionWidget;
 class CalibrationWidget;
 class DevToolsWidget;
 class ManualMaintainWidget;
+class SettingsWidget;
 
 namespace core {
 class PlcRuntimeServiceV2;
@@ -50,6 +51,7 @@ private:
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
+    void handleComputeResultRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();
     void refreshManualMaintainLiveStatus();
     void appendProductionLog(const QString &text);
@@ -63,12 +65,16 @@ private:
     ManualMaintainWidget *manualMaintainWidget_ = nullptr;
     ProductionWidget *productionWidget_ = nullptr;
     CalibrationWidget *calibrationWidget_ = nullptr;
+    SettingsWidget *settingsWidget_ = nullptr;
     QLabel *lbDb_ = nullptr;
     QLabel *lbPlc_ = nullptr;
     QLabel *lbMes_ = nullptr;
+    core::AppConfig appCfg_{};
     std::unique_ptr<core::PlcRuntimeServiceV2> plcRuntime_;
     quint16 lastMailboxReady_ = 0;
     core::PlcStatusBlockV2 lastStatus_{};
+    std::unique_ptr<core::PlcMailboxSnapshot> lastMailboxSnapshot_;
+    bool hasLastMailboxSnapshot_ = false;
     bool hasLastStatus_ = false;
     bool lastPlcConnectedKnown_ = false;
     bool lastPlcConnected_ = false;

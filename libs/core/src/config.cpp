@@ -114,6 +114,24 @@ namespace core
         c.scan_b.order_code = (quint16)s.value("order_code", 1).toInt();
         s.endGroup();
 
+        // 算法参数（生产页“计算结果”与后续流程复用）
+        s.beginGroup("algorithm");
+        c.algo.a_k_in_mm = s.value("a_k_in_mm", 8.0).toDouble();
+        c.algo.a_k_out_mm = s.value("a_k_out_mm", 23.0).toDouble();
+        c.algo.a_use_explicit_k_out = (s.value("a_use_explicit_k_out", 1).toInt() != 0);
+        c.algo.a_probe_base_mm = s.value("a_probe_base_mm", 15.0).toDouble();
+        c.algo.a_angle_offset_deg = s.value("a_angle_offset_deg", 0.0).toDouble();
+        c.algo.a_residual_threshold_in_mm = s.value("a_residual_threshold_in_mm", 0.03).toDouble();
+        c.algo.a_residual_threshold_out_mm = s.value("a_residual_threshold_out_mm", 0.03).toDouble();
+
+        c.algo.b_k_runout_mm = s.value("b_k_runout_mm", 20.0).toDouble();
+        c.algo.b_angle_offset_deg = s.value("b_angle_offset_deg", 0.0).toDouble();
+        c.algo.b_residual_threshold_mm = s.value("b_residual_threshold_mm", 0.03).toDouble();
+        c.algo.b_v_block_angle_deg = s.value("b_v_block_angle_deg", 90.0).toDouble();
+        c.algo.b_interpolation_factor = s.value("b_interpolation_factor", 5).toInt();
+        c.algo.invalid_point_limit = s.value("invalid_point_limit", 8).toInt();
+        s.endGroup();
+
         // PLC 通讯配置解析
         s.beginGroup("plc");
         c.plc.enabled = (s.value("enabled", 0).toInt() != 0);

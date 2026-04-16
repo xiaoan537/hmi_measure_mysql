@@ -644,6 +644,16 @@
                 </property>
                </widget>
               </item>
+              <item row="3" column="0" colspan="2">
+               <widget class="QPushButton" name="btnComputeResult">
+                <property name="text">
+                 <string>计算结果</string>
+                </property>
+                <property name="minimumHeight">
+                 <number>34</number>
+                </property>
+               </widget>
+              </item>
              </layout>
             </widget>
            </item>
