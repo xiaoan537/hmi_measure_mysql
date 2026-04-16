@@ -71,6 +71,8 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   // Algorithm
   ui_->doubleAlgoAKIn->setValue(c.algo.a_k_in_mm);
   ui_->doubleAlgoAKOut->setValue(c.algo.a_k_out_mm);
+  ui_->doubleAlgoAInnerInputOffset->setValue(c.algo.a_inner_input_offset_mm);
+  ui_->doubleAlgoAOuterInputOffset->setValue(c.algo.a_outer_input_offset_mm);
   ui_->checkAlgoAUseExplicitKOut->setChecked(c.algo.a_use_explicit_k_out);
   ui_->doubleAlgoAKOut->setEnabled(c.algo.a_use_explicit_k_out);
   ui_->doubleAlgoAProbeBase->setValue(c.algo.a_probe_base_mm);
@@ -124,6 +126,8 @@ core::AppConfig SettingsWidget::readFromUi() const
 
   c.algo.a_k_in_mm = ui_->doubleAlgoAKIn->value();
   c.algo.a_k_out_mm = ui_->doubleAlgoAKOut->value();
+  c.algo.a_inner_input_offset_mm = ui_->doubleAlgoAInnerInputOffset->value();
+  c.algo.a_outer_input_offset_mm = ui_->doubleAlgoAOuterInputOffset->value();
   c.algo.a_use_explicit_k_out = ui_->checkAlgoAUseExplicitKOut->isChecked();
   c.algo.a_probe_base_mm = ui_->doubleAlgoAProbeBase->value();
   c.algo.a_angle_offset_deg = ui_->doubleAlgoAAngleOffset->value();
@@ -206,6 +210,8 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.beginGroup("algorithm");
   s.setValue("a_k_in_mm", c.algo.a_k_in_mm);
   s.setValue("a_k_out_mm", c.algo.a_k_out_mm);
+  s.setValue("a_inner_input_offset_mm", c.algo.a_inner_input_offset_mm);
+  s.setValue("a_outer_input_offset_mm", c.algo.a_outer_input_offset_mm);
   s.setValue("a_use_explicit_k_out", c.algo.a_use_explicit_k_out ? 1 : 0);
   s.setValue("a_probe_base_mm", c.algo.a_probe_base_mm);
   s.setValue("a_angle_offset_deg", c.algo.a_angle_offset_deg);

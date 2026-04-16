@@ -179,7 +179,17 @@ Channel72Series buildChannel72Series(const QVector<float> &all, int offset, int 
   return s;
 }
 
-core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cfg) {
+void applyChannelOffset(Channel72Series *s, double offset_mm) {
+  if (!s || offset_mm == 0.0) return;
+  for (int i = 0; i < s->values_mm.size(); ++i) {
+    if (i < s->valid_mask.size() && s->valid_mask.at(i) && std::isfinite(s->values_mm.at(i))) {
+      s->values_mm[i] += offset_mm;
+    }
+  }
+}
+
+core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cfg,
+                                                 int minValidPoints) {
   core::DiameterAlgoParams p;
   p.k_in_mm = cfg.a_k_in_mm;
   p.k_out_mm = cfg.a_k_out_mm;
@@ -188,16 +198,20 @@ core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cf
   p.angle_offset_deg = cfg.a_angle_offset_deg;
   p.inner_fit.residual_threshold_mm = cfg.a_residual_threshold_in_mm;
   p.outer_fit.residual_threshold_mm = cfg.a_residual_threshold_out_mm;
+  p.inner_fit.min_valid_points = minValidPoints;
+  p.outer_fit.min_valid_points = minValidPoints;
   p.harmonic.max_order = 8;
   p.harmonic.remove_mean = false;
   return p;
 }
 
-core::RunoutAlgoParams buildRunoutAlgoParams(const core::AlgorithmConfig &cfg) {
+core::RunoutAlgoParams buildRunoutAlgoParams(const core::AlgorithmConfig &cfg,
+                                             int minValidPoints) {
   core::RunoutAlgoParams p;
   p.k_runout_mm = cfg.b_k_runout_mm;
   p.angle_offset_deg = cfg.b_angle_offset_deg;
   p.fit_options.residual_threshold_mm = cfg.b_residual_threshold_mm;
+  p.fit_options.min_valid_points = minValidPoints;
   p.v_block_angle_deg = cfg.b_v_block_angle_deg;
   p.interpolation_factor = cfg.b_interpolation_factor;
   p.harmonic.max_order = 8;
@@ -997,13 +1011,18 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
   }
 
   const int invalidLimit = qBound(0, appCfg_.algo.invalid_point_limit, 72);
-  const core::DiameterAlgoParams diameterParams = buildDiameterAlgoParams(appCfg_.algo);
-  const core::RunoutAlgoParams runoutParams = buildRunoutAlgoParams(appCfg_.algo);
+  const int minValidPoints = qBound(3, 72 - invalidLimit, 72);
+  const core::DiameterAlgoParams diameterParams = buildDiameterAlgoParams(appCfg_.algo, minValidPoints);
+  const core::RunoutAlgoParams runoutParams = buildRunoutAlgoParams(appCfg_.algo, minValidPoints);
 
-  appendProductionLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3")
+  appendProductionLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3 最小有效点=%4")
                           .arg(QString(snapshot.part_type))
                           .arg(snapshot.item_count)
-                          .arg(invalidLimit));
+                          .arg(invalidLimit)
+                          .arg(minValidPoints));
+  appendProductionLog(QStringLiteral("A型输入偏置：内径=%1 mm 外径=%2 mm")
+                          .arg(formatNumber(appCfg_.algo.a_inner_input_offset_mm))
+                          .arg(formatNumber(appCfg_.algo.a_outer_input_offset_mm)));
 
   for (const auto &item : snapshot.items) {
     if (!item.present) continue;
@@ -1025,10 +1044,14 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
         continue;
       }
 
-      const Channel72Series bInner = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
-      const Channel72Series bOuter = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
-      const Channel72Series cInner = buildChannel72Series(item.raw_points_um, 144, invalidLimit);
-      const Channel72Series cOuter = buildChannel72Series(item.raw_points_um, 216, invalidLimit);
+      Channel72Series bInner = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
+      Channel72Series bOuter = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
+      Channel72Series cInner = buildChannel72Series(item.raw_points_um, 144, invalidLimit);
+      Channel72Series cOuter = buildChannel72Series(item.raw_points_um, 216, invalidLimit);
+      applyChannelOffset(&bInner, appCfg_.algo.a_inner_input_offset_mm);
+      applyChannelOffset(&cInner, appCfg_.algo.a_inner_input_offset_mm);
+      applyChannelOffset(&bOuter, appCfg_.algo.a_outer_input_offset_mm);
+      applyChannelOffset(&cOuter, appCfg_.algo.a_outer_input_offset_mm);
 
       auto runInner = [&](const Channel72Series &ch) -> core::DiameterChannelResult {
         if (ch.invalid_too_many) return core::DiameterChannelResult{};

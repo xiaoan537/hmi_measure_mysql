@@ -28,7 +28,8 @@ struct PointSet2D
 struct CircleFitOptions
 {
     double residual_threshold_mm = 0.03;
-    int min_valid_points = 50;
+    // 最小有效点默认给低门槛（仅保证可拟合），业务门槛由上层流程控制
+    int min_valid_points = 3;
     bool enable_second_pass = true;
     int max_geometric_iterations = 20;
     double geometric_tolerance = 1e-9;

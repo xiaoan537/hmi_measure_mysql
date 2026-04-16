@@ -78,6 +78,9 @@ struct MesConfig
         // A型（内外径）参数
         double a_k_in_mm = 8.0;
         double a_k_out_mm = 23.0;
+        // A型输入点偏置：在拟合前对72点原始值做加/减（单位mm）
+        double a_inner_input_offset_mm = 2.0;
+        double a_outer_input_offset_mm = 0.0;
         bool a_use_explicit_k_out = true;
         double a_probe_base_mm = 15.0;
         double a_angle_offset_deg = 0.0;

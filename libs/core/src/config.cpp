@@ -118,6 +118,8 @@ namespace core
         s.beginGroup("algorithm");
         c.algo.a_k_in_mm = s.value("a_k_in_mm", 8.0).toDouble();
         c.algo.a_k_out_mm = s.value("a_k_out_mm", 23.0).toDouble();
+        c.algo.a_inner_input_offset_mm = s.value("a_inner_input_offset_mm", 2.0).toDouble();
+        c.algo.a_outer_input_offset_mm = s.value("a_outer_input_offset_mm", 0.0).toDouble();
         c.algo.a_use_explicit_k_out = (s.value("a_use_explicit_k_out", 1).toInt() != 0);
         c.algo.a_probe_base_mm = s.value("a_probe_base_mm", 15.0).toDouble();
         c.algo.a_angle_offset_deg = s.value("a_angle_offset_deg", 0.0).toDouble();
