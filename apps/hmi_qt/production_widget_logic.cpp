@@ -105,11 +105,8 @@ QString stepText(quint16 step)
     case 90: return QStringLiteral("等待PC读取");
     case 100: return QStringLiteral("放回料架");
     case 110: return QStringLiteral("循环完成");
-    case 200: return QStringLiteral("标定待上料(16号槽)");
-    case 210: return QStringLiteral("标定等待PC确认");
-    case 220: return QStringLiteral("标定测量中");
-    case 230: return QStringLiteral("标定等待PC读取");
-    case 240: return QStringLiteral("标定完成");
+    case 120: return QStringLiteral("等待是否复测");
+    case 220: return QStringLiteral("等待是否复测");
     case 900: return QStringLiteral("报警");
     case 910: return QStringLiteral("急停");
     default: return QStringLiteral("运行(%1)").arg(step);

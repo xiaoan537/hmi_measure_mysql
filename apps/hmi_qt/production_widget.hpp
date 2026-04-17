@@ -4,6 +4,7 @@
 #include <QString>
 #include <QtGlobal>
 #include <QVariantMap>
+#include <QTimer>
 
 #include "core/config.hpp"
 #include "core/measurement_pipeline.hpp"
@@ -31,6 +32,7 @@ public:
     void setTrayPresentMask(quint16 present_mask);
     void setScannedPartIds(const QVector<QString> &part_ids);
     void setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note = {});
+    void setActionSlotMask(quint16 action_slot_mask);
     void setSlotComputedResult(int slot, const SlotMeasureSummary &s);
     void setSlotSummary(int slot, const core::ProductionSlotSummary &s);
     void setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries);
@@ -112,6 +114,9 @@ private:
     QVector<QString> slot_notes_;          // mismatch / fail / 提示
     QVector<SlotMeasureSummary> slot_meas_;
     int selected_slot_ = 0;
+    quint16 action_slot_mask_ = 0;
+    QTimer blink_timer_;
+    bool blink_on_ = false;
 
     // mailbox preview cache（仅用于展示）
     QString last_machine_state_text_;

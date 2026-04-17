@@ -44,7 +44,7 @@ QString mailboxPartTypeText(const core::PlcMailboxSnapshot &snapshot) {
   return QStringLiteral("-");
 }
 
-QString stepStateText(quint16 stepState) {
+QString productionStepStateText(quint16 stepState) {
   switch (static_cast<core::PlcStepStateV2>(stepState)) {
   case core::PlcStepStateV2::WaitStart: return QStringLiteral("等待启动");
   case core::PlcStepStateV2::WaitTrayReady: return QStringLiteral("等待上料就绪");
@@ -58,15 +58,32 @@ QString stepStateText(quint16 stepState) {
   case core::PlcStepStateV2::WaitPcRead: return QStringLiteral("等待PC读取");
   case core::PlcStepStateV2::ReturnToTray: return QStringLiteral("回盘中");
   case core::PlcStepStateV2::CycleComplete: return QStringLiteral("循环完成");
-  case core::PlcStepStateV2::CalWaitLoadSlot16: return QStringLiteral("标定等待16号槽上料");
-  case core::PlcStepStateV2::CalWaitPcConfirm: return QStringLiteral("标定等待PC确认");
-  case core::PlcStepStateV2::CalMeasure: return QStringLiteral("标定测量中");
-  case core::PlcStepStateV2::CalWaitPcRead: return QStringLiteral("标定等待PC读取");
-  case core::PlcStepStateV2::CalComplete: return QStringLiteral("标定完成");
   case core::PlcStepStateV2::Fault: return QStringLiteral("故障");
   case core::PlcStepStateV2::EStop: return QStringLiteral("急停");
-  default: return QStringLiteral("STEP(%1)").arg(stepState);
+  default:
+    break;
   }
+  if (stepState == 120 || stepState == 220) {
+    return QStringLiteral("等待是否复测");
+  }
+  return QStringLiteral("STEP(%1)").arg(stepState);
+}
+
+QString calibrationStepStateText(quint16 stepState) {
+  switch (stepState) {
+  case 200: return QStringLiteral("标定等待16号槽上料");
+  case 210: return QStringLiteral("标定等待PC确认");
+  case 220: return QStringLiteral("标定测量中");
+  case 230: return QStringLiteral("标定等待PC读取");
+  case 240: return QStringLiteral("标定完成");
+  default:
+    return productionStepStateText(stepState);
+  }
+}
+
+QString stepStateText(quint16 stepState, bool calibrationContext) {
+  return calibrationContext ? calibrationStepStateText(stepState)
+                            : productionStepStateText(stepState);
 }
 
 
@@ -76,7 +93,7 @@ QString axisNameByIndex(int axisIndex) { return core::plc_v26::axisName(axisInde
 
 QString machineStateText(quint16 machineState) { return core::plc_codec_v26::decodeMachineState(machineState).text; }
 
-bool isCalibrationStep(quint16 stepState) {
+bool isCalibrationStepCode(quint16 stepState) {
   return stepState >= 200 && stepState < 300;
 }
 
@@ -92,14 +109,6 @@ bool isProcessingProductionStep(quint16 stepState) {
   default:
     return false;
   }
-}
-
-QVector<QString> trayToVector(const core::PlcTrayPartIdBlockV2 &tray) {
-  QVector<QString> ids(core::kLogicalSlotCount);
-  for (int i = 0; i < core::kLogicalSlotCount; ++i) {
-    ids[i] = tray.part_ids[i];
-  }
-  return ids;
 }
 
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
@@ -416,11 +425,15 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
               pendingCmdBits_ = 0;
               hasLastMailboxSnapshot_ = false;
               lastMailboxSnapshot_.reset();
+              calibrationFlowExpected_ = false;
             }
             if (manualMaintainWidget_) {
+              const bool calCtx = hasLastStatus_
+                                  && calibrationFlowExpected_
+                                  && isCalibrationStepCode(lastStatus_.step_state);
               manualMaintainWidget_->setRuntimeSummary(connected,
                                                        hasLastStatus_ ? machineStateText(lastStatus_.machine_state) : QStringLiteral("-"),
-                                                       hasLastStatus_ ? stepStateText(lastStatus_.step_state) : QStringLiteral("-"));
+                                                       hasLastStatus_ ? stepStateText(lastStatus_.step_state, calCtx) : QStringLiteral("-"));
             }
             if (!lastPlcConnectedKnown_ || lastPlcConnected_ != connected) {
               appendProductionLog(connected ? QStringLiteral("PLC 连接成功") : QStringLiteral("PLC 已断开"));
@@ -646,9 +659,12 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
     reconnectAttemptLogged_ = true;
   }
   if (manualMaintainWidget_) {
+    const bool calCtx = hasLastStatus_
+                        && calibrationFlowExpected_
+                        && isCalibrationStepCode(lastStatus_.step_state);
     manualMaintainWidget_->setRuntimeSummary(stats.connected,
                                              hasLastStatus_ ? machineStateText(lastStatus_.machine_state) : QStringLiteral("-"),
-                                             hasLastStatus_ ? stepStateText(lastStatus_.step_state) : QStringLiteral("-"));
+                                             hasLastStatus_ ? stepStateText(lastStatus_.step_state, calCtx) : QStringLiteral("-"));
     if (hasLastStatus_) manualMaintainWidget_->setCurrentPlcMode(lastStatus_.control_mode);
   }
 }
@@ -656,10 +672,11 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   lastStatus_ = status;
   hasLastStatus_ = true;
+  const bool calibrationContext = calibrationFlowExpected_ && isCalibrationStepCode(status.step_state);
   if (manualMaintainWidget_) {
     manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
                                              machineStateText(status.machine_state),
-                                             stepStateText(status.step_state));
+                                             stepStateText(status.step_state, calibrationContext));
     manualMaintainWidget_->setCurrentPlcMode(status.control_mode);
     refreshManualMaintainLiveStatus();
   }
@@ -678,13 +695,15 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
     productionWidget_->setStateSeq(0);
     productionWidget_->setAlarm(status.alarm_code, 0);
     productionWidget_->setInterlockMask(status.interlock_mask);
+    productionWidget_->setActionSlotMask(status.active_slot_mask);
     productionWidget_->setTrayPresentMask(status.tray_present_mask);
-    productionWidget_->setCalibrationMode(isCalibrationStep(status.step_state));
+    productionWidget_->setCalibrationMode(calibrationContext);
     productionWidget_->setCurrentPlcMode(status.control_mode);
 
     for (int slot = 0; slot < core::kLogicalSlotCount; ++slot) {
+      const bool isActive = ((status.active_slot_mask >> slot) & 0x1u) != 0;
       const bool present = ((status.tray_present_mask >> slot) & 0x1u) != 0;
-      if (!present) {
+      if (!present && !isActive) {
         productionWidget_->setSlotRuntimeState(slot, SlotRuntimeState::Empty, QString());
         continue;
       }
@@ -692,7 +711,7 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
       SlotRuntimeState state = SlotRuntimeState::Loaded;
       QString note;
 
-      if (isCalibrationStep(status.step_state) && slot == core::kCalibrationSlotIndex) {
+      if (calibrationContext && slot == core::kCalibrationSlotIndex) {
         state = SlotRuntimeState::Calibration;
       } else if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::ScanTrayIds)) {
         state = SlotRuntimeState::Loaded;
@@ -702,8 +721,6 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
         note = QStringLiteral("等待 PC 核对 ID");
       }
 
-      const bool isActive = (status.active_item_count >= 1 && status.active_slot_index[0] == static_cast<quint16>(slot)) ||
-                            (status.active_item_count >= 2 && status.active_slot_index[1] == static_cast<quint16>(slot));
       if (isActive) {
         if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcRead)) {
           state = SlotRuntimeState::WaitingPcRead;
@@ -812,10 +829,21 @@ void MainWindow::refreshManualMaintainLiveStatus() {
 
 void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
   if (productionWidget_) {
-    productionWidget_->setScannedPartIds(trayToVector(tray));
+    QVector<QString> slotIds(core::kLogicalSlotCount);
+    const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
+    for (int i = 0; i < core::kLogicalSlotCount; ++i) {
+      const bool present = ((presentMask >> i) & 0x1u) != 0;
+      if (!present) continue; // 无料槽位不写入
+      const QString id = tray.part_ids[i].trimmed();
+      if (id.isEmpty() || id.compare(QStringLiteral("NG"), Qt::CaseInsensitive) == 0) continue;
+      slotIds[i] = id;
+    }
+    productionWidget_->setScannedPartIds(slotIds);
     productionWidget_->appendPlcLogMessage(QStringLiteral("读取扫码ID成功："));
     for (int i = 0; i < core::kLogicalSlotCount; ++i) {
-      const QString id = tray.part_ids[i].trimmed().isEmpty() ? QStringLiteral("NG") : tray.part_ids[i].trimmed();
+      const bool present = ((presentMask >> i) & 0x1u) != 0;
+      if (!present) continue;
+      const QString id = slotIds[i].trimmed().isEmpty() ? QStringLiteral("NG") : slotIds[i].trimmed();
       productionWidget_->appendPlcLogMessage(QStringLiteral("  槽位%1：%2").arg(i + 1).arg(id));
     }
   }
@@ -830,22 +858,14 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
   QString slot1 = QStringLiteral("-");
   QString partId0;
   QString partId1;
-  quint16 slot0Value = core::kInvalidSlotIndex;
-  quint16 slot1Value = core::kInvalidSlotIndex;
-  float total0 = 0.0f;
-  float total1 = 0.0f;
 
   if (!snapshot.items.isEmpty()) {
-    slot0Value = snapshot.items.at(0).slot_index;
     slot0 = snapshot.items.at(0).slot_index >= 0 ? QString::number(snapshot.items.at(0).slot_index + 1) : QStringLiteral("-");
     partId0 = snapshot.items.at(0).part_id;
-    total0 = snapshot.items.at(0).total_len_mm;
   }
   if (snapshot.items.size() > 1) {
-    slot1Value = snapshot.items.at(1).slot_index;
     slot1 = snapshot.items.at(1).slot_index >= 0 ? QString::number(snapshot.items.at(1).slot_index + 1) : QStringLiteral("-");
     partId1 = snapshot.items.at(1).part_id;
-    total1 = snapshot.items.at(1).total_len_mm;
   }
 
   if (diagnosticsWidget_) {
@@ -854,18 +874,6 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
 
   if (productionWidget_) {
     productionWidget_->setMeasureDone(true);
-    productionWidget_->setMailboxPreview(snapshot.meas_seq,
-                                         snapshot.part_type,
-                                         slot0Value,
-                                         slot1Value,
-                                         partId0,
-                                         partId1,
-                                         false,
-                                         false,
-                                         0,
-                                         0,
-                                         total0,
-                                         total1);
   }
 
   if (calibrationWidget_) {
@@ -888,6 +896,13 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
   if (productionWidget_) {
     productionWidget_->appendPlcLogMessage(QStringLiteral("Mailbox 已解析：part=%1 slot0=%2 slot1=%3")
                                                .arg(mailboxPartTypeText(snapshot), slot0, slot1));
+  }
+
+  const bool calibrationContext = hasLastStatus_
+                               && calibrationFlowExpected_
+                               && isCalibrationStepCode(lastStatus_.step_state);
+  if (!calibrationContext) {
+    handleComputeResultRequested(snapshot.part_type);
   }
 
 }
@@ -981,6 +996,12 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
   if (!ok) { handlePlcRuntimeError(err); return; }
+  if (cmd == QStringLiteral("START_CALIBRATION")) {
+    calibrationFlowExpected_ = true;
+  } else if (cmd == QStringLiteral("START_AUTO") ||
+             cmd == QStringLiteral("INITIALIZE")) {
+    calibrationFlowExpected_ = false;
+  }
   awaitingCmdReply_ = true;
   pendingCmdBits_ = cmdBits;
 
@@ -1001,8 +1022,13 @@ void MainWindow::handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds
     return;
   }
   QString err;
+  const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
   for (int i = 0; i < slotIds.size() && i < core::kLogicalSlotCount; ++i) {
-    if (!plcRuntime_->writeTrayPartIdSlot(i, slotIds.at(i), &err)) {
+    const bool present = ((presentMask >> i) & 0x1u) != 0;
+    if (!present) continue; // 无料槽位不写
+    const QString id = slotIds.at(i).trimmed();
+    if (id.isEmpty()) continue;
+    if (!plcRuntime_->writeTrayPartIdSlot(i, id, &err)) {
       handlePlcRuntimeError(err.isEmpty()
                                 ? QStringLiteral("写入槽位 %1 工件 ID 失败").arg(i)
                                 : err);

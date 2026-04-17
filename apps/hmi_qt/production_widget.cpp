@@ -36,7 +36,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblSlotIdCaption->setText(QStringLiteral("工件ID(32)"));
     ui_->editSlotId->setPlaceholderText(QStringLiteral("仅待机/等待上料/等待ID核对阶段可编辑"));
     ui_->lblPart0Caption->setText(QStringLiteral("当前工件ID"));
-    ui_->lblPart1Caption->setText(QStringLiteral("测量包预览"));
+    ui_->lblPart1Caption->setText(QStringLiteral("工件类型"));
     ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
     ui_->btnWriteSlotIds->setText(QStringLiteral("写回工件ID"));
 
@@ -57,6 +57,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         QPushButton[slotState="3"] { background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 10px; }
         QPushButton[slotState="4"] { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 10px; }
         QPushButton[slotState="5"] { background: #ffedd5; border: 1px solid #fdba74; border-radius: 10px; }
+        QPushButton[slotState="6"] { background: #fde68a; border: 1px solid #f59e0b; border-radius: 10px; }
 
         QPushButton[slotSelected="1"] { border: 2px solid #111827; }
     )");
@@ -149,11 +150,26 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     connect(ui_->editSlotId, &QLineEdit::editingFinished, this, [this]{
         if (selected_slot_ < 0 || selected_slot_ >= 16) return;
         if (slot_part_ids_.size() != 16) slot_part_ids_ = QVector<QString>(16);
-        slot_part_ids_[selected_slot_] = ui_->editSlotId->text().trimmed();
+        const QString newId = ui_->editSlotId->text().trimmed();
+        if (slot_part_ids_[selected_slot_] != newId) {
+            slot_part_ids_[selected_slot_] = newId;
+            if (slot_meas_.size() == 16) slot_meas_[selected_slot_] = SlotMeasureSummary{};
+            if (slot_notes_.size() == 16) slot_notes_[selected_slot_].clear();
+        }
         if (((tray_present_ >> selected_slot_) & 0x1) != 0 && slot_states_[selected_slot_] == SlotRuntimeState::Empty) {
             slot_states_[selected_slot_] = SlotRuntimeState::Loaded;
         }
         updateSlotCard(selected_slot_);
+    });
+
+    blink_timer_.setInterval(420);
+    blink_timer_.setSingleShot(false);
+    connect(&blink_timer_, &QTimer::timeout, this, [this] {
+        blink_on_ = !blink_on_;
+        const quint16 mask = action_slot_mask_;
+        for (int i = 0; i < 16; ++i) {
+            if (((mask >> i) & 0x1u) != 0) updateSlotCard(i);
+        }
     });
 
     initSlotCards();
@@ -256,6 +272,20 @@ void ProductionWidget::refreshSelectedDetail()
     if (slot_meas_.size() == 16) ms = slot_meas_[selected_slot_];
 
     const QString note = (slot_notes_.size() == 16) ? slot_notes_[selected_slot_] : QString();
+    if (ms.valid) {
+        const QChar pt = ms.part_type.toUpper();
+        if (pt == QChar('A') || pt == QChar('B')) {
+            ui_->lblPart1->setText(QString(pt));
+        }
+    }
+    if (ms.valid && ms.judgement_known) {
+        ui_->lblResult->setText(ms.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
+        ui_->lblResult->setStyleSheet(ms.judgement_ok
+                                          ? QStringLiteral("QLabel{color:#166534;font-weight:700;}")
+                                          : QStringLiteral("QLabel{color:#b91c1c;font-weight:700;}"));
+    } else {
+        ui_->lblResult->setStyleSheet(QString());
+    }
     if (!ms.fail_reason_text.isEmpty()) ui_->lblFail->setText(ms.fail_reason_text);
     else if (!note.isEmpty()) ui_->lblFail->setText(note);
 
@@ -304,10 +334,17 @@ void ProductionWidget::updateSlotCard(int slot)
     if (slot_meas_.size() == 16) {
         const auto &ms = slot_meas_[slot];
         if (ms.valid) {
+            const QString judgeText = ms.judgement_known ? (ms.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                                                         : QStringLiteral("已计算");
             if (ms.part_type.toUpper() == QChar('B')) {
-                summary = QStringLiteral("AD=%1  BC=%2").arg(production_widget_logic::formatFloat(ms.b_ad_len_mm, 2)).arg(production_widget_logic::formatFloat(ms.b_bc_len_mm, 2));
+                summary = QStringLiteral("%1 AD=%2 BC=%3")
+                              .arg(judgeText)
+                              .arg(production_widget_logic::formatFloat(ms.b_ad_len_mm, 2))
+                              .arg(production_widget_logic::formatFloat(ms.b_bc_len_mm, 2));
             } else {
-                summary = QStringLiteral("L=%1").arg(production_widget_logic::formatFloat(ms.a_total_len_mm, 2));
+                summary = QStringLiteral("%1 L=%2")
+                              .arg(judgeText)
+                              .arg(production_widget_logic::formatFloat(ms.a_total_len_mm, 2));
             }
         }
     }
@@ -326,7 +363,8 @@ void ProductionWidget::updateSlotCard(int slot)
                  .arg(production_widget_logic::shortId(id))
                  .arg(stateText)
                  .arg(summary));
-    btn->setProperty("slotState", slotState);
+    const bool blinkActive = ((action_slot_mask_ >> slot) & 0x1u) != 0;
+    btn->setProperty("slotState", (blinkActive && blink_on_) ? 6 : slotState);
 
     btn->style()->unpolish(btn);
     btn->style()->polish(btn);
@@ -336,6 +374,16 @@ void ProductionWidget::updateSlotCard(int slot)
 
 QString ProductionWidget::stepText(quint16 step) const
 {
+    if (calibration_mode_) {
+        switch (step) {
+        case 200: return QStringLiteral("标定待上料(16号槽)");
+        case 210: return QStringLiteral("标定等待PC确认");
+        case 220: return QStringLiteral("标定测量中");
+        case 230: return QStringLiteral("标定等待PC读取");
+        case 240: return QStringLiteral("标定完成");
+        default: break;
+        }
+    }
     return production_widget_logic::stepText(step);
 }
 
@@ -451,8 +499,12 @@ void ProductionWidget::setTrayPresentMask(quint16 present_mask)
     for (int i = 0; i < 16; ++i) {
         const bool present = ((present_mask >> i) & 0x1) != 0;
         if (!present) {
-            clearSlotRuntimeData(i);
-            slot_states_[i] = SlotRuntimeState::Empty;
+            const bool active = ((action_slot_mask_ >> i) & 0x1u) != 0;
+            const bool hasId = (slot_part_ids_.size() == 16 && !slot_part_ids_[i].trimmed().isEmpty());
+            const bool hasResult = (slot_meas_.size() == 16 && slot_meas_[i].valid);
+            if (!active && !hasId && !hasResult) {
+                slot_states_[i] = SlotRuntimeState::Empty;
+            }
         } else if (i == reserved_cal_slot_ && calibration_mode_) {
             if (slot_states_[i] == SlotRuntimeState::Empty || slot_states_[i] == SlotRuntimeState::Unknown) {
                 slot_states_[i] = SlotRuntimeState::Calibration;
@@ -464,12 +516,40 @@ void ProductionWidget::setTrayPresentMask(quint16 present_mask)
     }
 }
 
+void ProductionWidget::setActionSlotMask(quint16 action_slot_mask)
+{
+    if (action_slot_mask_ == action_slot_mask) return;
+    const quint16 old = action_slot_mask_;
+    action_slot_mask_ = action_slot_mask;
+
+    if (action_slot_mask_ != 0) {
+        blink_on_ = true;
+        if (!blink_timer_.isActive()) blink_timer_.start();
+    } else {
+        blink_timer_.stop();
+        blink_on_ = false;
+    }
+
+    const quint16 changed = static_cast<quint16>(old | action_slot_mask_);
+    for (int i = 0; i < 16; ++i) {
+        if (((changed >> i) & 0x1u) != 0) updateSlotCard(i);
+    }
+}
+
 void ProductionWidget::setScannedPartIds(const QVector<QString> &part_ids)
 {
-    slot_part_ids_ = part_ids;
     if (slot_part_ids_.size() != 16) slot_part_ids_.resize(16);
+    if (slot_meas_.size() != 16) slot_meas_.resize(16);
+    if (slot_notes_.size() != 16) slot_notes_.resize(16);
 
     for (int i = 0; i < 16; ++i) {
+        const QString incoming = (i < part_ids.size()) ? part_ids[i].trimmed() : QString();
+        if (!incoming.isEmpty() && slot_part_ids_[i] != incoming) {
+            slot_part_ids_[i] = incoming;
+            // 新ID到位后清掉上一件的计算结果，避免串件显示
+            slot_meas_[i] = SlotMeasureSummary{};
+            slot_notes_[i].clear();
+        }
         if (!slot_part_ids_[i].trimmed().isEmpty() && ((tray_present_ >> i) & 0x1) != 0) {
             if (slot_states_[i] == SlotRuntimeState::Empty || slot_states_[i] == SlotRuntimeState::Unknown) {
                 slot_states_[i] = (i == reserved_cal_slot_ && calibration_mode_) ? SlotRuntimeState::Calibration : SlotRuntimeState::Loaded;
@@ -482,6 +562,11 @@ void ProductionWidget::setScannedPartIds(const QVector<QString> &part_ids)
 void ProductionWidget::setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note)
 {
     if (slot < 0 || slot >= 16) return;
+    if (slot_meas_.size() == 16 && slot_meas_[slot].valid && slot_meas_[slot].judgement_known) {
+        if (state == SlotRuntimeState::Loaded || state == SlotRuntimeState::Empty) {
+            state = slot_meas_[slot].judgement_ok ? SlotRuntimeState::Ok : SlotRuntimeState::Ng;
+        }
+    }
     slot_states_[slot] = state;
     if (slot_notes_.size() != 16) slot_notes_ = QVector<QString>(16);
     slot_notes_[slot] = note;
@@ -521,6 +606,7 @@ void ProductionWidget::setSlotSummaries(const QVector<core::ProductionSlotSummar
 void ProductionWidget::clearCurrentBatch()
 {
     tray_present_ = 0;
+    setActionSlotMask(0);
     mb_slot0_ = 0;
     mb_slot1_ = 0xFFFF;
     mb_part_id0_.clear();

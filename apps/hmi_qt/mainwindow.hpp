@@ -84,4 +84,5 @@ private:
     quint16 lastCmdResult_ = 0;
     quint16 lastRejectInstruction_ = 0;
     bool hasLastCommandSample_ = false;
+    bool calibrationFlowExpected_ = false;
 };

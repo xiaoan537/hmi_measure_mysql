@@ -241,6 +241,12 @@
            <item row="5" column="0"><widget class="QLabel" name="labelSpecAOdRightStd"><property name="text"><string>A右外径</string></property></widget></item>
            <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleSpecAOdRightStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
            <item row="5" column="2"><widget class="QDoubleSpinBox" name="doubleSpecAOdRightTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+           <item row="0" column="3" rowspan="6">
+            <spacer name="spacerJudgeARight">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+            </spacer>
+           </item>
           </layout>
          </widget>
         </item>
@@ -267,6 +273,12 @@
            <item row="4" column="0"><widget class="QLabel" name="labelSpecBRunoutRightStd"><property name="text"><string>B右跳动</string></property></widget></item>
            <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutRightStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
            <item row="4" column="2"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutRightTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+           <item row="0" column="3" rowspan="5">
+            <spacer name="spacerJudgeBRight">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
+            </spacer>
+           </item>
           </layout>
          </widget>
         </item>
