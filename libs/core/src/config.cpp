@@ -116,8 +116,13 @@ namespace core
 
         // 算法参数（生产页“计算结果”与后续流程复用）
         s.beginGroup("algorithm");
+        // 兼容旧键：先读单一K，再作为按通道K的默认值
         c.algo.a_k_in_mm = s.value("a_k_in_mm", 8.0).toDouble();
         c.algo.a_k_out_mm = s.value("a_k_out_mm", 23.0).toDouble();
+        c.algo.a_b_k_in_mm = s.value("a_b_k_in_mm", c.algo.a_k_in_mm).toDouble();
+        c.algo.a_b_k_out_mm = s.value("a_b_k_out_mm", c.algo.a_k_out_mm).toDouble();
+        c.algo.a_c_k_in_mm = s.value("a_c_k_in_mm", c.algo.a_k_in_mm).toDouble();
+        c.algo.a_c_k_out_mm = s.value("a_c_k_out_mm", c.algo.a_k_out_mm).toDouble();
         c.algo.a_inner_input_offset_mm = s.value("a_inner_input_offset_mm", 2.0).toDouble();
         c.algo.a_outer_input_offset_mm = s.value("a_outer_input_offset_mm", 0.0).toDouble();
         c.algo.a_use_explicit_k_out = (s.value("a_use_explicit_k_out", 1).toInt() != 0);
@@ -127,11 +132,33 @@ namespace core
         c.algo.a_residual_threshold_out_mm = s.value("a_residual_threshold_out_mm", 0.03).toDouble();
 
         c.algo.b_k_runout_mm = s.value("b_k_runout_mm", 20.0).toDouble();
+        c.algo.b_a_k_runout_mm = s.value("b_a_k_runout_mm", c.algo.b_k_runout_mm).toDouble();
+        c.algo.b_d_k_runout_mm = s.value("b_d_k_runout_mm", c.algo.b_k_runout_mm).toDouble();
         c.algo.b_angle_offset_deg = s.value("b_angle_offset_deg", 0.0).toDouble();
         c.algo.b_residual_threshold_mm = s.value("b_residual_threshold_mm", 0.03).toDouble();
         c.algo.b_v_block_angle_deg = s.value("b_v_block_angle_deg", 90.0).toDouble();
         c.algo.b_interpolation_factor = s.value("b_interpolation_factor", 5).toInt();
         c.algo.invalid_point_limit = s.value("invalid_point_limit", 8).toInt();
+
+        c.algo.spec_a_total_len.standard_mm = s.value("spec_a_total_len_standard_mm", 0.0).toDouble();
+        c.algo.spec_a_total_len.tolerance_mm = s.value("spec_a_total_len_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_a_id_left.standard_mm = s.value("spec_a_id_left_standard_mm", 0.0).toDouble();
+        c.algo.spec_a_id_left.tolerance_mm = s.value("spec_a_id_left_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_a_od_left.standard_mm = s.value("spec_a_od_left_standard_mm", 0.0).toDouble();
+        c.algo.spec_a_od_left.tolerance_mm = s.value("spec_a_od_left_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_a_id_right.standard_mm = s.value("spec_a_id_right_standard_mm", 0.0).toDouble();
+        c.algo.spec_a_id_right.tolerance_mm = s.value("spec_a_id_right_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_a_od_right.standard_mm = s.value("spec_a_od_right_standard_mm", 0.0).toDouble();
+        c.algo.spec_a_od_right.tolerance_mm = s.value("spec_a_od_right_tolerance_mm", -1.0).toDouble();
+
+        c.algo.spec_b_ad_len.standard_mm = s.value("spec_b_ad_len_standard_mm", 0.0).toDouble();
+        c.algo.spec_b_ad_len.tolerance_mm = s.value("spec_b_ad_len_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_b_bc_len.standard_mm = s.value("spec_b_bc_len_standard_mm", 0.0).toDouble();
+        c.algo.spec_b_bc_len.tolerance_mm = s.value("spec_b_bc_len_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_b_runout_left.standard_mm = s.value("spec_b_runout_left_standard_mm", 0.0).toDouble();
+        c.algo.spec_b_runout_left.tolerance_mm = s.value("spec_b_runout_left_tolerance_mm", -1.0).toDouble();
+        c.algo.spec_b_runout_right.standard_mm = s.value("spec_b_runout_right_standard_mm", 0.0).toDouble();
+        c.algo.spec_b_runout_right.tolerance_mm = s.value("spec_b_runout_right_tolerance_mm", -1.0).toDouble();
         s.endGroup();
 
         // PLC 通讯配置解析

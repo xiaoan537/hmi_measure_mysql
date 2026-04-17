@@ -148,6 +148,73 @@ QString formatNumber(double v, int prec = 6) {
   return std::isfinite(v) ? QString::number(v, 'f', prec) : QStringLiteral("--");
 }
 
+struct JudgeEvalState {
+  bool any_checked = false;
+  bool length_fail = false;
+  bool geometry_fail = false;
+  QStringList reasons;
+};
+
+void evaluateSpecItem(const QString &name,
+                      double value,
+                      const core::AlgorithmConfig::SpecValueConfig &spec,
+                      bool isLengthItem,
+                      JudgeEvalState *state) {
+  if (!state) return;
+  if (spec.tolerance_mm < 0.0) return;
+  state->any_checked = true;
+  if (!std::isfinite(value)) {
+    state->reasons << QStringLiteral("%1 无有效结果").arg(name);
+    if (isLengthItem) state->length_fail = true;
+    else state->geometry_fail = true;
+    return;
+  }
+  const double tol = std::fabs(spec.tolerance_mm);
+  const double delta = std::fabs(value - spec.standard_mm);
+  if (delta > tol) {
+    state->reasons << QStringLiteral("%1 超差(值=%2, 标准=%3, 公差=±%4)")
+                          .arg(name)
+                          .arg(formatNumber(value))
+                          .arg(formatNumber(spec.standard_mm))
+                          .arg(formatNumber(tol));
+    if (isLengthItem) state->length_fail = true;
+    else state->geometry_fail = true;
+  }
+}
+
+void finalizeSlotJudgement(core::ProductionSlotSummary *slot,
+                           JudgeEvalState *state) {
+  if (!slot || !state) return;
+  if (!slot->compute.valid) {
+    state->geometry_fail = true;
+    if (!slot->compute.fail_reason_text.isEmpty()) {
+      state->reasons.prepend(QStringLiteral("计算失败: %1").arg(slot->compute.fail_reason_text));
+    } else {
+      state->reasons.prepend(QStringLiteral("计算失败"));
+    }
+  }
+
+  slot->judgement_known = true;
+  slot->judgement_ok = slot->compute.valid && state->reasons.isEmpty();
+  slot->fail_reason_text = slot->judgement_ok ? QString() : state->reasons.join(QStringLiteral("；"));
+
+  if (slot->judgement_ok) {
+    slot->compute.judgement = core::MeasurementJudgement::Ok;
+    slot->compute.fail_class = core::MeasurementFailClass::None;
+    slot->compute.fail_reason_text.clear();
+  } else {
+    slot->compute.judgement = core::MeasurementJudgement::Ng;
+    if (state->length_fail && state->geometry_fail) {
+      slot->compute.fail_class = core::MeasurementFailClass::Mixed;
+    } else if (state->length_fail) {
+      slot->compute.fail_class = core::MeasurementFailClass::Length;
+    } else {
+      slot->compute.fail_class = core::MeasurementFailClass::Geometry;
+    }
+    slot->compute.fail_reason_text = slot->fail_reason_text;
+  }
+}
+
 QString slotTextByIndex(int slotIndex) {
   return (slotIndex >= 0) ? QString::number(slotIndex + 1) : QStringLiteral("-");
 }
@@ -189,10 +256,12 @@ void applyChannelOffset(Channel72Series *s, double offset_mm) {
 }
 
 core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cfg,
-                                                 int minValidPoints) {
+                                                 int minValidPoints,
+                                                 double kInMm,
+                                                 double kOutMm) {
   core::DiameterAlgoParams p;
-  p.k_in_mm = cfg.a_k_in_mm;
-  p.k_out_mm = cfg.a_k_out_mm;
+  p.k_in_mm = kInMm;
+  p.k_out_mm = kOutMm;
   p.use_explicit_k_out = cfg.a_use_explicit_k_out;
   p.probe_base_mm = cfg.a_probe_base_mm;
   p.angle_offset_deg = cfg.a_angle_offset_deg;
@@ -206,9 +275,10 @@ core::DiameterAlgoParams buildDiameterAlgoParams(const core::AlgorithmConfig &cf
 }
 
 core::RunoutAlgoParams buildRunoutAlgoParams(const core::AlgorithmConfig &cfg,
-                                             int minValidPoints) {
+                                             int minValidPoints,
+                                             double kRunoutMm) {
   core::RunoutAlgoParams p;
-  p.k_runout_mm = cfg.b_k_runout_mm;
+  p.k_runout_mm = kRunoutMm;
   p.angle_offset_deg = cfg.b_angle_offset_deg;
   p.fit_options.residual_threshold_mm = cfg.b_residual_threshold_mm;
   p.fit_options.min_valid_points = minValidPoints;
@@ -1012,8 +1082,16 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
 
   const int invalidLimit = qBound(0, appCfg_.algo.invalid_point_limit, 72);
   const int minValidPoints = qBound(3, 72 - invalidLimit, 72);
-  const core::DiameterAlgoParams diameterParams = buildDiameterAlgoParams(appCfg_.algo, minValidPoints);
-  const core::RunoutAlgoParams runoutParams = buildRunoutAlgoParams(appCfg_.algo, minValidPoints);
+  const core::DiameterAlgoParams diameterParamsB =
+      buildDiameterAlgoParams(appCfg_.algo, minValidPoints,
+                              appCfg_.algo.a_b_k_in_mm, appCfg_.algo.a_b_k_out_mm);
+  const core::DiameterAlgoParams diameterParamsC =
+      buildDiameterAlgoParams(appCfg_.algo, minValidPoints,
+                              appCfg_.algo.a_c_k_in_mm, appCfg_.algo.a_c_k_out_mm);
+  const core::RunoutAlgoParams runoutParamsA =
+      buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_a_k_runout_mm);
+  const core::RunoutAlgoParams runoutParamsD =
+      buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_d_k_runout_mm);
 
   appendProductionLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3 最小有效点=%4")
                           .arg(QString(snapshot.part_type))
@@ -1023,6 +1101,14 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
   appendProductionLog(QStringLiteral("A型输入偏置：内径=%1 mm 外径=%2 mm")
                           .arg(formatNumber(appCfg_.algo.a_inner_input_offset_mm))
                           .arg(formatNumber(appCfg_.algo.a_outer_input_offset_mm)));
+  appendProductionLog(QStringLiteral("A型通道K：B端(K_in=%1,K_out=%2) C端(K_in=%3,K_out=%4)")
+                          .arg(formatNumber(appCfg_.algo.a_b_k_in_mm))
+                          .arg(formatNumber(appCfg_.algo.a_b_k_out_mm))
+                          .arg(formatNumber(appCfg_.algo.a_c_k_in_mm))
+                          .arg(formatNumber(appCfg_.algo.a_c_k_out_mm)));
+  appendProductionLog(QStringLiteral("B型通道K：A点(K=%1) D点(K=%2)")
+                          .arg(formatNumber(appCfg_.algo.b_a_k_runout_mm))
+                          .arg(formatNumber(appCfg_.algo.b_d_k_runout_mm)));
 
   for (const auto &item : snapshot.items) {
     if (!item.present) continue;
@@ -1053,19 +1139,19 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       applyChannelOffset(&bOuter, appCfg_.algo.a_outer_input_offset_mm);
       applyChannelOffset(&cOuter, appCfg_.algo.a_outer_input_offset_mm);
 
-      auto runInner = [&](const Channel72Series &ch) -> core::DiameterChannelResult {
+      auto runInner = [&](const Channel72Series &ch, const core::DiameterAlgoParams &params) -> core::DiameterChannelResult {
         if (ch.invalid_too_many) return core::DiameterChannelResult{};
-        return core::computeInnerDiameter(ch.values_mm, ch.valid_mask, diameterParams);
+        return core::computeInnerDiameter(ch.values_mm, ch.valid_mask, params);
       };
-      auto runOuter = [&](const Channel72Series &ch) -> core::DiameterChannelResult {
+      auto runOuter = [&](const Channel72Series &ch, const core::DiameterAlgoParams &params) -> core::DiameterChannelResult {
         if (ch.invalid_too_many) return core::DiameterChannelResult{};
-        return core::computeOuterDiameter(ch.values_mm, ch.valid_mask, diameterParams);
+        return core::computeOuterDiameter(ch.values_mm, ch.valid_mask, params);
       };
 
-      const core::DiameterChannelResult rBInner = runInner(bInner);
-      const core::DiameterChannelResult rBOuter = runOuter(bOuter);
-      const core::DiameterChannelResult rCInner = runInner(cInner);
-      const core::DiameterChannelResult rCOuter = runOuter(cOuter);
+      const core::DiameterChannelResult rBInner = runInner(bInner, diameterParamsB);
+      const core::DiameterChannelResult rBOuter = runOuter(bOuter, diameterParamsB);
+      const core::DiameterChannelResult rCInner = runInner(cInner, diameterParamsC);
+      const core::DiameterChannelResult rCOuter = runOuter(cOuter, diameterParamsC);
 
       slotSummary.compute.values.total_len_mm = item.total_len_mm;
       slotSummary.compute.values.id_left_mm = rBInner.success ? static_cast<float>(rBInner.circle_fit.diameter_mm) : qQNaN();
@@ -1073,6 +1159,19 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       slotSummary.compute.values.id_right_mm = rCInner.success ? static_cast<float>(rCInner.circle_fit.diameter_mm) : qQNaN();
       slotSummary.compute.values.od_right_mm = rCOuter.success ? static_cast<float>(rCOuter.circle_fit.diameter_mm) : qQNaN();
       slotSummary.compute.valid = rBInner.success && rBOuter.success && rCInner.success && rCOuter.success;
+
+      JudgeEvalState judge;
+      evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,
+                       appCfg_.algo.spec_a_total_len, true, &judge);
+      evaluateSpecItem(QStringLiteral("A左内径"), slotSummary.compute.values.id_left_mm,
+                       appCfg_.algo.spec_a_id_left, false, &judge);
+      evaluateSpecItem(QStringLiteral("A左外径"), slotSummary.compute.values.od_left_mm,
+                       appCfg_.algo.spec_a_od_left, false, &judge);
+      evaluateSpecItem(QStringLiteral("A右内径"), slotSummary.compute.values.id_right_mm,
+                       appCfg_.algo.spec_a_id_right, false, &judge);
+      evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
+                       appCfg_.algo.spec_a_od_right, false, &judge);
+      finalizeSlotJudgement(&slotSummary, &judge);
 
       appendProductionLog(QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
                               .arg(item.item_index)
@@ -1095,6 +1194,9 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
         appendProductionLog(QStringLiteral("  A型拟合失败：B内[%1] B外[%2] C内[%3] C外[%4]")
                                 .arg(rBInner.error, rBOuter.error, rCInner.error, rCOuter.error));
       }
+      appendProductionLog(QStringLiteral("  判定=%1%2")
+                              .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                              .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
     } else if (snapshot.part_type.toUpper() == QChar('B')) {
       if (item.raw_points_um.size() < 72 * 2) {
         appendProductionLog(QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=144，实际=%2")
@@ -1106,19 +1208,30 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       const Channel72Series aRunout = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
       const Channel72Series dRunout = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
 
-      auto runRunout = [&](const Channel72Series &ch) -> core::RunoutResult {
+      auto runRunout = [&](const Channel72Series &ch, const core::RunoutAlgoParams &params) -> core::RunoutResult {
         if (ch.invalid_too_many) return core::RunoutResult{};
-        return core::computeRunoutAnalysis(ch.values_mm, ch.valid_mask, runoutParams);
+        return core::computeRunoutAnalysis(ch.values_mm, ch.valid_mask, params);
       };
 
-      const core::RunoutResult rA = runRunout(aRunout);
-      const core::RunoutResult rD = runRunout(dRunout);
+      const core::RunoutResult rA = runRunout(aRunout, runoutParamsA);
+      const core::RunoutResult rD = runRunout(dRunout, runoutParamsD);
 
       slotSummary.compute.values.ad_len_mm = item.ad_len_mm;
       slotSummary.compute.values.bc_len_mm = item.bc_len_mm;
       slotSummary.compute.values.runout_left_mm = rA.success ? static_cast<float>(rA.tir_axis_mm) : qQNaN();
       slotSummary.compute.values.runout_right_mm = rD.success ? static_cast<float>(rD.tir_axis_mm) : qQNaN();
       slotSummary.compute.valid = rA.success && rD.success;
+
+      JudgeEvalState judge;
+      evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
+                       appCfg_.algo.spec_b_ad_len, true, &judge);
+      evaluateSpecItem(QStringLiteral("B_BC长度"), slotSummary.compute.values.bc_len_mm,
+                       appCfg_.algo.spec_b_bc_len, true, &judge);
+      evaluateSpecItem(QStringLiteral("B左跳动"), slotSummary.compute.values.runout_left_mm,
+                       appCfg_.algo.spec_b_runout_left, false, &judge);
+      evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
+                       appCfg_.algo.spec_b_runout_right, false, &judge);
+      finalizeSlotJudgement(&slotSummary, &judge);
 
       appendProductionLog(QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
                               .arg(item.item_index)
@@ -1137,6 +1250,9 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       } else if (!slotSummary.compute.valid) {
         appendProductionLog(QStringLiteral("  B型拟合失败：A点[%1] D点[%2]").arg(rA.error, rD.error));
       }
+      appendProductionLog(QStringLiteral("  判定=%1%2")
+                              .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                              .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
     } else {
       appendProductionLog(QStringLiteral("计算失败：未知part_type=%1").arg(QString(snapshot.part_type)));
       continue;

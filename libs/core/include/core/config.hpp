@@ -75,9 +75,22 @@ struct MesConfig
 
     struct AlgorithmConfig
     {
+        struct SpecValueConfig
+        {
+            // tolerance < 0 表示该项不参与判定
+            double standard_mm = 0.0;
+            double tolerance_mm = -1.0;
+        };
+
         // A型（内外径）参数
+        // 兼容旧配置（单一K）字段：新代码优先使用按通道参数
         double a_k_in_mm = 8.0;
         double a_k_out_mm = 23.0;
+        // A型按通道K参数：B端与C端分别标定
+        double a_b_k_in_mm = 8.0;
+        double a_b_k_out_mm = 23.0;
+        double a_c_k_in_mm = 8.0;
+        double a_c_k_out_mm = 23.0;
         // A型输入点偏置：在拟合前对72点原始值做加/减（单位mm）
         double a_inner_input_offset_mm = 2.0;
         double a_outer_input_offset_mm = 0.0;
@@ -88,7 +101,11 @@ struct MesConfig
         double a_residual_threshold_out_mm = 0.03;
 
         // B型（跳动）参数
+        // 兼容旧配置（单一K）字段：新代码优先使用按通道参数
         double b_k_runout_mm = 20.0;
+        // B型按通道K参数：A点与D点分别标定
+        double b_a_k_runout_mm = 20.0;
+        double b_d_k_runout_mm = 20.0;
         double b_angle_offset_deg = 0.0;
         double b_residual_threshold_mm = 0.03;
         double b_v_block_angle_deg = 90.0;
@@ -96,6 +113,19 @@ struct MesConfig
 
         // 72点通道中，超过该无效点个数则判该通道无效
         int invalid_point_limit = 8;
+
+        // 结果判定规格（标准值 + 公差）
+        // A型
+        SpecValueConfig spec_a_total_len;
+        SpecValueConfig spec_a_id_left;
+        SpecValueConfig spec_a_od_left;
+        SpecValueConfig spec_a_id_right;
+        SpecValueConfig spec_a_od_right;
+        // B型
+        SpecValueConfig spec_b_ad_len;
+        SpecValueConfig spec_b_bc_len;
+        SpecValueConfig spec_b_runout_left;
+        SpecValueConfig spec_b_runout_right;
     };
 
     // PLC 运行配置：

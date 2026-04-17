@@ -113,77 +113,170 @@
      </widget>
      <widget class="QWidget" name="tabScan">
       <attribute name="title"><string>扫描参数</string></attribute>
+      <property name="styleSheet">
+       <string>QSpinBox, QDoubleSpinBox { min-width: 120px; max-width: 180px; }</string>
+      </property>
       <layout class="QGridLayout" name="gridScan">
-       <item row="0" column="0"><widget class="QLabel" name="labelA"><property name="text"><string>A型（CONF4）</string></property></widget></item>
-       <item row="0" column="1"><widget class="QLabel" name="labelB"><property name="text"><string>B型（RUNO2）</string></property></widget></item>
-
-       <item row="1" column="0"><layout class="QFormLayout" name="formA">
-        <item row="0" column="0"><widget class="QLabel" name="labelARings"><property name="text"><string>圈数</string></property></widget></item>
-        <item row="0" column="1"><widget class="QSpinBox" name="spinARings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="labelAPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-        <item row="1" column="1"><widget class="QSpinBox" name="spinAPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="labelAAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
-        <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="labelAOrder"><property name="text"><string>订单码</string></property></widget></item>
-        <item row="3" column="1"><widget class="QSpinBox" name="spinAOrder"><property name="maximum"><number>65535</number></property></widget></item>
-       </layout></item>
-       <item row="1" column="1"><layout class="QFormLayout" name="formB">
-        <item row="0" column="0"><widget class="QLabel" name="labelBRings"><property name="text"><string>圈数</string></property></widget></item>
-        <item row="0" column="1"><widget class="QSpinBox" name="spinBRings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
-        <item row="1" column="0"><widget class="QLabel" name="labelBPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-        <item row="1" column="1"><widget class="QSpinBox" name="spinBPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
-        <item row="2" column="0"><widget class="QLabel" name="labelBAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
-        <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleBAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-        <item row="3" column="0"><widget class="QLabel" name="labelBOrder"><property name="text"><string>订单码</string></property></widget></item>
-        <item row="3" column="1"><widget class="QSpinBox" name="spinBOrder"><property name="maximum"><number>65535</number></property></widget></item>
-       </layout></item>
-       <item row="2" column="0">
+       <item row="0" column="0">
+        <widget class="QGroupBox" name="groupScanA">
+         <property name="title"><string>A型（CONF4）扫描参数</string></property>
+         <layout class="QFormLayout" name="formA">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
+          <item row="0" column="0"><widget class="QLabel" name="labelARings"><property name="text"><string>圈数</string></property></widget></item>
+          <item row="0" column="1"><widget class="QSpinBox" name="spinARings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelAPoints"><property name="text"><string>每圈点数</string></property></widget></item>
+          <item row="1" column="1"><widget class="QSpinBox" name="spinAPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
+         <item row="2" column="0"><widget class="QLabel" name="labelAAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
+         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QGroupBox" name="groupScanB">
+         <property name="title"><string>B型（RUNO2）扫描参数</string></property>
+         <layout class="QFormLayout" name="formB">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
+          <item row="0" column="0"><widget class="QLabel" name="labelBRings"><property name="text"><string>圈数</string></property></widget></item>
+          <item row="0" column="1"><widget class="QSpinBox" name="spinBRings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelBPoints"><property name="text"><string>每圈点数</string></property></widget></item>
+          <item row="1" column="1"><widget class="QSpinBox" name="spinBPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
+         <item row="2" column="0"><widget class="QLabel" name="labelBAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
+         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleBAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+         </layout>
+        </widget>
+       </item>
+       <item row="1" column="0">
         <widget class="QGroupBox" name="groupAlgoA">
          <property name="title"><string>A型算法参数（内外径）</string></property>
          <layout class="QFormLayout" name="formAlgoA">
-          <item row="0" column="0"><widget class="QLabel" name="labelAlgoAKIn"><property name="text"><string>K_in(mm)</string></property></widget></item>
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
+          <item row="0" column="0"><widget class="QLabel" name="labelAlgoAKIn"><property name="text"><string>B端 K_in(mm)</string></property></widget></item>
           <item row="0" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAKIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
-          <item row="1" column="0"><widget class="QLabel" name="labelAlgoAKOut"><property name="text"><string>K_out(mm)</string></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelAlgoAKOut"><property name="text"><string>B端 K_out(mm)</string></property></widget></item>
           <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAKOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
-          <item row="2" column="0"><widget class="QLabel" name="labelAlgoAInnerInputOffset"><property name="text"><string>内径输入偏置(mm)</string></property></widget></item>
-          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAInnerInputOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>2.000000000000000</double></property></widget></item>
-          <item row="3" column="0"><widget class="QLabel" name="labelAlgoAOuterInputOffset"><property name="text"><string>外径输入偏置(mm)</string></property></widget></item>
-          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAOuterInputOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>0.000000000000000</double></property></widget></item>
-          <item row="4" column="0"><widget class="QLabel" name="labelAlgoAUseExplicit"><property name="text"><string>显式K_out</string></property></widget></item>
-          <item row="4" column="1"><widget class="QCheckBox" name="checkAlgoAUseExplicitKOut"/></item>
-          <item row="5" column="0"><widget class="QLabel" name="labelAlgoAProbeBase"><property name="text"><string>探头基距L(mm)</string></property></widget></item>
-          <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAProbeBase"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
-          <item row="6" column="0"><widget class="QLabel" name="labelAlgoAAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
-          <item row="6" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-          <item row="7" column="0"><widget class="QLabel" name="labelAlgoAResidualIn"><property name="text"><string>内径残差阈值(mm)</string></property></widget></item>
-          <item row="7" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
-          <item row="8" column="0"><widget class="QLabel" name="labelAlgoAResidualOut"><property name="text"><string>外径残差阈值(mm)</string></property></widget></item>
-          <item row="8" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="labelAlgoACKIn"><property name="text"><string>C端 K_in(mm)</string></property></widget></item>
+          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoACKIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="3" column="0"><widget class="QLabel" name="labelAlgoACKOut"><property name="text"><string>C端 K_out(mm)</string></property></widget></item>
+          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoACKOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="4" column="0"><widget class="QLabel" name="labelAlgoAInnerInputOffset"><property name="text"><string>内径输入偏置(mm)</string></property></widget></item>
+          <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAInnerInputOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>2.000000000000000</double></property></widget></item>
+          <item row="5" column="0"><widget class="QLabel" name="labelAlgoAOuterInputOffset"><property name="text"><string>外径输入偏置(mm)</string></property></widget></item>
+          <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAOuterInputOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>0.000000000000000</double></property></widget></item>
+          <item row="6" column="0"><widget class="QLabel" name="labelAlgoAUseExplicit"><property name="text"><string>显式K_out</string></property></widget></item>
+          <item row="6" column="1"><widget class="QCheckBox" name="checkAlgoAUseExplicitKOut"/></item>
+          <item row="7" column="0"><widget class="QLabel" name="labelAlgoAProbeBase"><property name="text"><string>探头基距L(mm)</string></property></widget></item>
+          <item row="7" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAProbeBase"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="8" column="0"><widget class="QLabel" name="labelAlgoAAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
+          <item row="8" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+          <item row="9" column="0"><widget class="QLabel" name="labelAlgoAResidualIn"><property name="text"><string>内径残差阈值(mm)</string></property></widget></item>
+          <item row="9" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualIn"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+          <item row="10" column="0"><widget class="QLabel" name="labelAlgoAResidualOut"><property name="text"><string>外径残差阈值(mm)</string></property></widget></item>
+          <item row="10" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoAResidualOut"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
          </layout>
         </widget>
        </item>
-       <item row="2" column="1">
+       <item row="1" column="1">
         <widget class="QGroupBox" name="groupAlgoB">
          <property name="title"><string>B型算法参数（跳动）</string></property>
          <layout class="QFormLayout" name="formAlgoB">
-          <item row="0" column="0"><widget class="QLabel" name="labelAlgoBKRunout"><property name="text"><string>K_runout(mm)</string></property></widget></item>
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
+          <item row="0" column="0"><widget class="QLabel" name="labelAlgoBKRunout"><property name="text"><string>A点 K_runout(mm)</string></property></widget></item>
           <item row="0" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBKRunout"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
-          <item row="1" column="0"><widget class="QLabel" name="labelAlgoBAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
-          <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-          <item row="2" column="0"><widget class="QLabel" name="labelAlgoBResidual"><property name="text"><string>拟合残差阈值(mm)</string></property></widget></item>
-          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBResidual"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
-          <item row="3" column="0"><widget class="QLabel" name="labelAlgoBVAngle"><property name="text"><string>V型块夹角(°)</string></property></widget></item>
-          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBVAngle"><property name="decimals"><number>3</number></property><property name="minimum"><double>1.000000000000000</double></property><property name="maximum"><double>179.000000000000000</double></property></widget></item>
-          <item row="4" column="0"><widget class="QLabel" name="labelAlgoBInterp"><property name="text"><string>轮廓插值倍率</string></property></widget></item>
-          <item row="4" column="1"><widget class="QSpinBox" name="spinAlgoBInterp"><property name="minimum"><number>1</number></property><property name="maximum"><number>50</number></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="labelAlgoBKRunoutD"><property name="text"><string>D点 K_runout(mm)</string></property></widget></item>
+          <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBKRunoutD"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="labelAlgoBAngleOffset"><property name="text"><string>角度偏移(°)</string></property></widget></item>
+          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBAngleOffset"><property name="decimals"><number>6</number></property><property name="minimum"><double>-360.000000000000000</double></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
+          <item row="3" column="0"><widget class="QLabel" name="labelAlgoBResidual"><property name="text"><string>拟合残差阈值(mm)</string></property></widget></item>
+          <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBResidual"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property></widget></item>
+          <item row="4" column="0"><widget class="QLabel" name="labelAlgoBVAngle"><property name="text"><string>V型块夹角(°)</string></property></widget></item>
+          <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBVAngle"><property name="decimals"><number>3</number></property><property name="minimum"><double>1.000000000000000</double></property><property name="maximum"><double>179.000000000000000</double></property></widget></item>
+          <item row="5" column="0"><widget class="QLabel" name="labelAlgoBInterp"><property name="text"><string>轮廓插值倍率</string></property></widget></item>
+          <item row="5" column="1"><widget class="QSpinBox" name="spinAlgoBInterp"><property name="minimum"><number>1</number></property><property name="maximum"><number>50</number></property></widget></item>
          </layout>
         </widget>
        </item>
+       <item row="2" column="0" colspan="2">
+       <layout class="QGridLayout" name="layoutAlgoJudge">
+        <item row="0" column="0" colspan="2">
+         <widget class="QGroupBox" name="groupJudgeCommon">
+          <property name="title"><string>判定通用参数</string></property>
+          <layout class="QFormLayout" name="formJudgeCommon">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
+           <item row="0" column="0"><widget class="QLabel" name="labelInvalidPointLimit"><property name="text"><string>无效点个数阈值</string></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="spinInvalidPointLimit"><property name="minimum"><number>0</number></property><property name="maximum"><number>72</number></property><property name="value"><number>8</number></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="0" colspan="2">
+         <widget class="QLabel" name="labelJudgeSpecHint">
+          <property name="text">
+           <string>提示：公差&lt;0 表示该项不参与判定</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0" alignment="Qt::AlignTop">
+         <widget class="QGroupBox" name="groupJudgeA">
+          <property name="title"><string>A型判定规格（标准值 / 公差）</string></property>
+          <layout class="QGridLayout" name="gridJudgeA">
+           <item row="0" column="0"><widget class="QLabel" name="labelJudgeAHeaderItem"><property name="text"><string>项目</string></property></widget></item>
+           <item row="0" column="1"><widget class="QLabel" name="labelJudgeAHeaderStd"><property name="text"><string>标准(mm)</string></property></widget></item>
+           <item row="0" column="2"><widget class="QLabel" name="labelJudgeAHeaderTol"><property name="text"><string>公差(mm)</string></property></widget></item>
+
+           <item row="1" column="0"><widget class="QLabel" name="labelSpecATotalLenStd"><property name="text"><string>A总长</string></property></widget></item>
+           <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleSpecATotalLenStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="1" column="2"><widget class="QDoubleSpinBox" name="doubleSpecATotalLenTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="2" column="0"><widget class="QLabel" name="labelSpecAIdLeftStd"><property name="text"><string>A左内径</string></property></widget></item>
+           <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleSpecAIdLeftStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="2" column="2"><widget class="QDoubleSpinBox" name="doubleSpecAIdLeftTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="3" column="0"><widget class="QLabel" name="labelSpecAOdLeftStd"><property name="text"><string>A左外径</string></property></widget></item>
+           <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleSpecAOdLeftStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="3" column="2"><widget class="QDoubleSpinBox" name="doubleSpecAOdLeftTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="4" column="0"><widget class="QLabel" name="labelSpecAIdRightStd"><property name="text"><string>A右内径</string></property></widget></item>
+           <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleSpecAIdRightStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="4" column="2"><widget class="QDoubleSpinBox" name="doubleSpecAIdRightTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="5" column="0"><widget class="QLabel" name="labelSpecAOdRightStd"><property name="text"><string>A右外径</string></property></widget></item>
+           <item row="5" column="1"><widget class="QDoubleSpinBox" name="doubleSpecAOdRightStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="5" column="2"><widget class="QDoubleSpinBox" name="doubleSpecAOdRightTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="1" alignment="Qt::AlignTop">
+         <widget class="QGroupBox" name="groupJudgeB">
+          <property name="title"><string>B型判定规格（标准值 / 公差）</string></property>
+          <layout class="QGridLayout" name="gridJudgeB">
+           <item row="0" column="0"><widget class="QLabel" name="labelJudgeBHeaderItem"><property name="text"><string>项目</string></property></widget></item>
+           <item row="0" column="1"><widget class="QLabel" name="labelJudgeBHeaderStd"><property name="text"><string>标准(mm)</string></property></widget></item>
+           <item row="0" column="2"><widget class="QLabel" name="labelJudgeBHeaderTol"><property name="text"><string>公差(mm)</string></property></widget></item>
+
+           <item row="1" column="0"><widget class="QLabel" name="labelSpecBAdLenStd"><property name="text"><string>B_AD长度</string></property></widget></item>
+           <item row="1" column="1"><widget class="QDoubleSpinBox" name="doubleSpecBAdLenStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="1" column="2"><widget class="QDoubleSpinBox" name="doubleSpecBAdLenTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="2" column="0"><widget class="QLabel" name="labelSpecBBcLenStd"><property name="text"><string>B_BC长度</string></property></widget></item>
+           <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleSpecBBcLenStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="2" column="2"><widget class="QDoubleSpinBox" name="doubleSpecBBcLenTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="3" column="0"><widget class="QLabel" name="labelSpecBRunoutLeftStd"><property name="text"><string>B左跳动</string></property></widget></item>
+           <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutLeftStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="3" column="2"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutLeftTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+
+           <item row="4" column="0"><widget class="QLabel" name="labelSpecBRunoutRightStd"><property name="text"><string>B右跳动</string></property></widget></item>
+           <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutRightStd"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1000000.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property></widget></item>
+           <item row="4" column="2"><widget class="QDoubleSpinBox" name="doubleSpecBRunoutRightTol"><property name="decimals"><number>6</number></property><property name="minimum"><double>-1.000000000000000</double></property><property name="maximum"><double>1000000.000000000000000</double></property><property name="value"><double>-1.000000000000000</double></property></widget></item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+       </item>
        <item row="3" column="0" colspan="2">
-        <layout class="QFormLayout" name="formAlgoCommon">
-         <item row="0" column="0"><widget class="QLabel" name="labelInvalidPointLimit"><property name="text"><string>无效点个数阈值</string></property></widget></item>
-         <item row="0" column="1"><widget class="QSpinBox" name="spinInvalidPointLimit"><property name="minimum"><number>0</number></property><property name="maximum"><number>72</number></property><property name="value"><number>8</number></property></widget></item>
-        </layout>
+        <spacer name="spacerScanBottom">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+        </spacer>
        </item>
       </layout>
      </widget>

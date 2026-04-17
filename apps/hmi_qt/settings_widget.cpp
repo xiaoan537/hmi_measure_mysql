@@ -18,8 +18,10 @@ SettingsWidget::SettingsWidget(const core::AppConfig& cfg, const QString& iniPat
   connect(ui_->btnApply, &QPushButton::clicked, this, &SettingsWidget::onApplyClicked);
   connect(ui_->btnSave, &QPushButton::clicked, this, &SettingsWidget::onSaveClicked);
   connect(ui_->btnTestDb, &QPushButton::clicked, this, &SettingsWidget::onTestDbClicked);
-  connect(ui_->checkAlgoAUseExplicitKOut, &QCheckBox::toggled,
-          ui_->doubleAlgoAKOut, &QWidget::setEnabled);
+  connect(ui_->checkAlgoAUseExplicitKOut, &QCheckBox::toggled, this, [this](bool on) {
+    ui_->doubleAlgoAKOut->setEnabled(on);
+    ui_->doubleAlgoACKOut->setEnabled(on);
+  });
 
   ui_->lblIniPath->setText(iniPath_.isEmpty() ? "(unknown)" : iniPath_);
 }
@@ -60,32 +62,54 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->spinARings->setValue(c.scan_a.rings);
   ui_->spinAPoints->setValue(c.scan_a.points_per_ring);
   ui_->doubleAAngle->setValue(c.scan_a.angle_step_deg);
-  ui_->spinAOrder->setValue(c.scan_a.order_code);
 
   // Scan B
   ui_->spinBRings->setValue(c.scan_b.rings);
   ui_->spinBPoints->setValue(c.scan_b.points_per_ring);
   ui_->doubleBAngle->setValue(c.scan_b.angle_step_deg);
-  ui_->spinBOrder->setValue(c.scan_b.order_code);
 
   // Algorithm
-  ui_->doubleAlgoAKIn->setValue(c.algo.a_k_in_mm);
-  ui_->doubleAlgoAKOut->setValue(c.algo.a_k_out_mm);
+  ui_->doubleAlgoAKIn->setValue(c.algo.a_b_k_in_mm);
+  ui_->doubleAlgoAKOut->setValue(c.algo.a_b_k_out_mm);
+  ui_->doubleAlgoACKIn->setValue(c.algo.a_c_k_in_mm);
+  ui_->doubleAlgoACKOut->setValue(c.algo.a_c_k_out_mm);
   ui_->doubleAlgoAInnerInputOffset->setValue(c.algo.a_inner_input_offset_mm);
   ui_->doubleAlgoAOuterInputOffset->setValue(c.algo.a_outer_input_offset_mm);
   ui_->checkAlgoAUseExplicitKOut->setChecked(c.algo.a_use_explicit_k_out);
   ui_->doubleAlgoAKOut->setEnabled(c.algo.a_use_explicit_k_out);
+  ui_->doubleAlgoACKOut->setEnabled(c.algo.a_use_explicit_k_out);
   ui_->doubleAlgoAProbeBase->setValue(c.algo.a_probe_base_mm);
   ui_->doubleAlgoAAngleOffset->setValue(c.algo.a_angle_offset_deg);
   ui_->doubleAlgoAResidualIn->setValue(c.algo.a_residual_threshold_in_mm);
   ui_->doubleAlgoAResidualOut->setValue(c.algo.a_residual_threshold_out_mm);
 
-  ui_->doubleAlgoBKRunout->setValue(c.algo.b_k_runout_mm);
+  ui_->doubleAlgoBKRunout->setValue(c.algo.b_a_k_runout_mm);
+  ui_->doubleAlgoBKRunoutD->setValue(c.algo.b_d_k_runout_mm);
   ui_->doubleAlgoBAngleOffset->setValue(c.algo.b_angle_offset_deg);
   ui_->doubleAlgoBResidual->setValue(c.algo.b_residual_threshold_mm);
   ui_->doubleAlgoBVAngle->setValue(c.algo.b_v_block_angle_deg);
   ui_->spinAlgoBInterp->setValue(c.algo.b_interpolation_factor);
   ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
+
+  ui_->doubleSpecATotalLenStd->setValue(c.algo.spec_a_total_len.standard_mm);
+  ui_->doubleSpecATotalLenTol->setValue(c.algo.spec_a_total_len.tolerance_mm);
+  ui_->doubleSpecAIdLeftStd->setValue(c.algo.spec_a_id_left.standard_mm);
+  ui_->doubleSpecAIdLeftTol->setValue(c.algo.spec_a_id_left.tolerance_mm);
+  ui_->doubleSpecAOdLeftStd->setValue(c.algo.spec_a_od_left.standard_mm);
+  ui_->doubleSpecAOdLeftTol->setValue(c.algo.spec_a_od_left.tolerance_mm);
+  ui_->doubleSpecAIdRightStd->setValue(c.algo.spec_a_id_right.standard_mm);
+  ui_->doubleSpecAIdRightTol->setValue(c.algo.spec_a_id_right.tolerance_mm);
+  ui_->doubleSpecAOdRightStd->setValue(c.algo.spec_a_od_right.standard_mm);
+  ui_->doubleSpecAOdRightTol->setValue(c.algo.spec_a_od_right.tolerance_mm);
+
+  ui_->doubleSpecBAdLenStd->setValue(c.algo.spec_b_ad_len.standard_mm);
+  ui_->doubleSpecBAdLenTol->setValue(c.algo.spec_b_ad_len.tolerance_mm);
+  ui_->doubleSpecBBcLenStd->setValue(c.algo.spec_b_bc_len.standard_mm);
+  ui_->doubleSpecBBcLenTol->setValue(c.algo.spec_b_bc_len.tolerance_mm);
+  ui_->doubleSpecBRunoutLeftStd->setValue(c.algo.spec_b_runout_left.standard_mm);
+  ui_->doubleSpecBRunoutLeftTol->setValue(c.algo.spec_b_runout_left.tolerance_mm);
+  ui_->doubleSpecBRunoutRightStd->setValue(c.algo.spec_b_runout_right.standard_mm);
+  ui_->doubleSpecBRunoutRightTol->setValue(c.algo.spec_b_runout_right.tolerance_mm);
 }
 
 core::AppConfig SettingsWidget::readFromUi() const
@@ -117,15 +141,18 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.scan_a.rings = ui_->spinARings->value();
   c.scan_a.points_per_ring = ui_->spinAPoints->value();
   c.scan_a.angle_step_deg = ui_->doubleAAngle->value();
-  c.scan_a.order_code = (quint16)ui_->spinAOrder->value();
 
   c.scan_b.rings = ui_->spinBRings->value();
   c.scan_b.points_per_ring = ui_->spinBPoints->value();
   c.scan_b.angle_step_deg = ui_->doubleBAngle->value();
-  c.scan_b.order_code = (quint16)ui_->spinBOrder->value();
 
-  c.algo.a_k_in_mm = ui_->doubleAlgoAKIn->value();
-  c.algo.a_k_out_mm = ui_->doubleAlgoAKOut->value();
+  c.algo.a_b_k_in_mm = ui_->doubleAlgoAKIn->value();
+  c.algo.a_b_k_out_mm = ui_->doubleAlgoAKOut->value();
+  c.algo.a_c_k_in_mm = ui_->doubleAlgoACKIn->value();
+  c.algo.a_c_k_out_mm = ui_->doubleAlgoACKOut->value();
+  // 兼容旧字段：保留B端值
+  c.algo.a_k_in_mm = c.algo.a_b_k_in_mm;
+  c.algo.a_k_out_mm = c.algo.a_b_k_out_mm;
   c.algo.a_inner_input_offset_mm = ui_->doubleAlgoAInnerInputOffset->value();
   c.algo.a_outer_input_offset_mm = ui_->doubleAlgoAOuterInputOffset->value();
   c.algo.a_use_explicit_k_out = ui_->checkAlgoAUseExplicitKOut->isChecked();
@@ -134,12 +161,35 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.algo.a_residual_threshold_in_mm = ui_->doubleAlgoAResidualIn->value();
   c.algo.a_residual_threshold_out_mm = ui_->doubleAlgoAResidualOut->value();
 
-  c.algo.b_k_runout_mm = ui_->doubleAlgoBKRunout->value();
+  c.algo.b_a_k_runout_mm = ui_->doubleAlgoBKRunout->value();
+  c.algo.b_d_k_runout_mm = ui_->doubleAlgoBKRunoutD->value();
+  // 兼容旧字段：保留A点值
+  c.algo.b_k_runout_mm = c.algo.b_a_k_runout_mm;
   c.algo.b_angle_offset_deg = ui_->doubleAlgoBAngleOffset->value();
   c.algo.b_residual_threshold_mm = ui_->doubleAlgoBResidual->value();
   c.algo.b_v_block_angle_deg = ui_->doubleAlgoBVAngle->value();
   c.algo.b_interpolation_factor = ui_->spinAlgoBInterp->value();
   c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
+
+  c.algo.spec_a_total_len.standard_mm = ui_->doubleSpecATotalLenStd->value();
+  c.algo.spec_a_total_len.tolerance_mm = ui_->doubleSpecATotalLenTol->value();
+  c.algo.spec_a_id_left.standard_mm = ui_->doubleSpecAIdLeftStd->value();
+  c.algo.spec_a_id_left.tolerance_mm = ui_->doubleSpecAIdLeftTol->value();
+  c.algo.spec_a_od_left.standard_mm = ui_->doubleSpecAOdLeftStd->value();
+  c.algo.spec_a_od_left.tolerance_mm = ui_->doubleSpecAOdLeftTol->value();
+  c.algo.spec_a_id_right.standard_mm = ui_->doubleSpecAIdRightStd->value();
+  c.algo.spec_a_id_right.tolerance_mm = ui_->doubleSpecAIdRightTol->value();
+  c.algo.spec_a_od_right.standard_mm = ui_->doubleSpecAOdRightStd->value();
+  c.algo.spec_a_od_right.tolerance_mm = ui_->doubleSpecAOdRightTol->value();
+
+  c.algo.spec_b_ad_len.standard_mm = ui_->doubleSpecBAdLenStd->value();
+  c.algo.spec_b_ad_len.tolerance_mm = ui_->doubleSpecBAdLenTol->value();
+  c.algo.spec_b_bc_len.standard_mm = ui_->doubleSpecBBcLenStd->value();
+  c.algo.spec_b_bc_len.tolerance_mm = ui_->doubleSpecBBcLenTol->value();
+  c.algo.spec_b_runout_left.standard_mm = ui_->doubleSpecBRunoutLeftStd->value();
+  c.algo.spec_b_runout_left.tolerance_mm = ui_->doubleSpecBRunoutLeftTol->value();
+  c.algo.spec_b_runout_right.standard_mm = ui_->doubleSpecBRunoutRightStd->value();
+  c.algo.spec_b_runout_right.tolerance_mm = ui_->doubleSpecBRunoutRightTol->value();
 
   return c;
 }
@@ -210,6 +260,10 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.beginGroup("algorithm");
   s.setValue("a_k_in_mm", c.algo.a_k_in_mm);
   s.setValue("a_k_out_mm", c.algo.a_k_out_mm);
+  s.setValue("a_b_k_in_mm", c.algo.a_b_k_in_mm);
+  s.setValue("a_b_k_out_mm", c.algo.a_b_k_out_mm);
+  s.setValue("a_c_k_in_mm", c.algo.a_c_k_in_mm);
+  s.setValue("a_c_k_out_mm", c.algo.a_c_k_out_mm);
   s.setValue("a_inner_input_offset_mm", c.algo.a_inner_input_offset_mm);
   s.setValue("a_outer_input_offset_mm", c.algo.a_outer_input_offset_mm);
   s.setValue("a_use_explicit_k_out", c.algo.a_use_explicit_k_out ? 1 : 0);
@@ -218,11 +272,32 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("a_residual_threshold_in_mm", c.algo.a_residual_threshold_in_mm);
   s.setValue("a_residual_threshold_out_mm", c.algo.a_residual_threshold_out_mm);
   s.setValue("b_k_runout_mm", c.algo.b_k_runout_mm);
+  s.setValue("b_a_k_runout_mm", c.algo.b_a_k_runout_mm);
+  s.setValue("b_d_k_runout_mm", c.algo.b_d_k_runout_mm);
   s.setValue("b_angle_offset_deg", c.algo.b_angle_offset_deg);
   s.setValue("b_residual_threshold_mm", c.algo.b_residual_threshold_mm);
   s.setValue("b_v_block_angle_deg", c.algo.b_v_block_angle_deg);
   s.setValue("b_interpolation_factor", c.algo.b_interpolation_factor);
   s.setValue("invalid_point_limit", c.algo.invalid_point_limit);
+  s.setValue("spec_a_total_len_standard_mm", c.algo.spec_a_total_len.standard_mm);
+  s.setValue("spec_a_total_len_tolerance_mm", c.algo.spec_a_total_len.tolerance_mm);
+  s.setValue("spec_a_id_left_standard_mm", c.algo.spec_a_id_left.standard_mm);
+  s.setValue("spec_a_id_left_tolerance_mm", c.algo.spec_a_id_left.tolerance_mm);
+  s.setValue("spec_a_od_left_standard_mm", c.algo.spec_a_od_left.standard_mm);
+  s.setValue("spec_a_od_left_tolerance_mm", c.algo.spec_a_od_left.tolerance_mm);
+  s.setValue("spec_a_id_right_standard_mm", c.algo.spec_a_id_right.standard_mm);
+  s.setValue("spec_a_id_right_tolerance_mm", c.algo.spec_a_id_right.tolerance_mm);
+  s.setValue("spec_a_od_right_standard_mm", c.algo.spec_a_od_right.standard_mm);
+  s.setValue("spec_a_od_right_tolerance_mm", c.algo.spec_a_od_right.tolerance_mm);
+
+  s.setValue("spec_b_ad_len_standard_mm", c.algo.spec_b_ad_len.standard_mm);
+  s.setValue("spec_b_ad_len_tolerance_mm", c.algo.spec_b_ad_len.tolerance_mm);
+  s.setValue("spec_b_bc_len_standard_mm", c.algo.spec_b_bc_len.standard_mm);
+  s.setValue("spec_b_bc_len_tolerance_mm", c.algo.spec_b_bc_len.tolerance_mm);
+  s.setValue("spec_b_runout_left_standard_mm", c.algo.spec_b_runout_left.standard_mm);
+  s.setValue("spec_b_runout_left_tolerance_mm", c.algo.spec_b_runout_left.tolerance_mm);
+  s.setValue("spec_b_runout_right_standard_mm", c.algo.spec_b_runout_right.standard_mm);
+  s.setValue("spec_b_runout_right_tolerance_mm", c.algo.spec_b_runout_right.tolerance_mm);
   s.endGroup();
 
   s.sync();
