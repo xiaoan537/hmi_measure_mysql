@@ -419,7 +419,8 @@ QString ProductionWidget::selectedPartTypeText() const
 
 quint32 ProductionWidget::selectedPartTypeArg() const
 {
-    return selectedPartTypeText() == QStringLiteral("B") ? 1u : 2u;
+    // PLC 写入按当前下拉框选择值执行，避免被批次展示字段锁死。
+    return selectedPartTypeTextInternal() == QStringLiteral("B") ? 1u : 2u;
 }
 
 int ProductionWidget::selectedPlcModeValue() const

@@ -94,9 +94,14 @@ bool isPartIdEditableStep(quint16 stepState)
 QString stepText(quint16 step)
 {
     switch (step) {
+    case 1: return QStringLiteral("数据清零");
+    case 2:
+    case 3: return QStringLiteral("初始化中");
+    case 9: return QStringLiteral("初始化完成");
     case 0: return QStringLiteral("待机");
-    case 10: return QStringLiteral("等待上料");
+    case 10: return QStringLiteral("扫码中");
     case 11: return QStringLiteral("等待PC核对ID");
+    case 12: return QStringLiteral("判断开始抓料位置");
     case 20: return QStringLiteral("PLC扫码中");
     case 30: return QStringLiteral("等待PC核对ID");
     case 40: return QStringLiteral("抓取工件");
@@ -105,10 +110,22 @@ QString stepText(quint16 step)
     case 70: return QStringLiteral("测量中");
     case 80: return QStringLiteral("整理测量包");
     case 90: return QStringLiteral("等待PC读取");
-    case 100: return QStringLiteral("放回料架");
-    case 110: return QStringLiteral("循环完成");
-    case 120: return QStringLiteral("等待是否复测");
-    case 220: return QStringLiteral("等待是否复测");
+    case 100:
+    case 101: return QStringLiteral("从料架抓料");
+    case 110: return QStringLiteral("测量工位上料");
+    case 120:
+    case 130: return QStringLiteral("测量中");
+    case 131: return QStringLiteral("等待测量工位完成");
+    case 140:
+    case 150: return QStringLiteral("物料交换工位测量");
+    case 160:
+    case 170: return QStringLiteral("交换后再次上料");
+    case 180:
+    case 190: return QStringLiteral("交换后测量中");
+    case 200:
+    case 210: return QStringLiteral("取料中");
+    case 220: return QStringLiteral("测量完成数据归档");
+    case 230: return QStringLiteral("下料回料架");
     case 900: return QStringLiteral("报警");
     case 910: return QStringLiteral("急停");
     default: return QStringLiteral("运行(%1)").arg(step);

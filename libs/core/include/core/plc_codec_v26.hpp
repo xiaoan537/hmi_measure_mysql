@@ -1,6 +1,7 @@
 #pragma once
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QtGlobal>
 #include "core/plc_types_v26.hpp"
@@ -20,6 +21,7 @@ bool readFloat64WordSwapped(const QVector<quint16> &regs, int offset, double *ou
 
 QVector<int> slotMaskToLogicalSlots(quint16 mask);
 PlcMachineStateDecodedV26 decodeMachineState(quint16 mask);
+QStringList decodeInterlockBits(quint32 mask);
 QString plcModeText(qint16 mode);
 
 } // namespace core::plc_codec_v26

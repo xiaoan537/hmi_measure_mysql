@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QVariantMap>
 
@@ -51,11 +52,37 @@ private:
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdRequested(int slotIndex, const QString &partId);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
-    void handleComputeResultRequested(QChar preferredPartType = QChar('A'));
+    bool handleComputeResultRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();
     void refreshManualMaintainLiveStatus();
     void appendProductionLog(const QString &text);
     void attemptReconnectPlc(bool manual);
+    void processAutoScanIdCheck();
+    void processAutoMailboxFlow();
+    void updateCalibrationAutoState(quint16 stepState);
+    bool tryAutoContinueAfterIdCheck();
+    bool tryAutoWritePcAck();
+    void promptNgDecisionAndDispatch();
+    qint16 currentCategoryModeForAutoFlow() const;
+    bool evaluateIdCheckAgainstMes(QStringList *mismatchDetails, QVector<int> *mismatchSlots) const;
+    bool loadMockExpectedPartIds(QVector<QString> *out, QString *err) const;
+    QString resolveIdCheckMockFilePath() const;
+    QString idCheckStrategyText() const;
+
+private:
+    enum class CalibrationAutoState {
+        Idle = 0,
+        WaitLoadSlot16,
+        WaitPcConfirm,
+        Measuring,
+        WaitPcRead,
+        Completed
+    };
+    enum class IdCheckStrategy {
+        Bypass = 0,
+        LocalMock,
+        MesStrict
+    };
 
 private:
     Ui::MainWindow *ui_ = nullptr;
@@ -85,4 +112,13 @@ private:
     quint16 lastRejectInstruction_ = 0;
     bool hasLastCommandSample_ = false;
     bool calibrationFlowExpected_ = false;
+    qint16 lastCategoryMode_ = 0;
+    core::PlcTrayPartIdBlockV2 lastTray_{};
+    bool hasLastTray_ = false;
+    QVector<QString> mesExpectedPartIds_;
+    CalibrationAutoState calibrationAutoState_ = CalibrationAutoState::Idle;
+    IdCheckStrategy idCheckStrategy_ = IdCheckStrategy::Bypass;
+    bool lastComputeHasItems_ = false;
+    bool lastComputeOverallOk_ = false;
+    QChar lastComputePartType_ = QChar('A');
 };

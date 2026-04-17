@@ -89,6 +89,10 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->doubleAlgoBResidual->setValue(c.algo.b_residual_threshold_mm);
   ui_->doubleAlgoBVAngle->setValue(c.algo.b_v_block_angle_deg);
   ui_->spinAlgoBInterp->setValue(c.algo.b_interpolation_factor);
+  {
+    const QString metric = c.algo.runout_metric.trimmed().toUpper();
+    ui_->comboAlgoBRunoutMetric->setCurrentIndex(metric == QStringLiteral("VBLOCK") ? 1 : 0);
+  }
   ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
 
   ui_->doubleSpecATotalLenStd->setValue(c.algo.spec_a_total_len.standard_mm);
@@ -169,6 +173,9 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.algo.b_residual_threshold_mm = ui_->doubleAlgoBResidual->value();
   c.algo.b_v_block_angle_deg = ui_->doubleAlgoBVAngle->value();
   c.algo.b_interpolation_factor = ui_->spinAlgoBInterp->value();
+  c.algo.runout_metric = (ui_->comboAlgoBRunoutMetric->currentIndex() == 1)
+                       ? QStringLiteral("VBLOCK")
+                       : QStringLiteral("TIR_AXIS");
   c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
 
   c.algo.spec_a_total_len.standard_mm = ui_->doubleSpecATotalLenStd->value();
@@ -278,6 +285,7 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("b_residual_threshold_mm", c.algo.b_residual_threshold_mm);
   s.setValue("b_v_block_angle_deg", c.algo.b_v_block_angle_deg);
   s.setValue("b_interpolation_factor", c.algo.b_interpolation_factor);
+  s.setValue("runout_metric", c.algo.runout_metric);
   s.setValue("invalid_point_limit", c.algo.invalid_point_limit);
   s.setValue("spec_a_total_len_standard_mm", c.algo.spec_a_total_len.standard_mm);
   s.setValue("spec_a_total_len_tolerance_mm", c.algo.spec_a_total_len.tolerance_mm);

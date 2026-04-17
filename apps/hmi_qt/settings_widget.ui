@@ -192,6 +192,13 @@
           <item row="4" column="1"><widget class="QDoubleSpinBox" name="doubleAlgoBVAngle"><property name="decimals"><number>3</number></property><property name="minimum"><double>1.000000000000000</double></property><property name="maximum"><double>179.000000000000000</double></property></widget></item>
           <item row="5" column="0"><widget class="QLabel" name="labelAlgoBInterp"><property name="text"><string>轮廓插值倍率</string></property></widget></item>
           <item row="5" column="1"><widget class="QSpinBox" name="spinAlgoBInterp"><property name="minimum"><number>1</number></property><property name="maximum"><number>50</number></property></widget></item>
+          <item row="6" column="0"><widget class="QLabel" name="labelAlgoBRunoutMetric"><property name="text"><string>跳动算法</string></property></widget></item>
+          <item row="6" column="1">
+           <widget class="QComboBox" name="comboAlgoBRunoutMetric">
+            <item><property name="text"><string>峰峰值算法</string></property></item>
+            <item><property name="text"><string>V型槽等效算法</string></property></item>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

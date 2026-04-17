@@ -32,6 +32,10 @@ struct MesConfig
     bool manual_enabled = true;    // 是否允许手动上传（UI 按钮）
     bool auto_enabled = true;      // 是否允许自动上传（后台定时器）
     int auto_interval_ms = 1000;   // 自动上传定时器周期（ms）
+    // ID核对策略：BYPASS / LOCAL_MOCK / MES_STRICT
+    QString id_check_strategy = QStringLiteral("BYPASS");
+    // LOCAL_MOCK 模式下本地期望工件ID文件路径（可相对 app.ini 目录）
+    QString id_check_mock_file = QStringLiteral("mes_id_mock.json");
 
     QString url;                   // 兼容旧配置：默认/普通报工地址
 
@@ -110,6 +114,8 @@ struct MesConfig
         double b_residual_threshold_mm = 0.03;
         double b_v_block_angle_deg = 90.0;
         int b_interpolation_factor = 5;
+        // 跳动口径开关：TIR_AXIS | VBLOCK
+        QString runout_metric = QStringLiteral("TIR_AXIS");
 
         // 72点通道中，超过该无效点个数则判该通道无效
         int invalid_point_limit = 8;

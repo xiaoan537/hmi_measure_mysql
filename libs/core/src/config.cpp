@@ -31,6 +31,14 @@ namespace
     {
         return v.trimmed().toUpper();
     }
+
+    QString normalizedRunoutMetric(const QString &v)
+    {
+        const QString metric = v.trimmed().toUpper();
+        if (metric == QStringLiteral("VBLOCK"))
+            return metric;
+        return QStringLiteral("TIR_AXIS");
+    }
 }
 
 namespace core
@@ -68,6 +76,8 @@ namespace core
         c.mes.manual_enabled = (s.value("manual_enabled", 1).toInt() != 0);
         c.mes.auto_enabled = (s.value("auto_enabled", 1).toInt() != 0);
         c.mes.auto_interval_ms = s.value("auto_interval_ms", 1000).toInt();
+        c.mes.id_check_strategy = s.value("id_check_strategy", "BYPASS").toString().trimmed().toUpper();
+        c.mes.id_check_mock_file = s.value("id_check_mock_file", "mes_id_mock.json").toString().trimmed();
         c.mes.url = trimUrl(s.value("url", "").toString());
 
         c.mes.sysid = trimUrl(s.value("sysid", "").toString());
@@ -138,6 +148,8 @@ namespace core
         c.algo.b_residual_threshold_mm = s.value("b_residual_threshold_mm", 0.03).toDouble();
         c.algo.b_v_block_angle_deg = s.value("b_v_block_angle_deg", 90.0).toDouble();
         c.algo.b_interpolation_factor = s.value("b_interpolation_factor", 5).toInt();
+        c.algo.runout_metric = normalizedRunoutMetric(
+            s.value("runout_metric", s.value("b_runout_metric", "TIR_AXIS")).toString());
         c.algo.invalid_point_limit = s.value("invalid_point_limit", 8).toInt();
 
         c.algo.spec_a_total_len.standard_mm = s.value("spec_a_total_len_standard_mm", 0.0).toDouble();

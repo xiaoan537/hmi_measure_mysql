@@ -13,9 +13,16 @@
 #include "todo_widget.hpp"
 
 #include <QAction>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequence>
 #include <QLabel>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVariantMap>
@@ -49,6 +56,32 @@ QString productionStepStateText(quint16 stepState) {
   if (stepState == 11) {
     return QStringLiteral("等待PC核对ID");
   }
+  switch (stepState) {
+  case 1: return QStringLiteral("数据清零");
+  case 2:
+  case 3: return QStringLiteral("初始化中");
+  case 9: return QStringLiteral("初始化完成");
+  case 10: return QStringLiteral("扫码中");
+  case 12: return QStringLiteral("判断开始抓料位置");
+  case 100:
+  case 101: return QStringLiteral("从料架抓料");
+  case 110: return QStringLiteral("测量工位上料");
+  case 120:
+  case 130: return QStringLiteral("测量中");
+  case 131: return QStringLiteral("等待测量工位完成");
+  case 140:
+  case 150: return QStringLiteral("物料交换工位测量");
+  case 160:
+  case 170: return QStringLiteral("交换后再次上料");
+  case 180:
+  case 190: return QStringLiteral("交换后测量中");
+  case 200:
+  case 210: return QStringLiteral("取料中");
+  case 220: return QStringLiteral("测量完成数据归档");
+  case 230: return QStringLiteral("下料回料架");
+  default:
+    break;
+  }
   switch (static_cast<core::PlcStepStateV2>(stepState)) {
   case core::PlcStepStateV2::WaitStart: return QStringLiteral("等待启动");
   case core::PlcStepStateV2::WaitTrayReady: return QStringLiteral("等待上料就绪");
@@ -66,9 +99,6 @@ QString productionStepStateText(quint16 stepState) {
   case core::PlcStepStateV2::EStop: return QStringLiteral("急停");
   default:
     break;
-  }
-  if (stepState == 120 || stepState == 220) {
-    return QStringLiteral("等待是否复测");
   }
   return QStringLiteral("STEP(%1)").arg(stepState);
 }
@@ -97,11 +127,19 @@ QString axisNameByIndex(int axisIndex) { return core::plc_v26::axisName(axisInde
 
 QString machineStateText(quint16 machineState) { return core::plc_codec_v26::decodeMachineState(machineState).text; }
 
+QString interlockMaskText(quint32 mask) {
+  const QStringList reasons = core::plc_codec_v26::decodeInterlockBits(mask);
+  return reasons.isEmpty() ? QStringLiteral("无") : reasons.join(QStringLiteral(" | "));
+}
+
 bool isCalibrationStepCode(quint16 stepState) {
   return stepState >= 200 && stepState < 300;
 }
 
 bool isProcessingProductionStep(quint16 stepState) {
+  if ((stepState >= 100 && stepState <= 230) && stepState != 131) {
+    return true;
+  }
   switch (static_cast<core::PlcStepStateV2>(stepState)) {
   case core::PlcStepStateV2::PickFromTray:
   case core::PlcStepStateV2::MoveToStations:
@@ -165,6 +203,16 @@ struct Channel72Series {
 
 QString formatNumber(double v, int prec = 6) {
   return std::isfinite(v) ? QString::number(v, 'f', prec) : QStringLiteral("--");
+}
+
+QString normalizedRunoutMetric(const QString &v) {
+  const QString metric = v.trimmed().toUpper();
+  return (metric == QStringLiteral("VBLOCK")) ? metric : QStringLiteral("TIR_AXIS");
+}
+
+double selectedRunoutValue(const core::RunoutResult &r, const QString &metric) {
+  if (!r.success) return qQNaN();
+  return (metric == QStringLiteral("VBLOCK")) ? r.runout_vblock_mm : r.tir_axis_mm;
 }
 
 struct JudgeEvalState {
@@ -313,6 +361,14 @@ core::RunoutAlgoParams buildRunoutAlgoParams(const core::AlgorithmConfig &cfg,
 MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
                        MesWorker *worker, QWidget *parent)
     : QMainWindow(parent), ui_(new Ui::MainWindow), iniPath_(iniPath), appCfg_(cfg) {
+  const QString idCheckCfg = appCfg_.mes.id_check_strategy.trimmed().toUpper();
+  if (idCheckCfg == QStringLiteral("LOCAL_MOCK")) {
+    idCheckStrategy_ = IdCheckStrategy::LocalMock;
+  } else if (idCheckCfg == QStringLiteral("MES_STRICT")) {
+    idCheckStrategy_ = IdCheckStrategy::MesStrict;
+  } else {
+    idCheckStrategy_ = IdCheckStrategy::Bypass;
+  }
   ui_->setupUi(this);
 
   setMinimumSize(800, 500);
@@ -354,7 +410,18 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   ui_->stackedWidget->addWidget(settingsWidget_);
   connect(settingsWidget_, &SettingsWidget::configApplied, this, [this](const core::AppConfig &newCfg){
     appCfg_ = newCfg;
-    appendProductionLog(QStringLiteral("设置已应用：算法参数已更新（后续“计算结果”按新参数计算）"));
+    const QString idCheckCfg = appCfg_.mes.id_check_strategy.trimmed().toUpper();
+    if (idCheckCfg == QStringLiteral("LOCAL_MOCK")) {
+      idCheckStrategy_ = IdCheckStrategy::LocalMock;
+    } else if (idCheckCfg == QStringLiteral("MES_STRICT")) {
+      idCheckStrategy_ = IdCheckStrategy::MesStrict;
+    } else {
+      idCheckStrategy_ = IdCheckStrategy::Bypass;
+    }
+    if (idCheckStrategy_ == IdCheckStrategy::LocalMock) {
+      mesExpectedPartIds_.clear();
+    }
+    appendProductionLog(QStringLiteral("设置已应用：算法参数已更新；ID核对策略=%1").arg(idCheckStrategyText()));
   });
   connect(settingsWidget_, &SettingsWidget::configSaved, this, [this](const QString &path){
     appendProductionLog(QStringLiteral("配置已保存：%1").arg(path));
@@ -412,6 +479,10 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   setupPlcRuntime(cfg);
   setupDiagnosticsBindings();
   setupBusinessPageBindings();
+  appendProductionLog(QStringLiteral("ID核对策略：%1").arg(idCheckStrategyText()));
+  if (idCheckStrategy_ == IdCheckStrategy::LocalMock) {
+    appendProductionLog(QStringLiteral("LOCAL_MOCK 文件：%1").arg(resolveIdCheckMockFilePath()));
+  }
 }
 
 MainWindow::~MainWindow() {
@@ -435,7 +506,9 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
               pendingCmdBits_ = 0;
               hasLastMailboxSnapshot_ = false;
               lastMailboxSnapshot_.reset();
+              hasLastTray_ = false;
               calibrationFlowExpected_ = false;
+              calibrationAutoState_ = CalibrationAutoState::Idle;
             }
             if (manualMaintainWidget_) {
               const bool calCtx = hasLastStatus_
@@ -690,9 +763,12 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
 }
 
 void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
+  const bool hadPrev = hasLastStatus_;
+  const core::PlcStatusBlockV2 prev = lastStatus_;
   lastStatus_ = status;
   hasLastStatus_ = true;
   const bool calibrationContext = calibrationFlowExpected_ && isCalibrationStepCode(status.step_state);
+  updateCalibrationAutoState(status.step_state);
   if (manualMaintainWidget_) {
     manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
                                              machineStateText(status.machine_state),
@@ -707,6 +783,22 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
                                         0,
                                         static_cast<quint32>(status.interlock_mask),
                                         0);
+  }
+
+  if (hadPrev && prev.step_state != status.step_state) {
+    appendProductionLog(QStringLiteral("流程步骤变化：%1 -> %2 (code=%3)")
+                            .arg(productionStepStateText(prev.step_state))
+                            .arg(productionStepStateText(status.step_state))
+                            .arg(status.step_state));
+  }
+  if (hadPrev && prev.interlock_mask != status.interlock_mask) {
+    if (status.interlock_mask == 0) {
+      appendProductionLog(QStringLiteral("互锁位图恢复正常"));
+    } else {
+      appendProductionLog(QStringLiteral("互锁位图触发：0x%1 (%2)")
+                              .arg(QString::number(status.interlock_mask, 16).toUpper())
+                              .arg(interlockMaskText(status.interlock_mask)));
+    }
   }
 
   if (productionWidget_) {
@@ -733,7 +825,8 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
 
       if (calibrationContext && slot == core::kCalibrationSlotIndex) {
         state = SlotRuntimeState::Calibration;
-      } else if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::ScanTrayIds)) {
+      } else if (status.step_state == 10
+              || status.step_state == static_cast<quint16>(core::PlcStepStateV2::ScanTrayIds)) {
         state = SlotRuntimeState::Loaded;
         note = QStringLiteral("PLC 扫码中");
       } else if (isWaitPcIdCheckStep(status.step_state)) {
@@ -766,6 +859,10 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
 }
 
 void MainWindow::onPlcCommandUpdated(const core::PlcCommandBlockV2 &command) {
+  if (command.category_mode == core::plc_v26::kPartTypeA ||
+      command.category_mode == core::plc_v26::kPartTypeB) {
+    lastCategoryMode_ = command.category_mode;
+  }
   const bool unchanged = hasLastCommandSample_
                       && lastCmdResult_ == command.cmd_result
                       && lastRejectInstruction_ == command.cmd_error_code;
@@ -848,6 +945,8 @@ void MainWindow::refreshManualMaintainLiveStatus() {
 }
 
 void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
+  lastTray_ = tray;
+  hasLastTray_ = true;
   if (productionWidget_) {
     QVector<QString> slotIds(core::kLogicalSlotCount);
     const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
@@ -914,21 +1013,372 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
   const bool calibrationContext = hasLastStatus_
                                && calibrationFlowExpected_
                                && isCalibrationStepCode(lastStatus_.step_state);
-  if (!calibrationContext) {
-    handleComputeResultRequested(snapshot.part_type);
+  if (calibrationContext) {
+    const bool singleItem = (snapshot.item_count == 1 && snapshot.items.size() == 1);
+    const bool slot16Only = singleItem && snapshot.items.at(0).slot_index == core::kCalibrationSlotIndex;
+    if (!slot16Only) {
+      appendProductionLog(QStringLiteral("标定邮箱规则异常：标定流程仅允许槽位16单件数据（item_count=%1, items=%2）")
+                              .arg(snapshot.item_count)
+                              .arg(snapshot.items.size()));
+      if (!snapshot.items.isEmpty()) {
+        appendProductionLog(QStringLiteral("标定邮箱异常详情：slot=%1 part_id=%2")
+                                .arg(snapshot.items.first().slot_index + 1)
+                                .arg(snapshot.items.first().part_id));
+      }
+    }
   }
-
 }
 
 void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV26 &events) {
-  if (productionWidget_) {
-    if (events.scan_ready) {
+  if (events.scan_ready) {
+    if (productionWidget_) {
       productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新扫码结果"));
     }
-    if (events.new_mailbox) {
+    processAutoScanIdCheck();
+  }
+  if (events.new_mailbox) {
+    if (productionWidget_) {
       productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
     }
+    processAutoMailboxFlow();
   }
+}
+
+void MainWindow::updateCalibrationAutoState(quint16 stepState) {
+  if (!calibrationFlowExpected_) {
+    calibrationAutoState_ = CalibrationAutoState::Idle;
+    return;
+  }
+  CalibrationAutoState next = calibrationAutoState_;
+  switch (stepState) {
+  case 200:
+    next = CalibrationAutoState::WaitLoadSlot16;
+    break;
+  case 210:
+    next = CalibrationAutoState::WaitPcConfirm;
+    break;
+  case 220:
+    next = CalibrationAutoState::Measuring;
+    break;
+  case 230:
+    next = CalibrationAutoState::WaitPcRead;
+    break;
+  case 240:
+    next = CalibrationAutoState::Completed;
+    break;
+  default:
+    if (!isCalibrationStepCode(stepState)) {
+      next = CalibrationAutoState::Idle;
+      calibrationFlowExpected_ = false;
+    }
+    break;
+  }
+  if (next == calibrationAutoState_) return;
+  calibrationAutoState_ = next;
+  QString text;
+  switch (calibrationAutoState_) {
+  case CalibrationAutoState::Idle: text = QStringLiteral("空闲"); break;
+  case CalibrationAutoState::WaitLoadSlot16: text = QStringLiteral("等待槽16上料"); break;
+  case CalibrationAutoState::WaitPcConfirm: text = QStringLiteral("等待PC确认"); break;
+  case CalibrationAutoState::Measuring: text = QStringLiteral("标定测量中"); break;
+  case CalibrationAutoState::WaitPcRead: text = QStringLiteral("等待PC读取"); break;
+  case CalibrationAutoState::Completed: text = QStringLiteral("标定完成"); break;
+  }
+  appendProductionLog(QStringLiteral("标定状态机切换：%1").arg(text));
+}
+
+qint16 MainWindow::currentCategoryModeForAutoFlow() const {
+  if (lastCategoryMode_ == core::plc_v26::kPartTypeA ||
+      lastCategoryMode_ == core::plc_v26::kPartTypeB) {
+    return lastCategoryMode_;
+  }
+  if (productionWidget_) {
+    const quint32 arg = productionWidget_->selectedPartTypeArg();
+    if (arg == core::plc_v26::kPartTypeA || arg == core::plc_v26::kPartTypeB) {
+      return static_cast<qint16>(arg);
+    }
+  }
+  return core::plc_v26::kPartTypeA;
+}
+
+QString MainWindow::idCheckStrategyText() const {
+  switch (idCheckStrategy_) {
+  case IdCheckStrategy::LocalMock:
+    return QStringLiteral("LOCAL_MOCK");
+  case IdCheckStrategy::MesStrict:
+    return QStringLiteral("MES_STRICT");
+  case IdCheckStrategy::Bypass:
+  default:
+    return QStringLiteral("BYPASS");
+  }
+}
+
+QString MainWindow::resolveIdCheckMockFilePath() const {
+  const QString raw = appCfg_.mes.id_check_mock_file.trimmed();
+  if (raw.isEmpty()) {
+    return QFileInfo(QFileInfo(iniPath_).absolutePath(),
+                     QStringLiteral("mes_id_mock.json")).absoluteFilePath();
+  }
+  QFileInfo fi(raw);
+  if (fi.isAbsolute()) return fi.absoluteFilePath();
+  return QFileInfo(QFileInfo(iniPath_).absolutePath(), raw).absoluteFilePath();
+}
+
+bool MainWindow::loadMockExpectedPartIds(QVector<QString> *out, QString *err) const {
+  if (!out) {
+    if (err) *err = QStringLiteral("out 不能为空");
+    return false;
+  }
+  out->fill(QString(), core::kLogicalSlotCount);
+  const QString path = resolveIdCheckMockFilePath();
+  QFile f(path);
+  if (!f.exists()) {
+    if (err) *err = QStringLiteral("LOCAL_MOCK 文件不存在：%1").arg(path);
+    return false;
+  }
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (err) *err = QStringLiteral("LOCAL_MOCK 文件打开失败：%1").arg(path);
+    return false;
+  }
+  const QByteArray bytes = f.readAll();
+  f.close();
+
+  QJsonParseError parseErr;
+  const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parseErr);
+  if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+    if (err) *err = QStringLiteral("LOCAL_MOCK JSON解析失败：%1 (line=%2)")
+                        .arg(parseErr.errorString())
+                        .arg(parseErr.offset);
+    return false;
+  }
+  const QJsonObject obj = doc.object();
+
+  auto applyPair = [&](int slot1Based, const QString &id) {
+    if (slot1Based < 1 || slot1Based > core::kLogicalSlotCount) return;
+    (*out)[slot1Based - 1] = id.trimmed();
+  };
+
+  const QJsonValue slotIdsVal = obj.value(QStringLiteral("slot_ids"));
+  if (slotIdsVal.isObject()) {
+    const QJsonObject m = slotIdsVal.toObject();
+    for (int slot = 1; slot <= core::kLogicalSlotCount; ++slot) {
+      const QString key = QString::number(slot);
+      if (!m.contains(key)) continue;
+      applyPair(slot, m.value(key).toString());
+    }
+  }
+
+  const QJsonValue slotsVal = obj.value(QStringLiteral("slots"));
+  if (slotsVal.isArray()) {
+    const QJsonArray arr = slotsVal.toArray();
+    for (int i = 0; i < arr.size() && i < core::kLogicalSlotCount; ++i) {
+      const QJsonValue v = arr.at(i);
+      if (v.isString()) {
+        applyPair(i + 1, v.toString());
+        continue;
+      }
+      if (v.isObject()) {
+        const QJsonObject one = v.toObject();
+        const int slot = one.value(QStringLiteral("slot")).toInt(i + 1);
+        const QString id = one.value(QStringLiteral("part_id")).toString(
+            one.value(QStringLiteral("partId")).toString(
+                one.value(QStringLiteral("id")).toString()));
+        applyPair(slot, id);
+      }
+    }
+  }
+
+  return true;
+}
+
+bool MainWindow::evaluateIdCheckAgainstMes(QStringList *mismatchDetails,
+                                           QVector<int> *mismatchSlots) const {
+  if (!mismatchDetails || !mismatchSlots) return false;
+  mismatchDetails->clear();
+  mismatchSlots->clear();
+  if (!hasLastStatus_ || !hasLastTray_) return false;
+  if (mesExpectedPartIds_.size() != core::kLogicalSlotCount) return false;
+
+  const quint16 presentMask = lastStatus_.tray_present_mask;
+  for (int slot = 0; slot < core::kLogicalSlotCount; ++slot) {
+    const bool present = ((presentMask >> slot) & 0x1u) != 0;
+    if (!present) continue;
+    const QString expected = mesExpectedPartIds_.at(slot).trimmed();
+    if (expected.isEmpty()) continue;
+    QString actual = lastTray_.part_ids[slot].trimmed();
+    if (actual.isEmpty()) actual = QStringLiteral("NG");
+    if (actual != expected) {
+      mismatchSlots->push_back(slot);
+      mismatchDetails->push_back(
+          QStringLiteral("槽位%1：扫描ID=%2，MES期望=%3")
+              .arg(slot + 1)
+              .arg(actual)
+              .arg(expected));
+    }
+  }
+  return mismatchSlots->isEmpty();
+}
+
+bool MainWindow::tryAutoContinueAfterIdCheck() {
+  if (!plcRuntime_) return false;
+  QString err;
+  if (!plcRuntime_->writeScanDone(0, &err)) {
+    handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 scan_done=0 失败") : err);
+    return false;
+  }
+  appendProductionLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
+  if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
+  plcRuntime_->pollOnce();
+  return true;
+}
+
+bool MainWindow::tryAutoWritePcAck() {
+  if (!plcRuntime_) return false;
+  QString err;
+  if (!plcRuntime_->sendPcAck(core::plc_v26::kJudgeOk, &err)) {
+    handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 iPc_Ack 失败") : err);
+    return false;
+  }
+  appendProductionLog(QStringLiteral("写 iPc_Ack=1"));
+  return true;
+}
+
+void MainWindow::promptNgDecisionAndDispatch() {
+  if (!plcRuntime_) return;
+  const auto decide = QMessageBox::question(
+      this,
+      QStringLiteral("NG处理决策"),
+      QStringLiteral("本次判定为 NG。\n选择“是”执行当前件复测；选择“否”继续（不复测）。"),
+      QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+      QMessageBox::Yes);
+  if (decide == QMessageBox::Cancel) {
+    appendProductionLog(QStringLiteral("NG自动分支：用户取消决策，保持当前步骤等待人工处理"));
+    return;
+  }
+  QVariantMap args;
+  const qint16 plcMode = (hasLastStatus_
+                       && lastStatus_.control_mode >= core::plc_v26::kModeManual
+                       && lastStatus_.control_mode <= core::plc_v26::kModeSingleStep)
+                          ? lastStatus_.control_mode
+                          : static_cast<qint16>(core::plc_v26::kModeAuto);
+  args.insert(QStringLiteral("plc_mode"), plcMode);
+  args.insert(QStringLiteral("part_type_arg"), static_cast<int>(currentCategoryModeForAutoFlow()));
+  if (decide == QMessageBox::Yes) {
+    appendProductionLog(QStringLiteral("NG自动分支：用户选择当前件复测"));
+    handleUiCommandRequested(QStringLiteral("START_RETEST_CURRENT"), args);
+    return;
+  }
+  appendProductionLog(QStringLiteral("NG自动分支：用户选择继续（不复测）"));
+  handleUiCommandRequested(QStringLiteral("CONTINUE_NO_RETEST"), args);
+}
+
+void MainWindow::processAutoScanIdCheck() {
+  if (!plcRuntime_ || !hasLastStatus_) return;
+  if (!isWaitPcIdCheckStep(lastStatus_.step_state)) return;
+
+  if (!hasLastTray_) {
+    core::PlcTrayPartIdBlockV2 tray;
+    QString err;
+    if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) {
+      handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("自动ID核对前读取扫码ID失败") : err);
+      return;
+    }
+  }
+
+  if (idCheckStrategy_ == IdCheckStrategy::Bypass) {
+    appendProductionLog(QStringLiteral("ID核对自动流：策略=BYPASS，自动放行"));
+    tryAutoContinueAfterIdCheck();
+    return;
+  }
+
+  if (idCheckStrategy_ == IdCheckStrategy::LocalMock) {
+    QString err;
+    QVector<QString> mockExpected;
+    if (!loadMockExpectedPartIds(&mockExpected, &err)) {
+      handlePlcRuntimeError(err);
+      appendProductionLog(QStringLiteral("ID核对自动流：策略=LOCAL_MOCK，读取本地期望ID失败，阻塞继续"));
+      return;
+    }
+    mesExpectedPartIds_ = mockExpected;
+    appendProductionLog(QStringLiteral("ID核对自动流：策略=LOCAL_MOCK，文件=%1")
+                            .arg(resolveIdCheckMockFilePath()));
+  }
+
+  bool hasExpectedIds = false;
+  if (mesExpectedPartIds_.size() == core::kLogicalSlotCount) {
+    for (const QString &id : mesExpectedPartIds_) {
+      if (!id.trimmed().isEmpty()) {
+        hasExpectedIds = true;
+        break;
+      }
+    }
+  }
+  if (!hasExpectedIds) {
+    if (idCheckStrategy_ == IdCheckStrategy::MesStrict) {
+      appendProductionLog(QStringLiteral("ID核对自动流：策略=MES_STRICT，但未收到MES期望ID，阻塞继续"));
+    } else {
+      appendProductionLog(QStringLiteral("ID核对自动流：策略=LOCAL_MOCK，但文件未提供任何期望ID，阻塞继续"));
+    }
+    return;
+  }
+
+  QStringList mismatchDetails;
+  QVector<int> mismatchSlots;
+  const bool pass = evaluateIdCheckAgainstMes(&mismatchDetails, &mismatchSlots);
+  if (pass) {
+    appendProductionLog(QStringLiteral("ID核对自动流：MES比对通过，允许继续"));
+    tryAutoContinueAfterIdCheck();
+    return;
+  }
+
+  for (int slot : mismatchSlots) {
+    if (productionWidget_) {
+      productionWidget_->setSlotRuntimeState(slot, SlotRuntimeState::ScanMismatch,
+                                             QStringLiteral("MES工件编号不一致"));
+    }
+  }
+  appendProductionLog(QStringLiteral("ID核对自动流：MES比对失败，阻塞自动继续"));
+  for (const QString &line : mismatchDetails) {
+    appendProductionLog(QStringLiteral("  %1").arg(line));
+  }
+}
+
+void MainWindow::processAutoMailboxFlow() {
+  if (!plcRuntime_ || !hasLastMailboxSnapshot_ || !lastMailboxSnapshot_) return;
+  if (hasLastStatus_ && calibrationFlowExpected_ && isCalibrationStepCode(lastStatus_.step_state)) {
+    appendProductionLog(QStringLiteral("标定流程：检测到新测量包，按槽16单件规则处理，不进入生产自动分支"));
+    return;
+  }
+
+  if (!handleComputeResultRequested(lastMailboxSnapshot_->part_type)) {
+    appendProductionLog(QStringLiteral("自动流：测量包计算失败，保持等待人工处理"));
+    return;
+  }
+  if (!lastComputeHasItems_) {
+    appendProductionLog(QStringLiteral("自动流：本次测量包无有效工件，跳过ACK/继续分支"));
+    return;
+  }
+
+  if (!tryAutoWritePcAck()) {
+    appendProductionLog(QStringLiteral("自动流：iPc_Ack写入失败，终止后续分支"));
+    return;
+  }
+
+  if (lastComputeOverallOk_) {
+    appendProductionLog(QStringLiteral("自动流：判定OK，自动发送继续（不复测）"));
+    QVariantMap args;
+    const qint16 plcMode = (hasLastStatus_
+                         && lastStatus_.control_mode >= core::plc_v26::kModeManual
+                         && lastStatus_.control_mode <= core::plc_v26::kModeSingleStep)
+                            ? lastStatus_.control_mode
+                            : static_cast<qint16>(core::plc_v26::kModeAuto);
+    args.insert(QStringLiteral("plc_mode"), plcMode);
+    args.insert(QStringLiteral("part_type_arg"), static_cast<int>(currentCategoryModeForAutoFlow()));
+    handleUiCommandRequested(QStringLiteral("CONTINUE_NO_RETEST"), args);
+    return;
+  }
+  appendProductionLog(QStringLiteral("自动流：判定NG，弹窗等待复测/继续决策"));
+  promptNgDecisionAndDispatch();
 }
 
 void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap &args) {
@@ -945,13 +1395,7 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
   if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) {
-    QString err;
-    if (!plcRuntime_->writeScanDone(0, &err)) {
-      handlePlcRuntimeError(err);
-      return;
-    }
-    if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 scan_done=0（ID核对通过）"));
-    plcRuntime_->pollOnce();
+    if (!tryAutoContinueAfterIdCheck()) return;
     return;
   }
 
@@ -960,6 +1404,9 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (cmd == QStringLiteral("SET_MODE_AUTO")) plcMode = core::plc_v26::kModeAuto;
   if (cmd == QStringLiteral("START_AUTO") || cmd == QStringLiteral("START_CALIBRATION")) plcMode = core::plc_v26::kModeAuto;
   qint16 categoryMode = static_cast<qint16>(mapArg(args, QStringLiteral("part_type_arg"), core::plc_v26::kPartTypeA));
+  if (categoryMode == core::plc_v26::kPartTypeA || categoryMode == core::plc_v26::kPartTypeB) {
+    lastCategoryMode_ = categoryMode;
+  }
 
   QString err;
   if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
@@ -1101,8 +1548,11 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
   }
 }
 
-void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
-  if (!plcRuntime_) return;
+bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
+  if (!plcRuntime_) return false;
+  lastComputeHasItems_ = false;
+  lastComputeOverallOk_ = false;
+  lastComputePartType_ = preferredPartType.toUpper();
 
   core::PlcMailboxSnapshot snapshot;
   if (hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
@@ -1111,7 +1561,7 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
     QString err;
     if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
       handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("读取测量包失败，无法计算结果") : err);
-      return;
+      return false;
     }
     if (!lastMailboxSnapshot_) lastMailboxSnapshot_ = std::make_unique<core::PlcMailboxSnapshot>();
     *lastMailboxSnapshot_ = snapshot;
@@ -1121,7 +1571,7 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
   QString validErr;
   if (!snapshot.isValid(&validErr)) {
     handlePlcRuntimeError(QStringLiteral("测量包校验失败，无法计算：%1").arg(validErr));
-    return;
+    return false;
   }
 
   const int invalidLimit = qBound(0, appCfg_.algo.invalid_point_limit, 72);
@@ -1153,6 +1603,15 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
   appendProductionLog(QStringLiteral("B型通道K：A点(K=%1) D点(K=%2)")
                           .arg(formatNumber(appCfg_.algo.b_a_k_runout_mm))
                           .arg(formatNumber(appCfg_.algo.b_d_k_runout_mm)));
+  const QString runoutMetric = normalizedRunoutMetric(appCfg_.algo.runout_metric);
+  appendProductionLog(QStringLiteral("B型跳动口径：%1").arg(runoutMetric));
+
+  int expectedItemCount = 0;
+  int judgedItemCount = 0;
+  bool overallOk = true;
+  for (const auto &item : snapshot.items) {
+    if (item.present) ++expectedItemCount;
+  }
 
   for (const auto &item : snapshot.items) {
     if (!item.present) continue;
@@ -1216,6 +1675,8 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
                        appCfg_.algo.spec_a_od_right, false, &judge);
       finalizeSlotJudgement(&slotSummary, &judge);
+      judgedItemCount += 1;
+      if (!slotSummary.judgement_ok) overallOk = false;
 
       appendProductionLog(QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
                               .arg(item.item_index)
@@ -1262,8 +1723,8 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
 
       slotSummary.compute.values.ad_len_mm = item.ad_len_mm;
       slotSummary.compute.values.bc_len_mm = item.bc_len_mm;
-      slotSummary.compute.values.runout_left_mm = rA.success ? static_cast<float>(rA.tir_axis_mm) : qQNaN();
-      slotSummary.compute.values.runout_right_mm = rD.success ? static_cast<float>(rD.tir_axis_mm) : qQNaN();
+      slotSummary.compute.values.runout_left_mm = static_cast<float>(selectedRunoutValue(rA, runoutMetric));
+      slotSummary.compute.values.runout_right_mm = static_cast<float>(selectedRunoutValue(rD, runoutMetric));
       slotSummary.compute.valid = rA.success && rD.success;
 
       JudgeEvalState judge;
@@ -1276,6 +1737,8 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
                        appCfg_.algo.spec_b_runout_right, false, &judge);
       finalizeSlotJudgement(&slotSummary, &judge);
+      judgedItemCount += 1;
+      if (!slotSummary.judgement_ok) overallOk = false;
 
       appendProductionLog(QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
                               .arg(item.item_index)
@@ -1307,7 +1770,31 @@ void MainWindow::handleComputeResultRequested(QChar preferredPartType) {
     }
   }
 
+  if (expectedItemCount > 0 && judgedItemCount < expectedItemCount) {
+    overallOk = false;
+    appendProductionLog(QStringLiteral("警告：部分工件未生成有效判定（expected=%1, judged=%2），总判定按 NG 处理")
+                            .arg(expectedItemCount)
+                            .arg(judgedItemCount));
+  }
+  lastComputeHasItems_ = (expectedItemCount > 0);
+  lastComputeOverallOk_ = (expectedItemCount > 0) ? overallOk : false;
+  lastComputePartType_ = snapshot.part_type.toUpper();
+  if (expectedItemCount > 0) {
+    const quint16 judgeResult = overallOk ? core::plc_v26::kJudgeOk : core::plc_v26::kJudgeNg;
+    QString err;
+    if (!plcRuntime_->writeJudgeResult(judgeResult, &err)) {
+      handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 iJudge_Result 失败") : err);
+    } else {
+      appendProductionLog(QStringLiteral("已写 iJudge_Result=%1 (%2)")
+                              .arg(judgeResult)
+                              .arg(overallOk ? QStringLiteral("OK") : QStringLiteral("NG")));
+    }
+  } else {
+    appendProductionLog(QStringLiteral("本次测量包无有效 item，跳过写 iJudge_Result"));
+  }
+
   appendProductionLog(QStringLiteral("计算结束"));
+  return true;
 }
 
 
