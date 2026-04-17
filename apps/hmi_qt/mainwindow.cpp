@@ -45,6 +45,10 @@ QString mailboxPartTypeText(const core::PlcMailboxSnapshot &snapshot) {
 }
 
 QString productionStepStateText(quint16 stepState) {
+  // 兼容现场步骤码：11=扫码完成/等待PC核对ID（v2.6）
+  if (stepState == 11) {
+    return QStringLiteral("等待PC核对ID");
+  }
   switch (static_cast<core::PlcStepStateV2>(stepState)) {
   case core::PlcStepStateV2::WaitStart: return QStringLiteral("等待启动");
   case core::PlcStepStateV2::WaitTrayReady: return QStringLiteral("等待上料就绪");
@@ -109,6 +113,12 @@ bool isProcessingProductionStep(quint16 stepState) {
   default:
     return false;
   }
+}
+
+bool isWaitPcIdCheckStep(quint16 stepState) {
+  // 优先按 v2.6 现场定义（11），同时兼容历史枚举值（30）
+  return (stepState == 11
+       || stepState == static_cast<quint16>(core::PlcStepStateV2::WaitPcIdCheck));
 }
 
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
@@ -567,6 +577,16 @@ void MainWindow::setupBusinessPageBindings() {
               core::PlcTrayPartIdBlockV2 tray; QString err;
               if (!plcRuntime_->readSecondStageTrayIds(&tray, &err)) { handlePlcRuntimeError(err); return; }
               onPlcTrayUpdated(tray);
+              const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
+              productionWidget_->appendPlcLogMessage(QStringLiteral("读取扫码ID成功："));
+              for (int i = 0; i < core::kLogicalSlotCount; ++i) {
+                const bool present = ((presentMask >> i) & 0x1u) != 0;
+                if (!present) continue;
+                const QString id = tray.part_ids[i].trimmed().isEmpty()
+                                       ? QStringLiteral("NG")
+                                       : tray.part_ids[i].trimmed();
+                productionWidget_->appendPlcLogMessage(QStringLiteral("  槽位%1：%2").arg(i + 1).arg(id));
+              }
             });
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
             this, &MainWindow::handleAckMailboxRequested);
@@ -576,8 +596,8 @@ void MainWindow::setupBusinessPageBindings() {
             this, [this](int mode){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode))); plcRuntime_->pollOnce(); });
     connect(productionWidget_, &ProductionWidget::requestWriteCategoryMode,
             this, [this](int partTypeArg){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->setCategoryMode(static_cast<qint16>(partTypeArg), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写工件类型到 PLC：%1").arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型"))); });
-    connect(productionWidget_, &ProductionWidget::requestWriteSlotIds,
-            this, &MainWindow::handleWriteTrayPartIdsRequested);
+    connect(productionWidget_, &ProductionWidget::requestWriteSlotId,
+            this, &MainWindow::handleWriteTrayPartIdRequested);
     connect(productionWidget_, &ProductionWidget::uiCommandRequested,
             this, &MainWindow::handleUiCommandRequested);
     connect(productionWidget_, &ProductionWidget::requestReconnectPlc,
@@ -716,7 +736,7 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
       } else if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::ScanTrayIds)) {
         state = SlotRuntimeState::Loaded;
         note = QStringLiteral("PLC 扫码中");
-      } else if (status.step_state == static_cast<quint16>(core::PlcStepStateV2::WaitPcIdCheck)) {
+      } else if (isWaitPcIdCheckStep(status.step_state)) {
         state = SlotRuntimeState::WaitingIdCheck;
         note = QStringLiteral("等待 PC 核对 ID");
       }
@@ -835,17 +855,10 @@ void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
       const bool present = ((presentMask >> i) & 0x1u) != 0;
       if (!present) continue; // 无料槽位不写入
       const QString id = tray.part_ids[i].trimmed();
-      if (id.isEmpty() || id.compare(QStringLiteral("NG"), Qt::CaseInsensitive) == 0) continue;
-      slotIds[i] = id;
+      // 有料槽位必须落位：空值按 NG 显示，便于人工修正
+      slotIds[i] = id.isEmpty() ? QStringLiteral("NG") : id;
     }
     productionWidget_->setScannedPartIds(slotIds);
-    productionWidget_->appendPlcLogMessage(QStringLiteral("读取扫码ID成功："));
-    for (int i = 0; i < core::kLogicalSlotCount; ++i) {
-      const bool present = ((presentMask >> i) & 0x1u) != 0;
-      if (!present) continue;
-      const QString id = slotIds[i].trimmed().isEmpty() ? QStringLiteral("NG") : slotIds[i].trimmed();
-      productionWidget_->appendPlcLogMessage(QStringLiteral("  槽位%1：%2").arg(i + 1).arg(id));
-    }
   }
 }
 
@@ -1017,24 +1030,29 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
                           .arg(QString::number(cmdBits, 16).toUpper()));
 }
 
-void MainWindow::handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds) {
+void MainWindow::handleWriteTrayPartIdRequested(int slotIndex, const QString &partId) {
   if (!plcRuntime_) {
     return;
   }
-  QString err;
-  const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
-  for (int i = 0; i < slotIds.size() && i < core::kLogicalSlotCount; ++i) {
-    const bool present = ((presentMask >> i) & 0x1u) != 0;
-    if (!present) continue; // 无料槽位不写
-    const QString id = slotIds.at(i).trimmed();
-    if (id.isEmpty()) continue;
-    if (!plcRuntime_->writeTrayPartIdSlot(i, id, &err)) {
-      handlePlcRuntimeError(err.isEmpty()
-                                ? QStringLiteral("写入槽位 %1 工件 ID 失败").arg(i)
-                                : err);
-      return;
-    }
+  if (slotIndex < 0 || slotIndex >= core::kLogicalSlotCount) {
+    handlePlcRuntimeError(QStringLiteral("槽位号越界：%1").arg(slotIndex));
+    return;
   }
+  const QString id = partId.trimmed();
+  if (id.isEmpty()) {
+    handlePlcRuntimeError(QStringLiteral("工件ID不能为空"));
+    return;
+  }
+
+  QString err;
+  if (!plcRuntime_->writeTrayPartIdSlot(slotIndex, id, &err)) {
+    handlePlcRuntimeError(err.isEmpty()
+                              ? QStringLiteral("写入槽位 %1 工件ID失败").arg(slotIndex + 1)
+                              : err);
+    return;
+  }
+
+  appendProductionLog(QStringLiteral("已写入槽位%1工件ID：%2").arg(slotIndex + 1).arg(id));
   plcRuntime_->pollOnce();
 }
 

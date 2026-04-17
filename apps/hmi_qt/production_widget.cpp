@@ -33,12 +33,13 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     // 用代码把文案切到当前项目真实语义
     ui_->lblSelectedTitle->setText(QStringLiteral("槽位详情 / 当前批次"));
     ui_->groupRun->setTitle(QStringLiteral("生产流程 / 模式"));
-    ui_->lblSlotIdCaption->setText(QStringLiteral("工件ID(32)"));
-    ui_->editSlotId->setPlaceholderText(QStringLiteral("仅待机/等待上料/等待ID核对阶段可编辑"));
-    ui_->lblPart0Caption->setText(QStringLiteral("当前工件ID"));
+    ui_->lblSlotIdCaption->setText(QStringLiteral("当前工件ID"));
+    ui_->editSlotId->setPlaceholderText(QStringLiteral("仅步骤11（等待PC核对ID）可编辑"));
+    ui_->lblPart0Caption->hide();
+    ui_->lblPart0->hide();
     ui_->lblPart1Caption->setText(QStringLiteral("工件类型"));
     ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
-    ui_->btnWriteSlotIds->setText(QStringLiteral("写回工件ID"));
+    ui_->btnWriteSlotIds->setText(QStringLiteral("保存当前槽位工件ID"));
 
     // 连接状态灯（用样式表）
     setStyleSheet(R"(
@@ -104,6 +105,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     if (autoIndex >= 0) plcModeCombo_->setCurrentIndex(autoIndex);
     const int partAIndex = partTypeCombo_->findData(QStringLiteral("A"));
     if (partAIndex >= 0) partTypeCombo_->setCurrentIndex(partAIndex);
+    batch_part_type_ = selectedPartTypeTextInternal();
 
     const QString comboStyle = QStringLiteral("QComboBox{min-height:30px;padding:2px 8px;} QComboBox::drop-down{width:24px;}");
     measureModeCombo_->setStyleSheet(comboStyle);
@@ -115,10 +117,30 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
 
     connect(ui_->btnReconnectPlc, &QPushButton::clicked, this, [this]{ emit requestReconnectPlc(); });
     connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestSetPlcMode(selectedPlcModeValue()); });
-    connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){ emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg())); });
-    connect(ui_->btnInit, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("INITIALIZE"), args); });
-    connect(ui_->btnStartMeasure, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText())); });
-    connect(ui_->btnStartCal, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args); });
+    connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){
+        const QString selected = selectedPartTypeTextInternal();
+        // 一批料只允许一个类型：仅在当前批次为空闲（无上料且无活跃槽）时更新批次类型
+        if (tray_present_ == 0 && action_slot_mask_ == 0) {
+            batch_part_type_ = selected;
+        }
+        refreshSelectedDetail();
+        emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg()));
+    });
+    connect(ui_->btnInit, &QPushButton::clicked, this, [this]{
+        batch_part_type_ = selectedPartTypeTextInternal();
+        refreshSelectedDetail();
+        QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("INITIALIZE"), args);
+    });
+    connect(ui_->btnStartMeasure, &QPushButton::clicked, this, [this]{
+        batch_part_type_ = selectedPartTypeTextInternal();
+        refreshSelectedDetail();
+        QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText()));
+    });
+    connect(ui_->btnStartCal, &QPushButton::clicked, this, [this]{
+        batch_part_type_ = selectedPartTypeTextInternal();
+        refreshSelectedDetail();
+        QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args);
+    });
     connect(ui_->btnStop2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("STOP"), args); });
     connect(ui_->btnResetAlarm, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("RESET_ALARM"), args); });
     connect(ui_->btnAlarmMute, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("ALARM_MUTE"), args); });
@@ -263,8 +285,8 @@ void ProductionWidget::refreshSelectedDetail()
     ui_->editSlotId->setText(id);
     ui_->lblResult->setText(runtimeStateText(selected_slot_));
 
-    ui_->lblPart0->setText(id.isEmpty() ? QStringLiteral("—") : id);
-    ui_->lblPart1->setText(QStringLiteral("—"));
+    ui_->lblPart1->setText(batch_part_type_.trimmed().isEmpty() ? selectedPartTypeTextInternal()
+                                                                 : batch_part_type_);
     ui_->lblFail->setText(QStringLiteral("—"));
 
 
@@ -272,12 +294,6 @@ void ProductionWidget::refreshSelectedDetail()
     if (slot_meas_.size() == 16) ms = slot_meas_[selected_slot_];
 
     const QString note = (slot_notes_.size() == 16) ? slot_notes_[selected_slot_] : QString();
-    if (ms.valid) {
-        const QChar pt = ms.part_type.toUpper();
-        if (pt == QChar('A') || pt == QChar('B')) {
-            ui_->lblPart1->setText(QString(pt));
-        }
-    }
     if (ms.valid && ms.judgement_known) {
         ui_->lblResult->setText(ms.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
         ui_->lblResult->setStyleSheet(ms.judgement_ok
@@ -396,12 +412,14 @@ QString ProductionWidget::selectedPartTypeTextInternal() const
 
 QString ProductionWidget::selectedPartTypeText() const
 {
+    const QString batch = batch_part_type_.trimmed().toUpper();
+    if (batch == QStringLiteral("A") || batch == QStringLiteral("B")) return batch;
     return selectedPartTypeTextInternal();
 }
 
 quint32 ProductionWidget::selectedPartTypeArg() const
 {
-    return selectedPartTypeTextInternal() == QStringLiteral("B") ? 1u : 2u;
+    return selectedPartTypeText() == QStringLiteral("B") ? 1u : 2u;
 }
 
 int ProductionWidget::selectedPlcModeValue() const
@@ -678,11 +696,21 @@ void ProductionWidget::setMailboxPreview(quint32 meas_seq,
 void ProductionWidget::onBtnWriteSlotIds()
 {
     if (!isPartIdEditableStep()) {
-        ui_->listMessages->addItem(QStringLiteral("当前工步不允许写回工件ID（仅待机/等待上料/等待ID核对阶段可写）"));
+        ui_->listMessages->addItem(QStringLiteral("当前工步不允许保存工件ID（仅步骤11：等待PC核对ID可写）"));
         return;
     }
-    emit requestWriteSlotIds(slot_part_ids_);
-    ui_->listMessages->addItem(QStringLiteral("已请求写回工件ID（PC->PLC，对应槽位寄存器）"));
+    if (selected_slot_ < 0 || selected_slot_ >= 16) return;
+    if (slot_part_ids_.size() != 16) slot_part_ids_ = QVector<QString>(16);
+
+    const QString id = ui_->editSlotId->text().trimmed();
+    if (id.isEmpty()) {
+        ui_->listMessages->addItem(QStringLiteral("当前工件ID不能为空"));
+        return;
+    }
+    slot_part_ids_[selected_slot_] = id;
+    updateSlotCard(selected_slot_);
+    emit requestWriteSlotId(selected_slot_, id);
+    ui_->listMessages->addItem(QStringLiteral("已请求保存槽位%1工件ID").arg(selected_slot_ + 1));
 }
 
 void ProductionWidget::onBtnReloadSlotIds()

@@ -132,6 +132,8 @@ private:
 
   QTimer poll_timer_;
   bool poll_in_progress_ = false;
+  int tray_id_poll_interval_ms_ = 1000;
+  int tray_id_poll_elapsed_ms_ = 0;
 
   class PlcRepositoryV26 *repo_ptr_ = nullptr;
   class PlcServiceV26 *service_ptr_ = nullptr;

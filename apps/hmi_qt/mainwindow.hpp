@@ -49,7 +49,7 @@ private:
     void onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &snapshot);
     void onPlcEventsRaised(const core::PlcPollEventsV26 &events);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
-    void handleWriteTrayPartIdsRequested(const QVector<QString> &slotIds);
+    void handleWriteTrayPartIdRequested(int slotIndex, const QString &partId);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
     void handleComputeResultRequested(QChar preferredPartType = QChar('A'));
     void handleAckMailboxRequested();

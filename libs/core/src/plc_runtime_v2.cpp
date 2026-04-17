@@ -42,6 +42,12 @@ bool PlcRuntimeServiceV2::applyConfig(const AppConfig &cfg, QString *err) {
   stats_.plc_enabled = cfg_.plc.enabled;
   stats_.poll_interval_ms = cfg_.plc.poll_interval_ms;
   poll_timer_.setInterval(cfg_.plc.poll_interval_ms > 0 ? cfg_.plc.poll_interval_ms : 100);
+  {
+    const int pollMs = (cfg_.plc.poll_interval_ms > 0) ? cfg_.plc.poll_interval_ms : 100;
+    // 槽位工件ID地址低频刷新：默认约1s一次，避免占用高频状态轮询带宽
+    tray_id_poll_interval_ms_ = qMax(1000, pollMs);
+    tray_id_poll_elapsed_ms_ = 0;
+  }
   cache_ = PlcPollCacheV26{};
   stats_.last_error.clear();
   rebuildPlcServices();
@@ -424,7 +430,12 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
   emit statusUpdated(status);
   emit commandUpdated(command);
 
-  if (events.scan_ready) {
+  const int pollMs = (stats_.poll_interval_ms > 0) ? stats_.poll_interval_ms : 100;
+  tray_id_poll_elapsed_ms_ += pollMs;
+  const bool trayPeriodicDue = (tray_id_poll_elapsed_ms_ >= tray_id_poll_interval_ms_);
+  if (trayPeriodicDue) tray_id_poll_elapsed_ms_ = 0;
+
+  if (events.scan_ready || trayPeriodicDue) {
     PlcTrayPartIdBlockV2 tray;
     if (service_ptr_->readTrayCoding(&tray, err)) {
       emit trayUpdated(tray);

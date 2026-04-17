@@ -87,7 +87,8 @@ int runtimeStateStyleCode(SlotRuntimeState state)
 
 bool isPartIdEditableStep(quint16 stepState)
 {
-    return (stepState == 0 || stepState == 10 || stepState == 30);
+    // 仅在“扫码完成/等待PC核对ID”步骤允许人工修正并写回
+    return (stepState == 11);
 }
 
 QString stepText(quint16 step)
@@ -95,6 +96,7 @@ QString stepText(quint16 step)
     switch (step) {
     case 0: return QStringLiteral("待机");
     case 10: return QStringLiteral("等待上料");
+    case 11: return QStringLiteral("等待PC核对ID");
     case 20: return QStringLiteral("PLC扫码中");
     case 30: return QStringLiteral("等待PC核对ID");
     case 40: return QStringLiteral("抓取工件");

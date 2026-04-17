@@ -67,7 +67,7 @@ public:
 signals:
     void uiCommandRequested(const QString &cmd, const QVariantMap &args);
 
-    void requestWriteSlotIds(const QVector<QString> &slot_ids); // 实际语义：PC->PLC 写回工件ID
+    void requestWriteSlotId(int slot_index, const QString &part_id); // 实际语义：PC->PLC 写回单槽位工件ID
     void requestReloadSlotIds();                                // 实际语义：PLC->PC 读取扫码工件ID
 
     void requestReadMailbox();
@@ -133,4 +133,5 @@ private:
     class QComboBox *measureModeCombo_ = nullptr;
     class QComboBox *partTypeCombo_ = nullptr;
     class QComboBox *plcModeCombo_ = nullptr;
+    QString batch_part_type_ = QStringLiteral("A");
 };
