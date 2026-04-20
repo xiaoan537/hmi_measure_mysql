@@ -27,6 +27,13 @@ public:
     void setAlarm(quint16 alarm_code, quint16 alarm_level);
     void setMeasureDone(bool done);
     void setInterlockMask(quint32 mask);
+    void setScanDone(quint16 scan_done);
+    void applyPlcRuntimeSnapshot(quint16 step_state,
+                                 quint16 scan_done,
+                                 quint16 tray_present_mask,
+                                 quint16 active_slot_mask,
+                                 bool calibration_mode,
+                                 quint16 mailbox_ready);
 
     // v2 推荐入口：Production 页默认只展示实时态 + 上位机计算结果
     void setTrayPresentMask(quint16 present_mask);
@@ -89,6 +96,7 @@ private:
     void selectSlot(int slot);
     void refreshSelectedDetail();
     void updateSlotEditability();
+    void updateDecisionButtonsVisibility();
     void updateSlotCard(int slot);
     QString stepText(quint16 step) const;
     QString measureModeText() const;
@@ -97,6 +105,8 @@ private:
     QString runtimeStateText(int slot) const;
     int runtimeStateStyleCode(int slot) const;
     bool isPartIdEditableStep() const;
+    bool shouldShowComputedResult(int slot) const;
+    void clearComputedCacheForNewCycle();
     void clearSlotRuntimeData(int slot);
 
 private:
@@ -104,6 +114,8 @@ private:
     Ui::ProductionWidget *ui_ = nullptr;
 
     quint16 step_state_ = 0;
+    quint16 scan_done_ = 0;
+    quint16 mailbox_ready_ = 0;
     quint16 tray_present_ = 0;
     bool plc_connected_ = false;
     bool calibration_mode_ = false;

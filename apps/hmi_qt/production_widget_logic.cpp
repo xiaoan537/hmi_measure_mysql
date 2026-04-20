@@ -1,4 +1,5 @@
 #include "production_widget_logic.hpp"
+#include "plc_step_rules_v26.hpp"
 
 namespace production_widget_logic {
 
@@ -58,7 +59,7 @@ QString runtimeStateText(SlotRuntimeState state)
     case SlotRuntimeState::Loaded: return QStringLiteral("已上料");
     case SlotRuntimeState::WaitingIdCheck: return QStringLiteral("待核对ID");
     case SlotRuntimeState::ScanMismatch: return QStringLiteral("ID不一致");
-    case SlotRuntimeState::Measuring: return QStringLiteral("测量中");
+    case SlotRuntimeState::Measuring: return QStringLiteral("已上料");
     case SlotRuntimeState::WaitingPcRead: return QStringLiteral("待读取");
     case SlotRuntimeState::Ok: return QStringLiteral("OK");
     case SlotRuntimeState::Ng: return QStringLiteral("NG");
@@ -87,49 +88,13 @@ int runtimeStateStyleCode(SlotRuntimeState state)
 
 bool isPartIdEditableStep(quint16 stepState)
 {
-    // 仅在“扫码完成/等待PC核对ID”步骤允许人工修正并写回
-    return (stepState == 11);
+    // 扫码流程阶段可编辑，具体是否允许由 scan_done 决定
+    return plc_step_rules_v26::isScanStep(stepState);
 }
 
 QString stepText(quint16 step)
 {
-    switch (step) {
-    case 1: return QStringLiteral("数据清零");
-    case 2:
-    case 3: return QStringLiteral("初始化中");
-    case 9: return QStringLiteral("初始化完成");
-    case 0: return QStringLiteral("待机");
-    case 10: return QStringLiteral("扫码中");
-    case 11: return QStringLiteral("等待PC核对ID");
-    case 12: return QStringLiteral("判断开始抓料位置");
-    case 20: return QStringLiteral("PLC扫码中");
-    case 30: return QStringLiteral("等待PC核对ID");
-    case 40: return QStringLiteral("抓取工件");
-    case 50: return QStringLiteral("移载到工位");
-    case 60: return QStringLiteral("夹紧/准备");
-    case 70: return QStringLiteral("测量中");
-    case 80: return QStringLiteral("整理测量包");
-    case 90: return QStringLiteral("等待PC读取");
-    case 100:
-    case 101: return QStringLiteral("从料架抓料");
-    case 110: return QStringLiteral("测量工位上料");
-    case 120:
-    case 130: return QStringLiteral("测量中");
-    case 131: return QStringLiteral("等待测量工位完成");
-    case 140:
-    case 150: return QStringLiteral("物料交换工位测量");
-    case 160:
-    case 170: return QStringLiteral("交换后再次上料");
-    case 180:
-    case 190: return QStringLiteral("交换后测量中");
-    case 200:
-    case 210: return QStringLiteral("取料中");
-    case 220: return QStringLiteral("测量完成数据归档");
-    case 230: return QStringLiteral("下料回料架");
-    case 900: return QStringLiteral("报警");
-    case 910: return QStringLiteral("急停");
-    default: return QStringLiteral("运行(%1)").arg(step);
-    }
+    return plc_step_rules_v26::productionStepText(step);
 }
 
 QString partTypeTextFromData(const QString &rawValue)
