@@ -14,6 +14,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 #include <QUrl>
+#include <limits>
 
 ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     : QWidget(parent), cfg_(cfg), ui_(new Ui::ProductionWidget)
@@ -40,7 +41,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->lblSelectedTitle->setText(QStringLiteral("槽位详情 / 当前批次"));
     ui_->groupRun->setTitle(QStringLiteral("生产流程 / 模式"));
     ui_->lblSlotIdCaption->setText(QStringLiteral("当前工件ID"));
-    ui_->editSlotId->setPlaceholderText(QStringLiteral("仅步骤11（等待PC核对ID）可编辑"));
+    ui_->editSlotId->setPlaceholderText(QStringLiteral("仅扫码完成后可编辑"));
     ui_->lblPart0Caption->hide();
     ui_->lblPart0->hide();
     ui_->lblPart1Caption->setText(QStringLiteral("工件类型"));
@@ -162,8 +163,6 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     connect(ui_->btnReloadSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnReloadSlotIds);
     connect(ui_->btnReadMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnReadMailbox);
     connect(ui_->btnAckMailbox, &QPushButton::clicked, this, &ProductionWidget::onBtnAckMailbox);
-    connect(ui_->btnDevDemo, &QPushButton::clicked, this, &ProductionWidget::onBtnDevDemo);
-
     connect(ui_->btnOpenLastRaw, &QPushButton::clicked, this, [this]{
         QDir dir(cfg_.paths.raw_dir);
         if (!dir.exists()) return;
@@ -182,6 +181,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         if (slot_part_ids_[selected_slot_] != newId) {
             slot_part_ids_[selected_slot_] = newId;
             if (slot_meas_.size() == 16) slot_meas_[selected_slot_] = SlotMeasureSummary{};
+            if (slot_result_tokens_.size() == 16) slot_result_tokens_[selected_slot_] = 0;
             if (slot_notes_.size() == 16) slot_notes_[selected_slot_].clear();
         }
         if (((tray_present_ >> selected_slot_) & 0x1) != 0 && slot_states_[selected_slot_] == SlotRuntimeState::Empty) {
@@ -206,6 +206,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     slot_states_ = QVector<SlotRuntimeState>(16, SlotRuntimeState::Empty);
     slot_notes_ = QVector<QString>(16);
     slot_meas_ = QVector<SlotMeasureSummary>(16);
+    slot_result_tokens_ = QVector<quint32>(16, 0);
 
     // init defaults
     setReservedCalibrationSlot(15);
@@ -291,12 +292,12 @@ bool ProductionWidget::shouldShowComputedResult(int slot) const
 {
     if (slot < 0 || slot >= 16) return false;
     if (slot_meas_.size() != 16) return false;
-    const auto &ms = slot_meas_.at(slot);
-    if (!ms.valid || !ms.judgement_known) return false;
-    const SlotRuntimeState state = slot_states_.value(slot, SlotRuntimeState::Unknown);
-    return state == SlotRuntimeState::Ok
-        || state == SlotRuntimeState::Ng
-        || state == SlotRuntimeState::WaitingPcRead;
+    if (slot_result_tokens_.size() != 16) return false;
+    return production_widget_logic::shouldShowComputedResult(
+        slot_meas_.at(slot),
+        slot_states_.value(slot, SlotRuntimeState::Unknown),
+        slot_result_tokens_.at(slot),
+        cycle_token_);
 }
 
 void ProductionWidget::refreshSelectedDetail()
@@ -553,43 +554,16 @@ void ProductionWidget::applyPlcRuntimeSnapshot(quint16 step_state,
     mailbox_ready_ = mailbox_ready;
 
     for (int slot = 0; slot < 16; ++slot) {
-        const bool isActive = ((action_slot_mask_ >> slot) & 0x1u) != 0;
-        const bool present = ((tray_present_ >> slot) & 0x1u) != 0;
-        if (!present && !isActive) {
-            setSlotRuntimeState(slot, SlotRuntimeState::Empty, QString());
-            continue;
-        }
-
-        SlotRuntimeState state = SlotRuntimeState::Loaded;
-        QString note;
-        if (calibration_mode_ && slot == reserved_cal_slot_) {
-            state = SlotRuntimeState::Calibration;
-        } else if (plc_step_rules_v26::isScanStep(step_state_)) {
-            if (scan_done_ != 0) {
-                state = SlotRuntimeState::WaitingIdCheck;
-                note = QStringLiteral("等待 PC 核对 ID");
-            } else {
-                state = SlotRuntimeState::Loaded;
-                note = QStringLiteral("PLC 扫码中");
-            }
-        }
-
-        if (isActive) {
-            if (plc_step_rules_v26::isMailboxArchiveStep(step_state_)) {
-                if (mailbox_ready_ != 0) {
-                    state = SlotRuntimeState::WaitingPcRead;
-                    note = QStringLiteral("已测完成，等待 PC 读取并 ACK");
-                } else {
-                    state = SlotRuntimeState::Loaded;
-                    note = QStringLiteral("等待数据归档");
-                }
-            } else if (plc_step_rules_v26::isProductionProcessingStep(step_state_)) {
-                state = SlotRuntimeState::Loaded;
-                note.clear();
-            }
-        }
-
-        setSlotRuntimeState(slot, state, note);
+        const auto decision = production_widget_logic::decideRuntimeSlotState(
+            slot,
+            reserved_cal_slot_,
+            calibration_mode_,
+            step_state_,
+            scan_done_,
+            mailbox_ready_,
+            tray_present_,
+            action_slot_mask_);
+        setSlotRuntimeState(slot, decision.state, decision.note);
     }
 }
 
@@ -599,16 +573,24 @@ void ProductionWidget::clearSlotRuntimeData(int slot)
     slot_part_ids_[slot].clear();
     slot_notes_[slot].clear();
     slot_meas_[slot] = SlotMeasureSummary{};
+    if (slot_result_tokens_.size() == 16) slot_result_tokens_[slot] = 0;
 }
 
 void ProductionWidget::clearComputedCacheForNewCycle()
 {
     if (slot_notes_.size() != 16) slot_notes_ = QVector<QString>(16);
     if (slot_meas_.size() != 16) slot_meas_ = QVector<SlotMeasureSummary>(16);
+    if (slot_result_tokens_.size() != 16) slot_result_tokens_ = QVector<quint32>(16, 0);
     if (slot_states_.size() != 16) slot_states_ = QVector<SlotRuntimeState>(16, SlotRuntimeState::Empty);
+    if (cycle_token_ >= std::numeric_limits<quint32>::max() - 1u) {
+        cycle_token_ = 1;
+    } else {
+        cycle_token_ += 1;
+    }
 
     for (int i = 0; i < 16; ++i) {
         slot_meas_[i] = SlotMeasureSummary{};
+        slot_result_tokens_[i] = 0;
         slot_notes_[i].clear();
         const bool present = ((tray_present_ >> i) & 0x1u) != 0;
         if (!present) {
@@ -670,15 +652,18 @@ void ProductionWidget::setScannedPartIds(const QVector<QString> &part_ids)
 {
     if (slot_part_ids_.size() != 16) slot_part_ids_.resize(16);
     if (slot_meas_.size() != 16) slot_meas_.resize(16);
+    if (slot_result_tokens_.size() != 16) slot_result_tokens_ = QVector<quint32>(16, 0);
     if (slot_notes_.size() != 16) slot_notes_.resize(16);
 
     for (int i = 0; i < 16; ++i) {
         const QString incoming = (i < part_ids.size()) ? part_ids[i].trimmed() : QString();
         if (!incoming.isEmpty() && slot_part_ids_[i] != incoming) {
             slot_part_ids_[i] = incoming;
-            // 新ID到位后清掉上一件的计算结果，避免串件显示
-            slot_meas_[i] = SlotMeasureSummary{};
-            slot_notes_[i].clear();
+            if (production_widget_logic::shouldInvalidateResultOnIdChange(step_state_, scan_done_)) {
+                slot_meas_[i] = SlotMeasureSummary{};
+                slot_result_tokens_[i] = 0;
+                slot_notes_[i].clear();
+            }
         }
         if (!slot_part_ids_[i].trimmed().isEmpty() && ((tray_present_ >> i) & 0x1) != 0) {
             if (slot_states_[i] == SlotRuntimeState::Empty || slot_states_[i] == SlotRuntimeState::Unknown) {
@@ -687,6 +672,12 @@ void ProductionWidget::setScannedPartIds(const QVector<QString> &part_ids)
         }
         updateSlotCard(i);
     }
+}
+
+void ProductionWidget::markSlotScanMismatch(int slot, const QString &note)
+{
+    setSlotRuntimeState(slot, SlotRuntimeState::ScanMismatch,
+                        note.isEmpty() ? QStringLiteral("MES工件编号不一致") : note);
 }
 
 void ProductionWidget::setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note)
@@ -726,6 +717,8 @@ void ProductionWidget::setSlotComputedResult(int slot, const SlotMeasureSummary 
 {
     if (slot < 0 || slot >= 16) return;
     slot_meas_[slot] = s;
+    if (slot_result_tokens_.size() != 16) slot_result_tokens_ = QVector<quint32>(16, 0);
+    slot_result_tokens_[slot] = cycle_token_;
     if (s.valid && s.judgement_known) {
         slot_states_[slot] = s.judgement_ok ? SlotRuntimeState::Ok : SlotRuntimeState::Ng;
         slot_notes_[slot] = s.fail_reason_text;
@@ -764,6 +757,8 @@ void ProductionWidget::clearCurrentBatch()
     slot_states_ = QVector<SlotRuntimeState>(16, SlotRuntimeState::Empty);
     slot_notes_ = QVector<QString>(16);
     slot_meas_ = QVector<SlotMeasureSummary>(16);
+    slot_result_tokens_ = QVector<quint32>(16, 0);
+    cycle_token_ = 1;
     for (int i = 0; i < 16; ++i) updateSlotCard(i);
 }
 
@@ -783,23 +778,6 @@ void ProductionWidget::setCalibrationMode(bool enabled)
         }
         updateSlotCard(i);
     }
-}
-
-void ProductionWidget::setTrayMasks(quint16 present_mask, quint16 /*ok_mask*/, quint16 /*ng_mask*/)
-{
-    // v2 起不再把 tray_ok/ng 作为 Production 判定来源。
-    setTrayPresentMask(present_mask);
-}
-
-void ProductionWidget::setSlotIds(const QVector<QString> &slot_ids)
-{
-    // v2 起语义改为“槽位当前工件ID”。
-    setScannedPartIds(slot_ids);
-}
-
-void ProductionWidget::setSlotMeasureSummary(int slot, const SlotMeasureSummary &s)
-{
-    setSlotComputedResult(slot, s);
 }
 
 void ProductionWidget::setMailboxPreview(quint32 meas_seq,
@@ -827,7 +805,7 @@ void ProductionWidget::setMailboxPreview(quint32 meas_seq,
 void ProductionWidget::onBtnWriteSlotIds()
 {
     if (!isPartIdEditableStep()) {
-        ui_->listMessages->addItem(QStringLiteral("当前工步不允许保存工件ID（仅步骤11：等待PC核对ID可写）"));
+        ui_->listMessages->addItem(QStringLiteral("当前工步不允许保存工件ID（仅扫码完成后可写）"));
         return;
     }
     if (selected_slot_ < 0 || selected_slot_ >= 16) return;
@@ -839,6 +817,9 @@ void ProductionWidget::onBtnWriteSlotIds()
         return;
     }
     slot_part_ids_[selected_slot_] = id;
+    if (slot_meas_.size() == 16) slot_meas_[selected_slot_] = SlotMeasureSummary{};
+    if (slot_result_tokens_.size() == 16) slot_result_tokens_[selected_slot_] = 0;
+    if (slot_notes_.size() == 16) slot_notes_[selected_slot_].clear();
     updateSlotCard(selected_slot_);
     emit requestWriteSlotId(selected_slot_, id);
     ui_->listMessages->addItem(QStringLiteral("已请求保存槽位%1工件ID").arg(selected_slot_ + 1));
@@ -860,9 +841,4 @@ void ProductionWidget::onBtnAckMailbox()
 {
     emit requestAckMailbox();
     ui_->listMessages->addItem(QStringLiteral("已请求写入 pc_ack（RAW+DB 完成落盘后）"));
-}
-
-void ProductionWidget::onBtnDevDemo()
-{
-    ui_->listMessages->addItem(QStringLiteral("DevDemo 已下线：当前版本仅保留 PLC 实链路。"));
 }

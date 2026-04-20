@@ -1230,8 +1230,7 @@ void MainWindow::processAutoScanIdCheck() {
 
   for (int slot : mismatchSlots) {
     if (productionWidget_) {
-      productionWidget_->setSlotRuntimeState(slot, SlotRuntimeState::ScanMismatch,
-                                             QStringLiteral("MES工件编号不一致"));
+      productionWidget_->markSlotScanMismatch(slot, QStringLiteral("MES工件编号不一致"));
     }
   }
   appendProductionLog(QStringLiteral("ID核对自动流：MES比对失败，阻塞自动继续"));

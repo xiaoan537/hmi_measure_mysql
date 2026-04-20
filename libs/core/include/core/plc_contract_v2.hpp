@@ -36,42 +36,6 @@ constexpr int kCommandOffsetCmdErrorCodeV26 = core::plc_v26::kCommandOffRejectIn
 
 constexpr quint16 kInvalidSlotIndex = 0xFFFFu;
 
-enum class PlcStepStateV2 : quint16 {
-  WaitStart = 0,
-  DataClear = 1,
-  InitializingA = 2,
-  InitializingB = 3,
-  InitDone = 9,
-  ScanTrayIds = 10,
-  ScanContinue = 11,
-  DecidePickStart = 12,
-  PickFromTrayA = 100,
-  PickFromTrayB = 101,
-  LoadMeasureStation = 111,
-  MeasureA = 120,
-  MeasureB = 131,
-  ExchangeMeasureA = 141,
-  ExchangeMeasureB = 151,
-  ReloadAfterExchangeA = 160,
-  ReloadAfterExchangeB = 161,
-  MeasureAfterExchangeA = 191,
-  MeasureAfterExchangeB = 192,
-  UnloadAfterMeasureA = 201,
-  UnloadAfterMeasureB = 211,
-  ArchiveAndCompute = 220,
-  ReturnToTray = 231,
-
-  // 标定流程仍保持独立上下文解释（通常由 calibrationFlowExpected_ 区分）
-  CalWaitLoadSlot16 = 200,
-  CalWaitPcConfirm = 210,
-  CalMeasure = 220,
-  CalWaitPcRead = 230,
-  CalComplete = 240,
-
-  Fault = 900,
-  EStop = 910,
-};
-
 struct PlcStatusBlockV2 {
   qint16 control_mode = 0;
   quint16 machine_state = 0;

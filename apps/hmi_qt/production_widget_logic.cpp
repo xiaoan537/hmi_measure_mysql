@@ -52,6 +52,57 @@ SlotMeasureSummary toWidgetSummary(const core::ProductionSlotSummary &src)
     return out;
 }
 
+RuntimeSlotDecision decideRuntimeSlotState(int slot,
+                                           int reservedCalibrationSlot,
+                                           bool calibrationMode,
+                                           quint16 stepState,
+                                           quint16 scanDone,
+                                           quint16 mailboxReady,
+                                           quint16 trayPresentMask,
+                                           quint16 activeSlotMask)
+{
+    RuntimeSlotDecision out;
+    const bool isActive = ((activeSlotMask >> slot) & 0x1u) != 0;
+    const bool present = ((trayPresentMask >> slot) & 0x1u) != 0;
+    if (!present && !isActive) {
+        out.state = SlotRuntimeState::Empty;
+        return out;
+    }
+
+    out.state = SlotRuntimeState::Loaded;
+    if (calibrationMode && slot == reservedCalibrationSlot) {
+        out.state = SlotRuntimeState::Calibration;
+        return out;
+    }
+
+    if (plc_step_rules_v26::isScanStep(stepState)) {
+        if (scanDone != 0) {
+            out.state = SlotRuntimeState::WaitingIdCheck;
+            out.note = QStringLiteral("等待 PC 核对 ID");
+        } else {
+            out.state = SlotRuntimeState::Loaded;
+            out.note = QStringLiteral("PLC 扫码中");
+        }
+    }
+
+    if (!isActive) return out;
+    if (plc_step_rules_v26::isMailboxArchiveStep(stepState)) {
+        if (mailboxReady != 0) {
+            out.state = SlotRuntimeState::WaitingPcRead;
+            out.note = QStringLiteral("已测完成，等待 PC 读取并 ACK");
+        } else {
+            out.state = SlotRuntimeState::Loaded;
+            out.note = QStringLiteral("等待数据归档");
+        }
+        return out;
+    }
+    if (plc_step_rules_v26::isProductionProcessingStep(stepState)) {
+        out.state = SlotRuntimeState::Loaded;
+        out.note.clear();
+    }
+    return out;
+}
+
 QString runtimeStateText(SlotRuntimeState state)
 {
     switch (state) {
@@ -123,6 +174,23 @@ quint32 measureModeCommandArg(ProductionMeasureMode mode)
     case ProductionMeasureMode::Normal:
     default: return 1;
     }
+}
+
+bool shouldInvalidateResultOnIdChange(quint16 stepState, quint16 /*scanDone*/)
+{
+    // 仅在扫码阶段允许 ID 变化导致本槽结果失效，避免低频轮询在后续步骤误清结果。
+    return plc_step_rules_v26::isScanStep(stepState);
+}
+
+bool shouldShowComputedResult(const SlotMeasureSummary &summary,
+                              SlotRuntimeState runtimeState,
+                              quint32 slotResultToken,
+                              quint32 currentCycleToken)
+{
+    if (!summary.valid || !summary.judgement_known) return false;
+    if (slotResultToken == 0 || currentCycleToken == 0) return false;
+    if (slotResultToken != currentCycleToken) return false;
+    return runtimeState != SlotRuntimeState::Empty;
 }
 
 } // namespace production_widget_logic

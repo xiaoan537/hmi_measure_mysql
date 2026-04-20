@@ -38,19 +38,13 @@ public:
     // v2 推荐入口：Production 页默认只展示实时态 + 上位机计算结果
     void setTrayPresentMask(quint16 present_mask);
     void setScannedPartIds(const QVector<QString> &part_ids);
-    void setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note = {});
-    void setActionSlotMask(quint16 action_slot_mask);
+    void markSlotScanMismatch(int slot, const QString &note = {});
     void setSlotComputedResult(int slot, const SlotMeasureSummary &s);
     void setSlotSummary(int slot, const core::ProductionSlotSummary &s);
     void setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries);
     void clearCurrentBatch();
     void setReservedCalibrationSlot(int slot = 15);
     void setCalibrationMode(bool enabled);
-
-    // ---- 兼容旧接口：内部已改为桥接到 v2 语义 ----
-    void setTrayMasks(quint16 present_mask, quint16 ok_mask, quint16 ng_mask);
-    void setSlotIds(const QVector<QString> &slot_ids);
-    void setSlotMeasureSummary(int slot, const SlotMeasureSummary &s);
 
     // Mailbox header preview（生产页只展示“选中槽位”概要；详细请到诊断页）
     void setMailboxPreview(quint32 meas_seq,
@@ -89,7 +83,6 @@ private slots:
     void onBtnReloadSlotIds();
     void onBtnReadMailbox();
     void onBtnAckMailbox();
-    void onBtnDevDemo();
 
 private:
     void initSlotCards();
@@ -108,6 +101,8 @@ private:
     bool shouldShowComputedResult(int slot) const;
     void clearComputedCacheForNewCycle();
     void clearSlotRuntimeData(int slot);
+    void setSlotRuntimeState(int slot, SlotRuntimeState state, const QString &note = {});
+    void setActionSlotMask(quint16 action_slot_mask);
 
 private:
     core::AppConfig cfg_;
@@ -125,6 +120,8 @@ private:
     QVector<SlotRuntimeState> slot_states_;
     QVector<QString> slot_notes_;          // mismatch / fail / 提示
     QVector<SlotMeasureSummary> slot_meas_;
+    QVector<quint32> slot_result_tokens_;
+    quint32 cycle_token_ = 1;
     int selected_slot_ = 0;
     quint16 action_slot_mask_ = 0;
     QTimer blink_timer_;
