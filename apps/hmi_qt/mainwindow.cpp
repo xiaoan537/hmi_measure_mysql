@@ -963,9 +963,10 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
 
   if (calibrationContext) {
     const bool singleItem = (snapshot.item_count == 1 && snapshot.items.size() == 1);
-    const bool slot16Only = singleItem && snapshot.items.at(0).slot_index == core::kCalibrationSlotIndex;
-    if (!slot16Only) {
-      appendCalibrationLog(QStringLiteral("标定邮箱规则异常：标定流程仅允许槽位16单件数据（item_count=%1, items=%2）")
+    const bool slotCalibrationOnly = singleItem && snapshot.items.at(0).slot_index == core::kCalibrationSlotIndex;
+    if (!slotCalibrationOnly) {
+      appendCalibrationLog(QStringLiteral("标定邮箱规则异常：标定流程仅允许槽位%1单件数据（item_count=%2, items=%3）")
+                               .arg(core::kCalibrationSlotIndex + 1)
                                .arg(snapshot.item_count)
                                .arg(snapshot.items.size()));
       if (!snapshot.items.isEmpty()) {

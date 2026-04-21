@@ -210,7 +210,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     slot_result_tokens_ = QVector<quint32>(16, 0);
 
     // init defaults
-    setReservedCalibrationSlot(15);
+    setReservedCalibrationSlot(-1);
     setPlcConnected(false);
     setStepState(0);
     setMachineState(0, "IDLE");
@@ -408,10 +408,7 @@ void ProductionWidget::updateSlotCard(int slot)
     }
     if (summary.isEmpty()) summary = QStringLiteral("—");
 
-    QString title = QStringLiteral("槽位%1").arg(slot + 1);
-    if (slot == reserved_cal_slot_) {
-        title += QStringLiteral("（标定槽）");
-    }
+    const QString title = QStringLiteral("槽位%1").arg(slot + 1);
 
     btn->setText(QStringLiteral("%1\n%2\n%3\n%4")
                  .arg(title)
@@ -799,7 +796,7 @@ void ProductionWidget::clearCurrentBatch()
 
 void ProductionWidget::setReservedCalibrationSlot(int slot)
 {
-    if (slot < 0 || slot >= 16) slot = 15;
+    if (slot < 0 || slot >= 16) slot = -1;
     reserved_cal_slot_ = slot;
     for (int i = 0; i < 16; ++i) updateSlotCard(i);
 }

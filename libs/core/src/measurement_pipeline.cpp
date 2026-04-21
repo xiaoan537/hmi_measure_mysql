@@ -197,7 +197,9 @@ bool MeasurementContext::isValid(QString *err) const {
   }
   if (run_kind == BusinessRunKind::Calibration) {
     if (calibration_slot_index != kCalibrationSlotIndex) {
-      failWith(err, QStringLiteral("标定 context.calibration_slot_index 必须为 15(协议槽位16)"));
+      failWith(err, QStringLiteral("标定 context.calibration_slot_index 必须为 %1(协议槽位%2)")
+                        .arg(kCalibrationSlotIndex)
+                        .arg(kCalibrationSlotIndex + 1));
       return false;
     }
     if (calibration_type.trimmed().isEmpty()) {

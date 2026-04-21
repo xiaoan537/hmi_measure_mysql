@@ -44,7 +44,7 @@ public:
     void setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries);
     void clearActiveSlotsComputedResults();
     void clearCurrentBatch();
-    void setReservedCalibrationSlot(int slot = 15);
+    void setReservedCalibrationSlot(int slot = -1);
     void setCalibrationMode(bool enabled);
 
     // Mailbox header preview（生产页只展示“选中槽位”概要；详细请到诊断页）
@@ -115,7 +115,7 @@ private:
     quint16 tray_present_ = 0;
     bool plc_connected_ = false;
     bool calibration_mode_ = false;
-    int reserved_cal_slot_ = 15;
+    int reserved_cal_slot_ = -1;
 
     QVector<QString> slot_part_ids_;       // 当前槽位工件ID（来自 PLC 扫码或人工修正）
     QVector<SlotRuntimeState> slot_states_;

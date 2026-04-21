@@ -57,10 +57,10 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     masterB->addWidget(new QLabel(QStringLiteral("B型标定件编号"), this));
     editMasterB_ = new QLineEdit(QStringLiteral("CAL-B-001"), this);
     masterB->addWidget(editMasterB_);
-    lblSlot15_ = new QLabel(QStringLiteral("16 号槽位: 空"), this);
+    lblSlot15_ = new QLabel(QStringLiteral("1 号槽位: 空"), this);
     lblSummary_ = new QLabel(QStringLiteral("结果摘要: --"), this);
     lblSummary_->setWordWrap(true);
-    auto *tip = new QLabel(QStringLiteral("说明：标定流程固定使用槽位16；标定件身份由 PC 本地主数据维护。"), this);
+    auto *tip = new QLabel(QStringLiteral("说明：标定流程固定使用槽位1；标定件身份由 PC 本地主数据维护。"), this);
     tip->setWordWrap(true);
     infoLay->addLayout(masterA);
     infoLay->addLayout(masterB);
@@ -265,7 +265,7 @@ void CalibrationWidget::setSlotSummary(const core::CalibrationSlotSummary &s)
 void CalibrationWidget::setSlotSummaries(const QVector<core::CalibrationSlotSummary> &summaries)
 {
     for (const auto &s : summaries) {
-        if (s.slot_index == 15) {
+        if (s.slot_index == core::kCalibrationSlotIndex) {
             setSlotSummary(s);
             return;
         }
@@ -309,7 +309,7 @@ int CalibrationWidget::selectedPlcModeValue() const
 
 void CalibrationWidget::refreshSlot15State()
 {
-    lblSlot15_->setText(calibration_widget_logic::slot15StateText(trayPresentMask_));
+    lblSlot15_->setText(calibration_widget_logic::calibrationSlotStateText(trayPresentMask_));
 }
 
 void CalibrationWidget::updateMasterIdEditability()

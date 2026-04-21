@@ -15,10 +15,10 @@ QString stepText(quint16 step)
     return plc_step_rules_v26::calibrationStepText(step);
 }
 
-QString slot15StateText(quint16 trayPresentMask)
+QString calibrationSlotStateText(quint16 trayPresentMask)
 {
-    const bool loaded = ((trayPresentMask >> 15) & 0x1) != 0;
-    return loaded ? QStringLiteral("16 号槽位: 有料") : QStringLiteral("16 号槽位: 空");
+    const bool loaded = ((trayPresentMask >> core::kCalibrationSlotIndex) & 0x1) != 0;
+    return loaded ? QStringLiteral("1 号槽位: 有料") : QStringLiteral("1 号槽位: 空");
 }
 
 QString selectedMasterTypeText(bool bChecked)

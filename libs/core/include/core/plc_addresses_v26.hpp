@@ -7,8 +7,8 @@
 namespace core::plc_v26 {
 
 constexpr int kLogicalSlotCount = 16;
-constexpr int kAutoSlotCount = 15;
-constexpr int kCalibrationSlotIndex = 15; // logical index, protocol slot 16
+constexpr int kAutoSlotCount = 16;
+constexpr int kCalibrationSlotIndex = 0; // logical index, protocol slot 1 (calibration only)
 constexpr int kProtocolInvalidSlot = 0;
 constexpr int kProtocolMinSlot = 1;
 constexpr int kProtocolMaxSlot = 16;
