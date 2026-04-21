@@ -42,6 +42,7 @@ public:
     void setSlotComputedResult(int slot, const SlotMeasureSummary &s);
     void setSlotSummary(int slot, const core::ProductionSlotSummary &s);
     void setSlotSummaries(const QVector<core::ProductionSlotSummary> &summaries);
+    void clearActiveSlotsComputedResults();
     void clearCurrentBatch();
     void setReservedCalibrationSlot(int slot = 15);
     void setCalibrationMode(bool enabled);

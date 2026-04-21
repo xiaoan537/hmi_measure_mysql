@@ -396,8 +396,14 @@ void ProductionWidget::updateSlotCard(int slot)
             }
         }
     }
-    if (summary.isEmpty() && slot_notes_.size() == 16 && !slot_notes_[slot].isEmpty()) {
-        summary = slot_notes_[slot];
+    if (summary.isEmpty() && slot_notes_.size() == 16) {
+        const QString note = slot_notes_[slot].trimmed();
+        // 卡片不展示流程步骤提示（如“PLC扫码中”），仅保留明确异常提示。
+        if (!note.isEmpty()
+            && slot_states_.size() == 16
+            && slot_states_[slot] == SlotRuntimeState::ScanMismatch) {
+            summary = note;
+        }
     }
     if (summary.isEmpty()) summary = QStringLiteral("—");
 
@@ -742,6 +748,34 @@ void ProductionWidget::setSlotSummaries(const QVector<core::ProductionSlotSummar
 {
     for (const auto &s : summaries) {
         setSlotSummary(s.slot_index, s);
+    }
+}
+
+void ProductionWidget::clearActiveSlotsComputedResults()
+{
+    if (slot_meas_.size() != 16) slot_meas_ = QVector<SlotMeasureSummary>(16);
+    if (slot_result_tokens_.size() != 16) slot_result_tokens_ = QVector<quint32>(16, 0);
+    if (slot_notes_.size() != 16) slot_notes_ = QVector<QString>(16);
+    if (slot_states_.size() != 16) slot_states_ = QVector<SlotRuntimeState>(16, SlotRuntimeState::Empty);
+
+    const quint16 activeMask = action_slot_mask_;
+    if (activeMask == 0) return;
+
+    for (int i = 0; i < 16; ++i) {
+        if (((activeMask >> i) & 0x1u) == 0) continue;
+        slot_meas_[i] = SlotMeasureSummary{};
+        slot_result_tokens_[i] = 0;
+        slot_notes_[i].clear();
+
+        const bool present = ((tray_present_ >> i) & 0x1u) != 0;
+        if (!present) {
+            slot_states_[i] = SlotRuntimeState::Empty;
+        } else if (i == reserved_cal_slot_ && calibration_mode_) {
+            slot_states_[i] = SlotRuntimeState::Calibration;
+        } else {
+            slot_states_[i] = SlotRuntimeState::Loaded;
+        }
+        updateSlotCard(i);
     }
 }
 

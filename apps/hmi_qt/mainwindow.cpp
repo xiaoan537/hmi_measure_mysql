@@ -24,6 +24,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QAbstractButton>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVariantMap>
@@ -1142,12 +1143,17 @@ bool MainWindow::tryAutoWritePcAck() {
 
 void MainWindow::promptNgDecisionAndDispatch() {
   if (!plcRuntime_) return;
-  const auto decide = QMessageBox::question(
-      this,
-      QStringLiteral("NG处理决策"),
-      QStringLiteral("本次判定为 NG。\n选择“是”执行当前件复测；选择“否”继续（不复测）。"),
-      QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-      QMessageBox::Yes);
+  QMessageBox box(QMessageBox::Question,
+                  QStringLiteral("NG处理决策"),
+                  QStringLiteral("本次判定为 NG。\n请选择后续处理方式："),
+                  QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
+                  this);
+  box.setDefaultButton(QMessageBox::Yes);
+  if (auto *btn = box.button(QMessageBox::Yes)) btn->setText(QStringLiteral("当前件复测"));
+  if (auto *btn = box.button(QMessageBox::No)) btn->setText(QStringLiteral("继续（不复测）"));
+  if (auto *btn = box.button(QMessageBox::Cancel)) btn->setText(QStringLiteral("取消"));
+  box.exec();
+  const auto decide = box.standardButton(box.clickedButton());
   if (decide == QMessageBox::Cancel) {
     appendProductionLog(QStringLiteral("NG自动分支：用户取消决策，保持当前步骤等待人工处理"));
     return;
@@ -1360,6 +1366,10 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
   if (!ok) { handlePlcRuntimeError(err); return; }
+  if (cmd == QStringLiteral("START_RETEST_CURRENT") && productionWidget_) {
+    productionWidget_->clearActiveSlotsComputedResults();
+    appendProductionLog(QStringLiteral("复测：已清理活跃槽位旧结果显示，等待新结果覆盖"));
+  }
   if (cmd == QStringLiteral("START_CALIBRATION")) {
     calibrationFlowExpected_ = true;
   } else if (cmd == QStringLiteral("START_AUTO") ||
