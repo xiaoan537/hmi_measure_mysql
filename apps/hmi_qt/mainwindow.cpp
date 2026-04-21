@@ -78,12 +78,15 @@ QString interlockMaskText(quint32 mask) {
   return reasons.isEmpty() ? QStringLiteral("无") : reasons.join(QStringLiteral(" | "));
 }
 
-bool isCalibrationStepCode(quint16 stepState) {
-  return plc_step_rules_v26::isCalibrationStep(stepState);
+bool isCalibrationStepCode(quint16 stepState, bool calibrationFlowExpected) {
+  if (plc_step_rules_v26::isCalibrationStep(stepState)) {
+    return true;
+  }
+  return calibrationFlowExpected && plc_step_rules_v26::isCalibrationInitStep(stepState);
 }
 
 bool isCalibrationContext(bool hasLastStatus, bool calibrationFlowExpected, quint16 stepState) {
-  return hasLastStatus && calibrationFlowExpected && isCalibrationStepCode(stepState);
+  return hasLastStatus && isCalibrationStepCode(stepState, calibrationFlowExpected);
 }
 
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
@@ -439,8 +442,7 @@ void MainWindow::setupPlcRuntime(const core::AppConfig &cfg) {
             }
             if (manualMaintainWidget_) {
               const bool calCtx = hasLastStatus_
-                                  && calibrationFlowExpected_
-                                  && isCalibrationStepCode(lastStatus_.step_state);
+                                  && isCalibrationStepCode(lastStatus_.step_state, calibrationFlowExpected_);
               manualMaintainWidget_->setRuntimeSummary(connected,
                                                        hasLastStatus_ ? machineStateText(lastStatus_.machine_state) : QStringLiteral("-"),
                                                        hasLastStatus_ ? stepStateText(lastStatus_.step_state, lastStatus_.scan_done, calCtx) : QStringLiteral("-"));
@@ -619,17 +621,6 @@ void MainWindow::setupBusinessPageBindings() {
               updatePlcStatusLabel();
               plcRuntime_->pollOnce();
             });
-    connect(calibrationWidget_, &CalibrationWidget::requestSetPlcMode,
-            this, [this](int mode){
-              if (!plcRuntime_) return;
-              QString err;
-              if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) {
-                handlePlcRuntimeError(err);
-                return;
-              }
-              appendCalibrationLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode)));
-              plcRuntime_->pollOnce();
-            });
     connect(calibrationWidget_, &CalibrationWidget::requestWriteCategoryMode,
             this, [this](int partTypeArg){
               if (!plcRuntime_) return;
@@ -727,8 +718,7 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
   }
   if (manualMaintainWidget_) {
     const bool calCtx = hasLastStatus_
-                        && calibrationFlowExpected_
-                        && isCalibrationStepCode(lastStatus_.step_state);
+                        && isCalibrationStepCode(lastStatus_.step_state, calibrationFlowExpected_);
     manualMaintainWidget_->setRuntimeSummary(stats.connected,
                                              hasLastStatus_ ? machineStateText(lastStatus_.machine_state) : QStringLiteral("-"),
                                              hasLastStatus_ ? stepStateText(lastStatus_.step_state, lastStatus_.scan_done, calCtx) : QStringLiteral("-"));
@@ -1022,7 +1012,7 @@ void MainWindow::updateCalibrationAutoState(quint16 stepState) {
     next = CalibrationAutoState::Completed;
     break;
   default:
-    if (!isCalibrationStepCode(stepState)) {
+    if (!isCalibrationStepCode(stepState, calibrationFlowExpected_)) {
       next = CalibrationAutoState::Idle;
       calibrationFlowExpected_ = false;
     }
@@ -1033,7 +1023,9 @@ void MainWindow::updateCalibrationAutoState(quint16 stepState) {
   QString text;
   switch (calibrationAutoState_) {
   case CalibrationAutoState::Idle: text = QStringLiteral("空闲"); break;
-  case CalibrationAutoState::WaitLoadSlot16: text = QStringLiteral("等待槽16上料"); break;
+  case CalibrationAutoState::WaitLoadSlot16:
+    text = QStringLiteral("等待槽%1上料").arg(core::kCalibrationSlotIndex + 1);
+    break;
   case CalibrationAutoState::WaitPcConfirm: text = QStringLiteral("等待PC确认"); break;
   case CalibrationAutoState::Measuring: text = QStringLiteral("标定测量中"); break;
   case CalibrationAutoState::WaitPcRead: text = QStringLiteral("等待PC读取"); break;
@@ -1304,7 +1296,17 @@ void MainWindow::processAutoScanIdCheck() {
 
 void MainWindow::processAutoMailboxFlow() {
   if (!plcRuntime_ || !hasLastMailboxSnapshot_ || !lastMailboxSnapshot_) return;
-  if (hasLastStatus_ && calibrationFlowExpected_ && isCalibrationStepCode(lastStatus_.step_state)) {
+  const bool calibrationContext = hasLastStatus_ && isCalibrationStepCode(lastStatus_.step_state, calibrationFlowExpected_);
+  if (calibrationContext) {
+    if (!handleComputeResultRequested(lastMailboxSnapshot_->part_type, true)) {
+      appendCalibrationLog(QStringLiteral("标定自动流：测量包计算失败，保持等待人工处理"));
+      return;
+    }
+    if (!lastComputeHasItems_) {
+      appendCalibrationLog(QStringLiteral("标定自动流：本次测量包无有效工件"));
+      return;
+    }
+    appendCalibrationLog(QStringLiteral("标定自动流：计算完成，结果已更新到标定页"));
     return;
   }
 
@@ -1357,7 +1359,7 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     if (!partTypeText.isEmpty() && (partTypeText.at(0) == QChar('A') || partTypeText.at(0) == QChar('B'))) {
       preferredPartType = partTypeText.at(0);
     }
-    handleComputeResultRequested(preferredPartType);
+    handleComputeResultRequested(preferredPartType, fromCalibrationUi);
     return;
   }
   if (cmd == QStringLiteral("CONTINUE_AFTER_ID_CHECK")) {
@@ -1430,6 +1432,16 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
   if (!ok) { handlePlcRuntimeError(err); return; }
+  if (commandInCalibrationFlow
+      && (cmd == QStringLiteral("START_RETEST_CURRENT")
+          || cmd == QStringLiteral("CONTINUE_NO_RETEST"))) {
+    err.clear();
+    if (!plcRuntime_->sendPcAck(1, &err)) {
+      handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 iPc_Ack=1 失败") : err);
+      return;
+    }
+    appendCmdLog(QStringLiteral("已写 iPc_Ack=1"));
+  }
   if (cmd == QStringLiteral("START_RETEST_CURRENT") && productionWidget_ && !commandInCalibrationFlow) {
     productionWidget_->clearActiveSlotsComputedResults();
     appendCmdLog(QStringLiteral("复测：已清理活跃槽位旧结果显示，等待新结果覆盖"));
@@ -1516,44 +1528,44 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType, bool prefer
     }
   }
 
-  if (!calibrationContext) {
-    for (const auto &item : snapshot.items) {
-      const QString slotText = item.slot_index >= 0 ? QString::number(item.slot_index + 1) : QStringLiteral("-");
-      const QString idText = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
-      if (snapshot.part_type == QChar('A')) {
-        appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 总长=%4 原始点数=%5")
-                             .arg(item.item_index)
-                             .arg(slotText)
-                             .arg(idText)
-                             .arg(item.total_len_mm, 0, 'f', 6)
-                             .arg(item.raw_points_um.size()));
-      } else {
-        appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 原始点数=%6")
-                             .arg(item.item_index)
-                             .arg(slotText)
-                             .arg(idText)
-                             .arg(item.ad_len_mm, 0, 'f', 6)
-                             .arg(item.bc_len_mm, 0, 'f', 6)
-                             .arg(item.raw_points_um.size()));
-      }
-      if (!item.raw_points_um.isEmpty()) {
-        QStringList vals;
-        vals.reserve(item.raw_points_um.size());
-        for (float v : item.raw_points_um) vals << QString::number(v, 'f', 6);
-        appendMailboxLog(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
-      }
+  for (const auto &item : snapshot.items) {
+    const QString slotText = item.slot_index >= 0 ? QString::number(item.slot_index + 1) : QStringLiteral("-");
+    const QString idText = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
+    if (snapshot.part_type == QChar('A')) {
+      appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 总长=%4 原始点数=%5")
+                           .arg(item.item_index)
+                           .arg(slotText)
+                           .arg(idText)
+                           .arg(item.total_len_mm, 0, 'f', 6)
+                           .arg(item.raw_points_um.size()));
+    } else {
+      appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 原始点数=%6")
+                           .arg(item.item_index)
+                           .arg(slotText)
+                           .arg(idText)
+                           .arg(item.ad_len_mm, 0, 'f', 6)
+                           .arg(item.bc_len_mm, 0, 'f', 6)
+                           .arg(item.raw_points_um.size()));
+    }
+    if (!item.raw_points_um.isEmpty()) {
+      QStringList vals;
+      vals.reserve(item.raw_points_um.size());
+      for (float v : item.raw_points_um) vals << QString::number(v, 'f', 6);
+      appendMailboxLog(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
     }
   }
 }
 
-bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
+bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
+                                              bool preferCalibrationContext,
+                                              bool forceReloadMailbox) {
   if (!plcRuntime_) return false;
   lastComputeHasItems_ = false;
   lastComputeOverallOk_ = false;
   lastComputePartType_ = preferredPartType.toUpper();
 
   core::PlcMailboxSnapshot snapshot;
-  if (hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
+  if (!forceReloadMailbox && hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
     snapshot = *lastMailboxSnapshot_;
   } else {
     QString err;
@@ -1584,7 +1596,18 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_a_k_runout_mm);
   const core::RunoutAlgoParams runoutParamsD =
       buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_d_k_runout_mm);
-  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  const bool calibrationContext =
+      preferCalibrationContext ||
+      isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  const auto &spec_a_total_len = calibrationContext ? appCfg_.algo.cal_spec_a_total_len : appCfg_.algo.spec_a_total_len;
+  const auto &spec_a_id_left = calibrationContext ? appCfg_.algo.cal_spec_a_id_left : appCfg_.algo.spec_a_id_left;
+  const auto &spec_a_od_left = calibrationContext ? appCfg_.algo.cal_spec_a_od_left : appCfg_.algo.spec_a_od_left;
+  const auto &spec_a_id_right = calibrationContext ? appCfg_.algo.cal_spec_a_id_right : appCfg_.algo.spec_a_id_right;
+  const auto &spec_a_od_right = calibrationContext ? appCfg_.algo.cal_spec_a_od_right : appCfg_.algo.spec_a_od_right;
+  const auto &spec_b_ad_len = calibrationContext ? appCfg_.algo.cal_spec_b_ad_len : appCfg_.algo.spec_b_ad_len;
+  const auto &spec_b_bc_len = calibrationContext ? appCfg_.algo.cal_spec_b_bc_len : appCfg_.algo.spec_b_bc_len;
+  const auto &spec_b_runout_left = calibrationContext ? appCfg_.algo.cal_spec_b_runout_left : appCfg_.algo.spec_b_runout_left;
+  const auto &spec_b_runout_right = calibrationContext ? appCfg_.algo.cal_spec_b_runout_right : appCfg_.algo.spec_b_runout_right;
   auto appendComputeLog = [this, calibrationContext](const QString &line) {
     if (calibrationContext) appendCalibrationLog(line);
     else appendProductionLog(line);
@@ -1608,6 +1631,8 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
                        .arg(formatNumber(appCfg_.algo.b_d_k_runout_mm)));
   const QString runoutMetric = normalizedRunoutMetric(appCfg_.algo.runout_metric);
   appendComputeLog(QStringLiteral("B型跳动口径：%1").arg(runoutMetric));
+  appendComputeLog(QStringLiteral("判定规则：%1")
+                       .arg(calibrationContext ? QStringLiteral("标定判定规则") : QStringLiteral("生产判定规则")));
 
   int expectedItemCount = 0;
   int judgedItemCount = 0;
@@ -1668,15 +1693,15 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
 
       JudgeEvalState judge;
       evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,
-                       appCfg_.algo.spec_a_total_len, true, &judge);
+                       spec_a_total_len, true, &judge);
       evaluateSpecItem(QStringLiteral("A左内径"), slotSummary.compute.values.id_left_mm,
-                       appCfg_.algo.spec_a_id_left, false, &judge);
+                       spec_a_id_left, false, &judge);
       evaluateSpecItem(QStringLiteral("A左外径"), slotSummary.compute.values.od_left_mm,
-                       appCfg_.algo.spec_a_od_left, false, &judge);
+                       spec_a_od_left, false, &judge);
       evaluateSpecItem(QStringLiteral("A右内径"), slotSummary.compute.values.id_right_mm,
-                       appCfg_.algo.spec_a_id_right, false, &judge);
+                       spec_a_id_right, false, &judge);
       evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
-                       appCfg_.algo.spec_a_od_right, false, &judge);
+                       spec_a_od_right, false, &judge);
       finalizeSlotJudgement(&slotSummary, &judge);
       judgedItemCount += 1;
       if (!slotSummary.judgement_ok) overallOk = false;
@@ -1732,13 +1757,13 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
 
       JudgeEvalState judge;
       evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
-                       appCfg_.algo.spec_b_ad_len, true, &judge);
+                       spec_b_ad_len, true, &judge);
       evaluateSpecItem(QStringLiteral("B_BC长度"), slotSummary.compute.values.bc_len_mm,
-                       appCfg_.algo.spec_b_bc_len, true, &judge);
+                       spec_b_bc_len, true, &judge);
       evaluateSpecItem(QStringLiteral("B左跳动"), slotSummary.compute.values.runout_left_mm,
-                       appCfg_.algo.spec_b_runout_left, false, &judge);
+                       spec_b_runout_left, false, &judge);
       evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
-                       appCfg_.algo.spec_b_runout_right, false, &judge);
+                       spec_b_runout_right, false, &judge);
       finalizeSlotJudgement(&slotSummary, &judge);
       judgedItemCount += 1;
       if (!slotSummary.judgement_ok) overallOk = false;

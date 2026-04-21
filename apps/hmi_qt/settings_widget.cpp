@@ -1,8 +1,14 @@
 #include "settings_widget.hpp"
 
 #include <QCheckBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QLabel>
 #include <QMessageBox>
 #include <QSettings>
+#include <QSpacerItem>
 
 #include "core/db.hpp"
 
@@ -12,6 +18,7 @@ SettingsWidget::SettingsWidget(const core::AppConfig& cfg, const QString& iniPat
   : QWidget(parent), ui_(new Ui::SettingsWidget), cfg_(cfg), iniPath_(iniPath)
 {
   ui_->setupUi(this);
+  setupCalibrationJudgeEditors();
   loadToUi(cfg_);
 
   connect(ui_->btnReload, &QPushButton::clicked, this, &SettingsWidget::onReloadClicked);
@@ -29,6 +36,78 @@ SettingsWidget::SettingsWidget(const core::AppConfig& cfg, const QString& iniPat
 SettingsWidget::~SettingsWidget()
 {
   delete ui_;
+}
+
+QDoubleSpinBox* SettingsWidget::makeSpecSpinBox(QWidget* parent, double min, double max, double value)
+{
+  auto* spin = new QDoubleSpinBox(parent);
+  spin->setDecimals(6);
+  spin->setRange(min, max);
+  spin->setValue(value);
+  return spin;
+}
+
+void SettingsWidget::setSpecRow(QGridLayout* grid, int row, const QString& title, QDoubleSpinBox*& stdSpin, QDoubleSpinBox*& tolSpin)
+{
+  if (!grid) return;
+  QWidget* parent = grid->parentWidget();
+  auto* label = new QLabel(title, parent);
+  stdSpin = makeSpecSpinBox(parent, -1000000.0, 1000000.0, 0.0);
+  tolSpin = makeSpecSpinBox(parent, -1.0, 1000000.0, -1.0);
+  grid->addWidget(label, row, 0, Qt::AlignLeft | Qt::AlignVCenter);
+  grid->addWidget(stdSpin, row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+  grid->addWidget(tolSpin, row, 2, Qt::AlignLeft | Qt::AlignVCenter);
+}
+
+void SettingsWidget::setupCalibrationJudgeEditors()
+{
+  if (!ui_->layoutAlgoJudge) return;
+  auto* layout = ui_->layoutAlgoJudge;
+  if (ui_->groupJudgeA) ui_->groupJudgeA->setTitle(QStringLiteral("A型生产判定规格（标准值 / 公差）"));
+  if (ui_->groupJudgeB) ui_->groupJudgeB->setTitle(QStringLiteral("B型生产判定规格（标准值 / 公差）"));
+  if (ui_->labelJudgeSpecHint) ui_->labelJudgeSpecHint->setText(QStringLiteral("提示：生产判定公差<0 表示该项不参与判定"));
+
+  if (QLayoutItem* oldBottomSpacer = layout->itemAtPosition(3, 0)) {
+    layout->removeItem(oldBottomSpacer);
+    delete oldBottomSpacer;
+  }
+
+  auto* labelHint = new QLabel(QStringLiteral("提示：标定判定独立于生产判定；公差<0 表示该项不参与判定"), this);
+  labelHint->setWordWrap(true);
+  layout->addWidget(labelHint, 3, 0, 1, 2);
+
+  auto* groupCalA = new QGroupBox(QStringLiteral("A型标定判定规格（标准值 / 公差）"), this);
+  auto* gridCalA = new QGridLayout(groupCalA);
+  gridCalA->addWidget(new QLabel(QStringLiteral("项目"), groupCalA), 0, 0, Qt::AlignLeft);
+  gridCalA->addWidget(new QLabel(QStringLiteral("标准(mm)"), groupCalA), 0, 1, Qt::AlignLeft);
+  gridCalA->addWidget(new QLabel(QStringLiteral("公差(mm)"), groupCalA), 0, 2, Qt::AlignLeft);
+  setSpecRow(gridCalA, 1, QStringLiteral("A总长"), calSpecEditors_.a_total_len_std, calSpecEditors_.a_total_len_tol);
+  setSpecRow(gridCalA, 2, QStringLiteral("A左内径"), calSpecEditors_.a_id_left_std, calSpecEditors_.a_id_left_tol);
+  setSpecRow(gridCalA, 3, QStringLiteral("A左外径"), calSpecEditors_.a_od_left_std, calSpecEditors_.a_od_left_tol);
+  setSpecRow(gridCalA, 4, QStringLiteral("A右内径"), calSpecEditors_.a_id_right_std, calSpecEditors_.a_id_right_tol);
+  setSpecRow(gridCalA, 5, QStringLiteral("A右外径"), calSpecEditors_.a_od_right_std, calSpecEditors_.a_od_right_tol);
+  gridCalA->setColumnStretch(0, 0);
+  gridCalA->setColumnStretch(1, 0);
+  gridCalA->setColumnStretch(2, 0);
+  gridCalA->setColumnStretch(3, 1);
+  layout->addWidget(groupCalA, 4, 0, Qt::AlignTop);
+
+  auto* groupCalB = new QGroupBox(QStringLiteral("B型标定判定规格（标准值 / 公差）"), this);
+  auto* gridCalB = new QGridLayout(groupCalB);
+  gridCalB->addWidget(new QLabel(QStringLiteral("项目"), groupCalB), 0, 0, Qt::AlignLeft);
+  gridCalB->addWidget(new QLabel(QStringLiteral("标准(mm)"), groupCalB), 0, 1, Qt::AlignLeft);
+  gridCalB->addWidget(new QLabel(QStringLiteral("公差(mm)"), groupCalB), 0, 2, Qt::AlignLeft);
+  setSpecRow(gridCalB, 1, QStringLiteral("B_AD长度"), calSpecEditors_.b_ad_len_std, calSpecEditors_.b_ad_len_tol);
+  setSpecRow(gridCalB, 2, QStringLiteral("B_BC长度"), calSpecEditors_.b_bc_len_std, calSpecEditors_.b_bc_len_tol);
+  setSpecRow(gridCalB, 3, QStringLiteral("B左跳动"), calSpecEditors_.b_runout_left_std, calSpecEditors_.b_runout_left_tol);
+  setSpecRow(gridCalB, 4, QStringLiteral("B右跳动"), calSpecEditors_.b_runout_right_std, calSpecEditors_.b_runout_right_tol);
+  gridCalB->setColumnStretch(0, 0);
+  gridCalB->setColumnStretch(1, 0);
+  gridCalB->setColumnStretch(2, 0);
+  gridCalB->setColumnStretch(3, 1);
+  layout->addWidget(groupCalB, 4, 1, Qt::AlignTop);
+
+  layout->addItem(new QSpacerItem(20, 40, QSizePolicy::Minimum, QSizePolicy::Expanding), 5, 0, 1, 2);
 }
 
 void SettingsWidget::loadToUi(const core::AppConfig& c)
@@ -114,6 +193,25 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->doubleSpecBRunoutLeftTol->setValue(c.algo.spec_b_runout_left.tolerance_mm);
   ui_->doubleSpecBRunoutRightStd->setValue(c.algo.spec_b_runout_right.standard_mm);
   ui_->doubleSpecBRunoutRightTol->setValue(c.algo.spec_b_runout_right.tolerance_mm);
+
+  if (calSpecEditors_.a_total_len_std) calSpecEditors_.a_total_len_std->setValue(c.algo.cal_spec_a_total_len.standard_mm);
+  if (calSpecEditors_.a_total_len_tol) calSpecEditors_.a_total_len_tol->setValue(c.algo.cal_spec_a_total_len.tolerance_mm);
+  if (calSpecEditors_.a_id_left_std) calSpecEditors_.a_id_left_std->setValue(c.algo.cal_spec_a_id_left.standard_mm);
+  if (calSpecEditors_.a_id_left_tol) calSpecEditors_.a_id_left_tol->setValue(c.algo.cal_spec_a_id_left.tolerance_mm);
+  if (calSpecEditors_.a_od_left_std) calSpecEditors_.a_od_left_std->setValue(c.algo.cal_spec_a_od_left.standard_mm);
+  if (calSpecEditors_.a_od_left_tol) calSpecEditors_.a_od_left_tol->setValue(c.algo.cal_spec_a_od_left.tolerance_mm);
+  if (calSpecEditors_.a_id_right_std) calSpecEditors_.a_id_right_std->setValue(c.algo.cal_spec_a_id_right.standard_mm);
+  if (calSpecEditors_.a_id_right_tol) calSpecEditors_.a_id_right_tol->setValue(c.algo.cal_spec_a_id_right.tolerance_mm);
+  if (calSpecEditors_.a_od_right_std) calSpecEditors_.a_od_right_std->setValue(c.algo.cal_spec_a_od_right.standard_mm);
+  if (calSpecEditors_.a_od_right_tol) calSpecEditors_.a_od_right_tol->setValue(c.algo.cal_spec_a_od_right.tolerance_mm);
+  if (calSpecEditors_.b_ad_len_std) calSpecEditors_.b_ad_len_std->setValue(c.algo.cal_spec_b_ad_len.standard_mm);
+  if (calSpecEditors_.b_ad_len_tol) calSpecEditors_.b_ad_len_tol->setValue(c.algo.cal_spec_b_ad_len.tolerance_mm);
+  if (calSpecEditors_.b_bc_len_std) calSpecEditors_.b_bc_len_std->setValue(c.algo.cal_spec_b_bc_len.standard_mm);
+  if (calSpecEditors_.b_bc_len_tol) calSpecEditors_.b_bc_len_tol->setValue(c.algo.cal_spec_b_bc_len.tolerance_mm);
+  if (calSpecEditors_.b_runout_left_std) calSpecEditors_.b_runout_left_std->setValue(c.algo.cal_spec_b_runout_left.standard_mm);
+  if (calSpecEditors_.b_runout_left_tol) calSpecEditors_.b_runout_left_tol->setValue(c.algo.cal_spec_b_runout_left.tolerance_mm);
+  if (calSpecEditors_.b_runout_right_std) calSpecEditors_.b_runout_right_std->setValue(c.algo.cal_spec_b_runout_right.standard_mm);
+  if (calSpecEditors_.b_runout_right_tol) calSpecEditors_.b_runout_right_tol->setValue(c.algo.cal_spec_b_runout_right.tolerance_mm);
 }
 
 core::AppConfig SettingsWidget::readFromUi() const
@@ -197,6 +295,26 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.algo.spec_b_runout_left.tolerance_mm = ui_->doubleSpecBRunoutLeftTol->value();
   c.algo.spec_b_runout_right.standard_mm = ui_->doubleSpecBRunoutRightStd->value();
   c.algo.spec_b_runout_right.tolerance_mm = ui_->doubleSpecBRunoutRightTol->value();
+
+  if (calSpecEditors_.a_total_len_std) c.algo.cal_spec_a_total_len.standard_mm = calSpecEditors_.a_total_len_std->value();
+  if (calSpecEditors_.a_total_len_tol) c.algo.cal_spec_a_total_len.tolerance_mm = calSpecEditors_.a_total_len_tol->value();
+  if (calSpecEditors_.a_id_left_std) c.algo.cal_spec_a_id_left.standard_mm = calSpecEditors_.a_id_left_std->value();
+  if (calSpecEditors_.a_id_left_tol) c.algo.cal_spec_a_id_left.tolerance_mm = calSpecEditors_.a_id_left_tol->value();
+  if (calSpecEditors_.a_od_left_std) c.algo.cal_spec_a_od_left.standard_mm = calSpecEditors_.a_od_left_std->value();
+  if (calSpecEditors_.a_od_left_tol) c.algo.cal_spec_a_od_left.tolerance_mm = calSpecEditors_.a_od_left_tol->value();
+  if (calSpecEditors_.a_id_right_std) c.algo.cal_spec_a_id_right.standard_mm = calSpecEditors_.a_id_right_std->value();
+  if (calSpecEditors_.a_id_right_tol) c.algo.cal_spec_a_id_right.tolerance_mm = calSpecEditors_.a_id_right_tol->value();
+  if (calSpecEditors_.a_od_right_std) c.algo.cal_spec_a_od_right.standard_mm = calSpecEditors_.a_od_right_std->value();
+  if (calSpecEditors_.a_od_right_tol) c.algo.cal_spec_a_od_right.tolerance_mm = calSpecEditors_.a_od_right_tol->value();
+
+  if (calSpecEditors_.b_ad_len_std) c.algo.cal_spec_b_ad_len.standard_mm = calSpecEditors_.b_ad_len_std->value();
+  if (calSpecEditors_.b_ad_len_tol) c.algo.cal_spec_b_ad_len.tolerance_mm = calSpecEditors_.b_ad_len_tol->value();
+  if (calSpecEditors_.b_bc_len_std) c.algo.cal_spec_b_bc_len.standard_mm = calSpecEditors_.b_bc_len_std->value();
+  if (calSpecEditors_.b_bc_len_tol) c.algo.cal_spec_b_bc_len.tolerance_mm = calSpecEditors_.b_bc_len_tol->value();
+  if (calSpecEditors_.b_runout_left_std) c.algo.cal_spec_b_runout_left.standard_mm = calSpecEditors_.b_runout_left_std->value();
+  if (calSpecEditors_.b_runout_left_tol) c.algo.cal_spec_b_runout_left.tolerance_mm = calSpecEditors_.b_runout_left_tol->value();
+  if (calSpecEditors_.b_runout_right_std) c.algo.cal_spec_b_runout_right.standard_mm = calSpecEditors_.b_runout_right_std->value();
+  if (calSpecEditors_.b_runout_right_tol) c.algo.cal_spec_b_runout_right.tolerance_mm = calSpecEditors_.b_runout_right_tol->value();
 
   return c;
 }
@@ -306,6 +424,26 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("spec_b_runout_left_tolerance_mm", c.algo.spec_b_runout_left.tolerance_mm);
   s.setValue("spec_b_runout_right_standard_mm", c.algo.spec_b_runout_right.standard_mm);
   s.setValue("spec_b_runout_right_tolerance_mm", c.algo.spec_b_runout_right.tolerance_mm);
+
+  s.setValue("cal_spec_a_total_len_standard_mm", c.algo.cal_spec_a_total_len.standard_mm);
+  s.setValue("cal_spec_a_total_len_tolerance_mm", c.algo.cal_spec_a_total_len.tolerance_mm);
+  s.setValue("cal_spec_a_id_left_standard_mm", c.algo.cal_spec_a_id_left.standard_mm);
+  s.setValue("cal_spec_a_id_left_tolerance_mm", c.algo.cal_spec_a_id_left.tolerance_mm);
+  s.setValue("cal_spec_a_od_left_standard_mm", c.algo.cal_spec_a_od_left.standard_mm);
+  s.setValue("cal_spec_a_od_left_tolerance_mm", c.algo.cal_spec_a_od_left.tolerance_mm);
+  s.setValue("cal_spec_a_id_right_standard_mm", c.algo.cal_spec_a_id_right.standard_mm);
+  s.setValue("cal_spec_a_id_right_tolerance_mm", c.algo.cal_spec_a_id_right.tolerance_mm);
+  s.setValue("cal_spec_a_od_right_standard_mm", c.algo.cal_spec_a_od_right.standard_mm);
+  s.setValue("cal_spec_a_od_right_tolerance_mm", c.algo.cal_spec_a_od_right.tolerance_mm);
+
+  s.setValue("cal_spec_b_ad_len_standard_mm", c.algo.cal_spec_b_ad_len.standard_mm);
+  s.setValue("cal_spec_b_ad_len_tolerance_mm", c.algo.cal_spec_b_ad_len.tolerance_mm);
+  s.setValue("cal_spec_b_bc_len_standard_mm", c.algo.cal_spec_b_bc_len.standard_mm);
+  s.setValue("cal_spec_b_bc_len_tolerance_mm", c.algo.cal_spec_b_bc_len.tolerance_mm);
+  s.setValue("cal_spec_b_runout_left_standard_mm", c.algo.cal_spec_b_runout_left.standard_mm);
+  s.setValue("cal_spec_b_runout_left_tolerance_mm", c.algo.cal_spec_b_runout_left.tolerance_mm);
+  s.setValue("cal_spec_b_runout_right_standard_mm", c.algo.cal_spec_b_runout_right.standard_mm);
+  s.setValue("cal_spec_b_runout_right_tolerance_mm", c.algo.cal_spec_b_runout_right.tolerance_mm);
   s.endGroup();
 
   s.sync();

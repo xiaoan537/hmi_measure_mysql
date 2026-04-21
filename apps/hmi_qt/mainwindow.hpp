@@ -53,7 +53,9 @@ private:
     void handleWriteTrayPartIdRequested(int slotIndex, const QString &partId);
     void handleReadMailboxRequested(QChar preferredPartType = QChar('A'),
                                     bool preferCalibrationContext = false);
-    bool handleComputeResultRequested(QChar preferredPartType = QChar('A'));
+    bool handleComputeResultRequested(QChar preferredPartType = QChar('A'),
+                                      bool preferCalibrationContext = false,
+                                      bool forceReloadMailbox = false);
     void handleAckMailboxRequested(bool preferCalibrationContext = false);
     void refreshManualMaintainLiveStatus();
     void appendProductionLog(const QString &text);

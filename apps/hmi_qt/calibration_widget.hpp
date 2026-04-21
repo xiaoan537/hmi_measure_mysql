@@ -40,7 +40,6 @@ signals:
     void requestReadMailbox();
     void requestAckMailbox();
     void requestReconnectPlc();
-    void requestSetPlcMode(int mode);
     void requestWriteCategoryMode(int partTypeArg);
 
 private:

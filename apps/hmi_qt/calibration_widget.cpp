@@ -74,9 +74,8 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     auto *ctrlRow = new QHBoxLayout();
     ctrlRow->addWidget(new QLabel(QStringLiteral("控制模式"), this));
     plcModeCombo_ = new QComboBox(this);
-    plcModeCombo_->addItem(QStringLiteral("手动"), 1);
     plcModeCombo_->addItem(QStringLiteral("自动"), 2);
-    plcModeCombo_->addItem(QStringLiteral("单步"), 3);
+    plcModeCombo_->setEnabled(false);
     ctrlRow->addWidget(plcModeCombo_);
     ctrlRow->addSpacing(12);
     ctrlRow->addWidget(new QLabel(QStringLiteral("标定类型"), this));
@@ -151,10 +150,6 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     connect(btnMuteTop, &QPushButton::clicked, this, [this, cmdArgs]{
         emit uiCommandRequested(QStringLiteral("ALARM_MUTE"), cmdArgs());
         appendLogMessage(QStringLiteral("已请求：报警静音"));
-    });
-    connect(plcModeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int) {
-        emit requestSetPlcMode(selectedPlcModeValue());
-        appendLogMessage(QStringLiteral("已请求写 PLC 模式：%1").arg(plcModeCombo_->currentText()));
     });
     connect(partTypeCombo_, qOverload<int>(&QComboBox::activated), this, [this](int) {
         emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg()));

@@ -107,12 +107,18 @@ inline bool isCalibrationStep(quint16 step) {
   }
 }
 
+inline bool isCalibrationInitStep(quint16 step) {
+  return step == kStepInitPrepareB || step == kStepInitDone;
+}
+
 inline bool isCalibrationArchiveStep(quint16 step) {
   return step == kStepCalArchiveWaitDecisionA || step == kStepCalArchiveWaitDecisionB;
 }
 
 inline QString calibrationStepText(quint16 step) {
   switch (step) {
+  case kStepInitPrepareB: return QStringLiteral("标定初始化中");
+  case kStepInitDone: return QStringLiteral("标定初始化完成");
   case kStepCalPickFromRack: return QStringLiteral("从料架抓料中");
   case kStepCalLoadMeasureStation: return QStringLiteral("测量工位上料中");
   case kStepCalMeasureA:

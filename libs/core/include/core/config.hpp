@@ -132,6 +132,19 @@ struct MesConfig
         SpecValueConfig spec_b_bc_len;
         SpecValueConfig spec_b_runout_left;
         SpecValueConfig spec_b_runout_right;
+
+        // 标定判定规格（与生产判定分离）
+        // A型标定
+        SpecValueConfig cal_spec_a_total_len;
+        SpecValueConfig cal_spec_a_id_left;
+        SpecValueConfig cal_spec_a_od_left;
+        SpecValueConfig cal_spec_a_id_right;
+        SpecValueConfig cal_spec_a_od_right;
+        // B型标定
+        SpecValueConfig cal_spec_b_ad_len;
+        SpecValueConfig cal_spec_b_bc_len;
+        SpecValueConfig cal_spec_b_runout_left;
+        SpecValueConfig cal_spec_b_runout_right;
     };
 
     // PLC 运行配置：
