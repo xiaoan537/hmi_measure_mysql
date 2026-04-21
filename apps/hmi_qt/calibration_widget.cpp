@@ -137,6 +137,7 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
         args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue());
         args.insert(QStringLiteral("part_type"), selectedPartTypeText());
         args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg()));
+        args.insert(QStringLiteral("ui_source"), QStringLiteral("calibration"));
         return args;
     };
 
@@ -277,6 +278,16 @@ void CalibrationWidget::appendLogMessage(const QString &text)
     const QString trimmed = text.trimmed();
     if (trimmed.isEmpty()) return;
     listMessages_->addItem(trimmed);
+}
+
+QString CalibrationWidget::masterPartIdForType(QChar partType) const
+{
+    const bool isB = partType.toUpper() == QChar('B');
+    const QString id = isB
+                           ? (editMasterB_ ? editMasterB_->text().trimmed() : QString())
+                           : (editMasterA_ ? editMasterA_->text().trimmed() : QString());
+    if (!id.isEmpty()) return id;
+    return isB ? QStringLiteral("CAL-B-001") : QStringLiteral("CAL-A-001");
 }
 
 QString CalibrationWidget::selectedPartTypeText() const

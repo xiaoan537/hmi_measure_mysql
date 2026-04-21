@@ -410,7 +410,7 @@ void ProductionWidget::updateSlotCard(int slot)
 
     QString title = QStringLiteral("槽位%1").arg(slot + 1);
     if (slot == reserved_cal_slot_) {
-        title += QStringLiteral("*");
+        title += QStringLiteral("（标定槽）");
     }
 
     btn->setText(QStringLiteral("%1\n%2\n%3\n%4")

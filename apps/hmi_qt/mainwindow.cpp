@@ -82,6 +82,10 @@ bool isCalibrationStepCode(quint16 stepState) {
   return plc_step_rules_v26::isCalibrationStep(stepState);
 }
 
+bool isCalibrationContext(bool hasLastStatus, bool calibrationFlowExpected, quint16 stepState) {
+  return hasLastStatus && calibrationFlowExpected && isCalibrationStepCode(stepState);
+}
+
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
   const QVariant v = args.value(key);
   if (!v.isValid()) return def;
@@ -492,7 +496,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(diagnosticsWidget_, &DiagnosticsWidget::requestReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().trimmed().isEmpty() ? QChar('A') : productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(diagnosticsWidget_, &DiagnosticsWidget::requestAckMailbox,
-            this, &MainWindow::handleAckMailboxRequested);
+            this, [this] { handleAckMailboxRequested(false); });
   }
 
   if (manualMaintainWidget_) {
@@ -517,7 +521,7 @@ void MainWindow::setupDiagnosticsBindings() {
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcAckMailbox,
-            this, &MainWindow::handleAckMailboxRequested);
+            this, [this] { handleAckMailboxRequested(false); });
     connect(manualMaintainWidget_, &ManualMaintainWidget::requestPlcContinueAfterIdCheck,
             this, [this] {
               QString err;
@@ -567,7 +571,7 @@ void MainWindow::setupBusinessPageBindings() {
 
   if (productionWidget_) {
     connect(productionWidget_, &ProductionWidget::requestReadMailbox,
-            this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A')); });
+            this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A'), false); });
     connect(productionWidget_, &ProductionWidget::requestReloadSlotIds,
             this, [this] {
               core::PlcTrayPartIdBlockV2 tray; QString err;
@@ -585,7 +589,7 @@ void MainWindow::setupBusinessPageBindings() {
               }
             });
     connect(productionWidget_, &ProductionWidget::requestAckMailbox,
-            this, &MainWindow::handleAckMailboxRequested);
+            this, [this] { handleAckMailboxRequested(false); });
     connect(productionWidget_, &ProductionWidget::requestContinueAfterIdCheck,
             this, [this]{ handleUiCommandRequested(QStringLiteral("CONTINUE_AFTER_ID_CHECK"), {}); });
     connect(productionWidget_, &ProductionWidget::requestSetPlcMode,
@@ -638,9 +642,9 @@ void MainWindow::setupBusinessPageBindings() {
                                        .arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型")));
             });
     connect(calibrationWidget_, &CalibrationWidget::requestReadMailbox,
-            this, [this] { handleReadMailboxRequested(calibrationWidget_ ? calibrationWidget_->selectedPartTypeText().at(0) : QChar('A')); });
+            this, [this] { handleReadMailboxRequested(calibrationWidget_ ? calibrationWidget_->selectedPartTypeText().at(0) : QChar('A'), true); });
     connect(calibrationWidget_, &CalibrationWidget::requestAckMailbox,
-            this, &MainWindow::handleAckMailboxRequested);
+            this, [this] { handleAckMailboxRequested(true); });
     connect(calibrationWidget_, &CalibrationWidget::uiCommandRequested,
             this, &MainWindow::handleUiCommandRequested);
   }
@@ -694,7 +698,9 @@ void MainWindow::updatePlcStatusLabel() {
 void MainWindow::handlePlcRuntimeError(const QString &message) {
   if (!message.trimmed().isEmpty()) {
     statusBar()->showMessage(QStringLiteral("PLC: %1").arg(message), 5000);
-    appendProductionLog(message);
+    const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+    if (calibrationContext) appendCalibrationLog(message);
+    else appendProductionLog(message);
   }
 }
 
@@ -714,7 +720,9 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
                                      stats.poll_ok_count, stats.poll_error_count);
   }
   if (!stats.connected && plcRuntime_ && plcRuntime_->config().plc.auto_reconnect && !reconnectAttemptLogged_) {
-    appendProductionLog(QStringLiteral("尝试重新连接 PLC..."));
+    const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+    if (calibrationContext) appendCalibrationLog(QStringLiteral("尝试重新连接 PLC..."));
+    else appendProductionLog(QStringLiteral("尝试重新连接 PLC..."));
     reconnectAttemptLogged_ = true;
   }
   if (manualMaintainWidget_) {
@@ -733,7 +741,11 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   const core::PlcStatusBlockV2 prev = lastStatus_;
   lastStatus_ = status;
   hasLastStatus_ = true;
-  const bool calibrationContext = calibrationFlowExpected_ && isCalibrationStepCode(status.step_state);
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, status.step_state);
+  auto appendFlowLog = [this, calibrationContext](const QString &line) {
+    if (calibrationContext) appendCalibrationLog(line);
+    else appendProductionLog(line);
+  };
   updateCalibrationAutoState(status.step_state);
   if (manualMaintainWidget_) {
     manualMaintainWidget_->setRuntimeSummary(plcRuntime_ ? plcRuntime_->isConnected() : false,
@@ -752,22 +764,22 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
   }
 
   if (hadPrev && prev.step_state != status.step_state) {
-    appendProductionLog(QStringLiteral("流程步骤变化：%1 -> %2 (code=%3)")
-                            .arg(stepStateText(prev.step_state, prev.scan_done, calibrationContext))
-                            .arg(stepStateText(status.step_state, status.scan_done, calibrationContext))
-                            .arg(status.step_state));
+    appendFlowLog(QStringLiteral("流程步骤变化：%1 -> %2 (code=%3)")
+                      .arg(stepStateText(prev.step_state, prev.scan_done, calibrationContext))
+                      .arg(stepStateText(status.step_state, status.scan_done, calibrationContext))
+                      .arg(status.step_state));
   }
   if (hadPrev && prev.interlock_mask != status.interlock_mask) {
     if (status.interlock_mask == 0) {
-      appendProductionLog(QStringLiteral("互锁位图恢复正常"));
+      appendFlowLog(QStringLiteral("互锁位图恢复正常"));
     } else {
-      appendProductionLog(QStringLiteral("互锁位图触发：0x%1 (%2)")
-                              .arg(QString::number(status.interlock_mask, 16).toUpper())
-                              .arg(interlockMaskText(status.interlock_mask)));
+      appendFlowLog(QStringLiteral("互锁位图触发：0x%1 (%2)")
+                        .arg(QString::number(status.interlock_mask, 16).toUpper())
+                        .arg(interlockMaskText(status.interlock_mask)));
     }
   }
 
-  if (productionWidget_) {
+  if (productionWidget_ && !calibrationContext) {
     productionWidget_->setMachineState(status.machine_state, machineStateText(status.machine_state));
     productionWidget_->setStateSeq(0);
     productionWidget_->setAlarm(status.alarm_code, 0);
@@ -835,7 +847,10 @@ void MainWindow::onPlcCommandUpdated(const core::PlcCommandBlockV2 &command) {
     return;
   }
 
-  appendProductionLog(line);
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0)
+                               || calibrationFlowExpected_;
+  if (calibrationContext) appendCalibrationLog(line);
+  else appendProductionLog(line);
   if (manualMaintainWidget_) manualMaintainWidget_->appendLog(line);
   awaitingCmdReply_ = false;
   pendingCmdBits_ = 0;
@@ -883,7 +898,8 @@ void MainWindow::refreshManualMaintainLiveStatus() {
 void MainWindow::onPlcTrayUpdated(const core::PlcTrayPartIdBlockV2 &tray) {
   lastTray_ = tray;
   hasLastTray_ = true;
-  if (productionWidget_) {
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  if (productionWidget_ && !calibrationContext) {
     QVector<QString> slotIds(core::kLogicalSlotCount);
     const quint16 presentMask = hasLastStatus_ ? lastStatus_.tray_present_mask : 0xFFFFu;
     for (int i = 0; i < core::kLogicalSlotCount; ++i) {
@@ -901,6 +917,7 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
   if (!lastMailboxSnapshot_) lastMailboxSnapshot_ = std::make_unique<core::PlcMailboxSnapshot>();
   *lastMailboxSnapshot_ = snapshot;
   hasLastMailboxSnapshot_ = true;
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
 
   QString slot0 = QStringLiteral("-");
   QString slot1 = QStringLiteral("-");
@@ -920,13 +937,9 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
     diagnosticsWidget_->setMailboxPreview(mailboxPartTypeText(snapshot), slot0, slot1, partId0, partId1);
   }
 
-  if (productionWidget_) {
+  if (productionWidget_ && !calibrationContext) {
     productionWidget_->setMeasureDone(true);
   }
-
-  const bool calibrationContext = hasLastStatus_
-                               && calibrationFlowExpected_
-                               && isCalibrationStepCode(lastStatus_.step_state);
 
   if (calibrationWidget_ && calibrationContext) {
     for (const auto &item : snapshot.items) {
@@ -934,9 +947,7 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
         core::CalibrationSlotSummary s;
         s.slot_index = item.slot_index;
         s.calibration_type = QString(snapshot.part_type.toUpper());
-        s.calibration_master_part_id = (snapshot.part_type.toUpper() == QChar('B'))
-                                           ? QStringLiteral("CAL-B-001")
-                                           : QStringLiteral("CAL-A-001");
+        s.calibration_master_part_id = calibrationWidget_->masterPartIdForType(snapshot.part_type);
         s.measured_part_id = item.part_id;
         s.valid = false;
         calibrationWidget_->setSlotSummary(s);
@@ -945,7 +956,7 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
     }
   }
 
-  if (productionWidget_) {
+  if (productionWidget_ && !calibrationContext) {
     productionWidget_->appendPlcLogMessage(QStringLiteral("Mailbox 已解析：part=%1 slot0=%2 slot1=%3")
                                                .arg(mailboxPartTypeText(snapshot), slot0, slot1));
   }
@@ -967,15 +978,20 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
 }
 
 void MainWindow::onPlcEventsRaised(const core::PlcPollEventsV26 &events) {
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
   if (events.scan_ready) {
-    if (productionWidget_) {
-      productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新扫码结果"));
+    if (calibrationContext) {
+      appendCalibrationLog(QStringLiteral("检测到扫码事件（标定流程不参与扫码核对）"));
+    } else {
+      appendProductionLog(QStringLiteral("检测到新扫码结果"));
+      processAutoScanIdCheck();
     }
-    processAutoScanIdCheck();
   }
   if (events.new_mailbox) {
-    if (productionWidget_) {
-      productionWidget_->appendPlcLogMessage(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
+    if (calibrationContext) {
+      appendCalibrationLog(QStringLiteral("检测到新测量包，按标定流程处理"));
+    } else {
+      appendProductionLog(QStringLiteral("检测到新测量包，等待业务处理/ACK"));
     }
     processAutoMailboxFlow();
   }
@@ -1288,7 +1304,6 @@ void MainWindow::processAutoScanIdCheck() {
 void MainWindow::processAutoMailboxFlow() {
   if (!plcRuntime_ || !hasLastMailboxSnapshot_ || !lastMailboxSnapshot_) return;
   if (hasLastStatus_ && calibrationFlowExpected_ && isCalibrationStepCode(lastStatus_.step_state)) {
-    appendCalibrationLog(QStringLiteral("标定流程：检测到新测量包，按槽16单件规则处理，不进入生产自动分支"));
     return;
   }
 
@@ -1327,6 +1342,14 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (!plcRuntime_) {
     return;
   }
+  const QString uiSource = args.value(QStringLiteral("ui_source")).toString().trimmed().toLower();
+  const bool fromCalibrationUi = (uiSource == QStringLiteral("calibration"));
+  const bool statusInCalibrationFlow = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  const bool commandInCalibrationFlow = fromCalibrationUi || statusInCalibrationFlow || cmd == QStringLiteral("START_CALIBRATION");
+  auto appendCmdLog = [this, commandInCalibrationFlow](const QString &line) {
+    if (commandInCalibrationFlow) appendCalibrationLog(line);
+    else appendProductionLog(line);
+  };
   if (cmd == QStringLiteral("COMPUTE_RESULT")) {
     QChar preferredPartType = QChar('A');
     const QString partTypeText = args.value(QStringLiteral("part_type")).toString().trimmed().toUpper();
@@ -1372,7 +1395,7 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
       handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("清零 iJudge_Result 失败") : err);
       return;
     }
-    appendProductionLog(QStringLiteral("已清零 iJudge_Result=0"));
+    appendCmdLog(QStringLiteral("已清零 iJudge_Result=0"));
   }
 
   quint16 cmdBits = 0;
@@ -1406,9 +1429,9 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     return;
   }
   if (!ok) { handlePlcRuntimeError(err); return; }
-  if (cmd == QStringLiteral("START_RETEST_CURRENT") && productionWidget_) {
+  if (cmd == QStringLiteral("START_RETEST_CURRENT") && productionWidget_ && !commandInCalibrationFlow) {
     productionWidget_->clearActiveSlotsComputedResults();
-    appendProductionLog(QStringLiteral("复测：已清理活跃槽位旧结果显示，等待新结果覆盖"));
+    appendCmdLog(QStringLiteral("复测：已清理活跃槽位旧结果显示，等待新结果覆盖"));
   }
   if (cmd == QStringLiteral("START_CALIBRATION")) {
     calibrationFlowExpected_ = true;
@@ -1419,11 +1442,11 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   awaitingCmdReply_ = true;
   pendingCmdBits_ = cmdBits;
 
-  appendProductionLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
-                          .arg(cmd)
-                          .arg(plcMode)
-                          .arg(categoryMode)
-                          .arg(QString::number(cmdBits, 16).toUpper()));
+  appendCmdLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
+                   .arg(cmd)
+                   .arg(plcMode)
+                   .arg(categoryMode)
+                   .arg(QString::number(cmdBits, 16).toUpper()));
   if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
                           .arg(cmd)
                           .arg(plcMode)
@@ -1457,8 +1480,14 @@ void MainWindow::handleWriteTrayPartIdRequested(int slotIndex, const QString &pa
   plcRuntime_->pollOnce();
 }
 
-void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
+void MainWindow::handleReadMailboxRequested(QChar preferredPartType, bool preferCalibrationContext) {
   if (!plcRuntime_) return;
+  const bool calibrationContext = preferCalibrationContext
+                               || isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  auto appendMailboxLog = [this, calibrationContext](const QString &line) {
+    if (calibrationContext) appendCalibrationLog(line);
+    else appendProductionLog(line);
+  };
   core::PlcMailboxSnapshot snapshot;
   QString err;
   if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
@@ -1469,34 +1498,48 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType) {
   *lastMailboxSnapshot_ = snapshot;
   hasLastMailboxSnapshot_ = true;
 
-  if (productionWidget_) {
-    productionWidget_->appendPlcLogMessage(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
-                                               .arg(QString(snapshot.part_type))
-                                               .arg(snapshot.item_count));
+  appendMailboxLog(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
+                       .arg(QString(snapshot.part_type))
+                       .arg(snapshot.item_count));
+  if (calibrationContext && calibrationWidget_) {
+    for (const auto &item : snapshot.items) {
+      if (item.slot_index != core::kCalibrationSlotIndex) continue;
+      core::CalibrationSlotSummary s;
+      s.slot_index = item.slot_index;
+      s.calibration_type = QString(snapshot.part_type.toUpper());
+      s.calibration_master_part_id = calibrationWidget_->masterPartIdForType(snapshot.part_type);
+      s.measured_part_id = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
+      s.valid = false;
+      calibrationWidget_->setSlotSummary(s);
+      break;
+    }
+  }
+
+  if (!calibrationContext) {
     for (const auto &item : snapshot.items) {
       const QString slotText = item.slot_index >= 0 ? QString::number(item.slot_index + 1) : QStringLiteral("-");
       const QString idText = item.part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item.part_id.trimmed();
       if (snapshot.part_type == QChar('A')) {
-        productionWidget_->appendPlcLogMessage(QStringLiteral("  item%1 slot=%2 id=%3 总长=%4 原始点数=%5")
-                                                   .arg(item.item_index)
-                                                   .arg(slotText)
-                                                   .arg(idText)
-                                                   .arg(item.total_len_mm, 0, 'f', 6)
-                                                   .arg(item.raw_points_um.size()));
+        appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 总长=%4 原始点数=%5")
+                             .arg(item.item_index)
+                             .arg(slotText)
+                             .arg(idText)
+                             .arg(item.total_len_mm, 0, 'f', 6)
+                             .arg(item.raw_points_um.size()));
       } else {
-        productionWidget_->appendPlcLogMessage(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 原始点数=%6")
-                                                   .arg(item.item_index)
-                                                   .arg(slotText)
-                                                   .arg(idText)
-                                                   .arg(item.ad_len_mm, 0, 'f', 6)
-                                                   .arg(item.bc_len_mm, 0, 'f', 6)
-                                                   .arg(item.raw_points_um.size()));
+        appendMailboxLog(QStringLiteral("  item%1 slot=%2 id=%3 AD=%4 BC=%5 原始点数=%6")
+                             .arg(item.item_index)
+                             .arg(slotText)
+                             .arg(idText)
+                             .arg(item.ad_len_mm, 0, 'f', 6)
+                             .arg(item.bc_len_mm, 0, 'f', 6)
+                             .arg(item.raw_points_um.size()));
       }
       if (!item.raw_points_um.isEmpty()) {
         QStringList vals;
         vals.reserve(item.raw_points_um.size());
         for (float v : item.raw_points_um) vals << QString::number(v, 'f', 6);
-        productionWidget_->appendPlcLogMessage(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
+        appendMailboxLog(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
       }
     }
   }
@@ -1540,25 +1583,30 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_a_k_runout_mm);
   const core::RunoutAlgoParams runoutParamsD =
       buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_d_k_runout_mm);
+  const bool calibrationContext = isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  auto appendComputeLog = [this, calibrationContext](const QString &line) {
+    if (calibrationContext) appendCalibrationLog(line);
+    else appendProductionLog(line);
+  };
 
-  appendProductionLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3 最小有效点=%4")
-                          .arg(QString(snapshot.part_type))
-                          .arg(snapshot.item_count)
-                          .arg(invalidLimit)
-                          .arg(minValidPoints));
-  appendProductionLog(QStringLiteral("A型输入偏置：内径=%1 mm 外径=%2 mm")
-                          .arg(formatNumber(appCfg_.algo.a_inner_input_offset_mm))
-                          .arg(formatNumber(appCfg_.algo.a_outer_input_offset_mm)));
-  appendProductionLog(QStringLiteral("A型通道K：B端(K_in=%1,K_out=%2) C端(K_in=%3,K_out=%4)")
-                          .arg(formatNumber(appCfg_.algo.a_b_k_in_mm))
-                          .arg(formatNumber(appCfg_.algo.a_b_k_out_mm))
-                          .arg(formatNumber(appCfg_.algo.a_c_k_in_mm))
-                          .arg(formatNumber(appCfg_.algo.a_c_k_out_mm)));
-  appendProductionLog(QStringLiteral("B型通道K：A点(K=%1) D点(K=%2)")
-                          .arg(formatNumber(appCfg_.algo.b_a_k_runout_mm))
-                          .arg(formatNumber(appCfg_.algo.b_d_k_runout_mm)));
+  appendComputeLog(QStringLiteral("开始计算：part=%1 item_count=%2 无效点阈值=%3 最小有效点=%4")
+                       .arg(QString(snapshot.part_type))
+                       .arg(snapshot.item_count)
+                       .arg(invalidLimit)
+                       .arg(minValidPoints));
+  appendComputeLog(QStringLiteral("A型输入偏置：内径=%1 mm 外径=%2 mm")
+                       .arg(formatNumber(appCfg_.algo.a_inner_input_offset_mm))
+                       .arg(formatNumber(appCfg_.algo.a_outer_input_offset_mm)));
+  appendComputeLog(QStringLiteral("A型通道K：B端(K_in=%1,K_out=%2) C端(K_in=%3,K_out=%4)")
+                       .arg(formatNumber(appCfg_.algo.a_b_k_in_mm))
+                       .arg(formatNumber(appCfg_.algo.a_b_k_out_mm))
+                       .arg(formatNumber(appCfg_.algo.a_c_k_in_mm))
+                       .arg(formatNumber(appCfg_.algo.a_c_k_out_mm)));
+  appendComputeLog(QStringLiteral("B型通道K：A点(K=%1) D点(K=%2)")
+                       .arg(formatNumber(appCfg_.algo.b_a_k_runout_mm))
+                       .arg(formatNumber(appCfg_.algo.b_d_k_runout_mm)));
   const QString runoutMetric = normalizedRunoutMetric(appCfg_.algo.runout_metric);
-  appendProductionLog(QStringLiteral("B型跳动口径：%1").arg(runoutMetric));
+  appendComputeLog(QStringLiteral("B型跳动口径：%1").arg(runoutMetric));
 
   int expectedItemCount = 0;
   int judgedItemCount = 0;
@@ -1581,9 +1629,9 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
 
     if (snapshot.part_type.toUpper() == QChar('A')) {
       if (item.raw_points_um.size() < 72 * 4) {
-        appendProductionLog(QStringLiteral("计算失败：A型 item%1 raw点数不足，期望>=288，实际=%2")
-                                .arg(item.item_index)
-                                .arg(item.raw_points_um.size()));
+        appendComputeLog(QStringLiteral("计算失败：A型 item%1 raw点数不足，期望>=288，实际=%2")
+                             .arg(item.item_index)
+                             .arg(item.raw_points_um.size()));
         continue;
       }
 
@@ -1632,35 +1680,35 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       judgedItemCount += 1;
       if (!slotSummary.judgement_ok) overallOk = false;
 
-      appendProductionLog(QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
-                              .arg(item.item_index)
-                              .arg(slotText)
-                              .arg(idText)
-                              .arg(formatNumber(item.total_len_mm))
-                              .arg(formatNumber(slotSummary.compute.values.id_left_mm))
-                              .arg(formatNumber(slotSummary.compute.values.od_left_mm))
-                              .arg(formatNumber(slotSummary.compute.values.id_right_mm))
-                              .arg(formatNumber(slotSummary.compute.values.od_right_mm)));
-      appendProductionLog(QStringLiteral("  A型通道有效点: B内=%1/72 B外=%2/72 C内=%3/72 C外=%4/72")
-                              .arg(countValidMask(bInner.valid_mask))
-                              .arg(countValidMask(bOuter.valid_mask))
-                              .arg(countValidMask(cInner.valid_mask))
-                              .arg(countValidMask(cOuter.valid_mask)));
+      appendComputeLog(QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
+                           .arg(item.item_index)
+                           .arg(slotText)
+                           .arg(idText)
+                           .arg(formatNumber(item.total_len_mm))
+                           .arg(formatNumber(slotSummary.compute.values.id_left_mm))
+                           .arg(formatNumber(slotSummary.compute.values.od_left_mm))
+                           .arg(formatNumber(slotSummary.compute.values.id_right_mm))
+                           .arg(formatNumber(slotSummary.compute.values.od_right_mm)));
+      appendComputeLog(QStringLiteral("  A型通道有效点: B内=%1/72 B外=%2/72 C内=%3/72 C外=%4/72")
+                           .arg(countValidMask(bInner.valid_mask))
+                           .arg(countValidMask(bOuter.valid_mask))
+                           .arg(countValidMask(cInner.valid_mask))
+                           .arg(countValidMask(cOuter.valid_mask)));
 
       if (bInner.invalid_too_many || bOuter.invalid_too_many || cInner.invalid_too_many || cOuter.invalid_too_many) {
-        appendProductionLog(QStringLiteral("  A型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
+        appendComputeLog(QStringLiteral("  A型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
       } else if (!slotSummary.compute.valid) {
-        appendProductionLog(QStringLiteral("  A型拟合失败：B内[%1] B外[%2] C内[%3] C外[%4]")
-                                .arg(rBInner.error, rBOuter.error, rCInner.error, rCOuter.error));
+        appendComputeLog(QStringLiteral("  A型拟合失败：B内[%1] B外[%2] C内[%3] C外[%4]")
+                             .arg(rBInner.error, rBOuter.error, rCInner.error, rCOuter.error));
       }
-      appendProductionLog(QStringLiteral("  判定=%1%2")
-                              .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
-                              .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
+      appendComputeLog(QStringLiteral("  判定=%1%2")
+                           .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
     } else if (snapshot.part_type.toUpper() == QChar('B')) {
       if (item.raw_points_um.size() < 72 * 2) {
-        appendProductionLog(QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=144，实际=%2")
-                                .arg(item.item_index)
-                                .arg(item.raw_points_um.size()));
+        appendComputeLog(QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=144，实际=%2")
+                             .arg(item.item_index)
+                             .arg(item.raw_points_um.size()));
         continue;
       }
 
@@ -1694,41 +1742,53 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
       judgedItemCount += 1;
       if (!slotSummary.judgement_ok) overallOk = false;
 
-      appendProductionLog(QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
-                              .arg(item.item_index)
-                              .arg(slotText)
-                              .arg(idText)
-                              .arg(formatNumber(item.ad_len_mm))
-                              .arg(formatNumber(item.bc_len_mm))
-                              .arg(formatNumber(slotSummary.compute.values.runout_left_mm))
-                              .arg(formatNumber(slotSummary.compute.values.runout_right_mm)));
-      appendProductionLog(QStringLiteral("  B型通道有效点: A点=%1/72 D点=%2/72")
-                              .arg(countValidMask(aRunout.valid_mask))
-                              .arg(countValidMask(dRunout.valid_mask)));
+      appendComputeLog(QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
+                           .arg(item.item_index)
+                           .arg(slotText)
+                           .arg(idText)
+                           .arg(formatNumber(item.ad_len_mm))
+                           .arg(formatNumber(item.bc_len_mm))
+                           .arg(formatNumber(slotSummary.compute.values.runout_left_mm))
+                           .arg(formatNumber(slotSummary.compute.values.runout_right_mm)));
+      appendComputeLog(QStringLiteral("  B型通道有效点: A点=%1/72 D点=%2/72")
+                           .arg(countValidMask(aRunout.valid_mask))
+                           .arg(countValidMask(dRunout.valid_mask)));
 
       if (aRunout.invalid_too_many || dRunout.invalid_too_many) {
-        appendProductionLog(QStringLiteral("  B型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
+        appendComputeLog(QStringLiteral("  B型通道无效：无效点超过阈值(%1)").arg(invalidLimit));
       } else if (!slotSummary.compute.valid) {
-        appendProductionLog(QStringLiteral("  B型拟合失败：A点[%1] D点[%2]").arg(rA.error, rD.error));
+        appendComputeLog(QStringLiteral("  B型拟合失败：A点[%1] D点[%2]").arg(rA.error, rD.error));
       }
-      appendProductionLog(QStringLiteral("  判定=%1%2")
-                              .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
-                              .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
+      appendComputeLog(QStringLiteral("  判定=%1%2")
+                           .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.judgement_ok ? QString() : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text)));
     } else {
-      appendProductionLog(QStringLiteral("计算失败：未知part_type=%1").arg(QString(snapshot.part_type)));
+      appendComputeLog(QStringLiteral("计算失败：未知part_type=%1").arg(QString(snapshot.part_type)));
       continue;
     }
 
-    if (productionWidget_ && item.slot_index >= 0 && item.slot_index < core::kLogicalSlotCount) {
+    if (!calibrationContext && productionWidget_ && item.slot_index >= 0 && item.slot_index < core::kLogicalSlotCount) {
       productionWidget_->setSlotSummary(item.slot_index, slotSummary);
+    } else if (calibrationContext && calibrationWidget_) {
+      core::CalibrationSlotSummary calSummary;
+      calSummary.slot_index = item.slot_index;
+      calSummary.calibration_type = QString(snapshot.part_type.toUpper());
+      calSummary.calibration_master_part_id = calibrationWidget_->masterPartIdForType(snapshot.part_type);
+      calSummary.measured_part_id = idText;
+      calSummary.valid = slotSummary.valid;
+      calSummary.judgement_known = slotSummary.judgement_known;
+      calSummary.judgement_ok = slotSummary.judgement_ok;
+      calSummary.fail_reason_text = slotSummary.fail_reason_text;
+      calSummary.compute = slotSummary.compute;
+      calibrationWidget_->setSlotSummary(calSummary);
     }
   }
 
   if (expectedItemCount > 0 && judgedItemCount < expectedItemCount) {
     overallOk = false;
-    appendProductionLog(QStringLiteral("警告：部分工件未生成有效判定（expected=%1, judged=%2），总判定按 NG 处理")
-                            .arg(expectedItemCount)
-                            .arg(judgedItemCount));
+    appendComputeLog(QStringLiteral("警告：部分工件未生成有效判定（expected=%1, judged=%2），总判定按 NG 处理")
+                         .arg(expectedItemCount)
+                         .arg(judgedItemCount));
   }
   lastComputeHasItems_ = (expectedItemCount > 0);
   lastComputeOverallOk_ = (expectedItemCount > 0) ? overallOk : false;
@@ -1739,27 +1799,28 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType) {
     if (!plcRuntime_->writeJudgeResult(judgeResult, &err)) {
       handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 iJudge_Result 失败") : err);
     } else {
-      appendProductionLog(QStringLiteral("已写 iJudge_Result=%1 (%2)")
-                              .arg(judgeResult)
-                              .arg(overallOk ? QStringLiteral("OK") : QStringLiteral("NG")));
+      appendComputeLog(QStringLiteral("已写 iJudge_Result=%1 (%2)")
+                           .arg(judgeResult)
+                           .arg(overallOk ? QStringLiteral("OK") : QStringLiteral("NG")));
     }
   } else {
-    appendProductionLog(QStringLiteral("本次测量包无有效 item，跳过写 iJudge_Result"));
+    appendComputeLog(QStringLiteral("本次测量包无有效 item，跳过写 iJudge_Result"));
   }
 
-  appendProductionLog(QStringLiteral("计算结束"));
+  appendComputeLog(QStringLiteral("计算结束"));
   return true;
 }
 
 
-void MainWindow::handleAckMailboxRequested() {
+void MainWindow::handleAckMailboxRequested(bool preferCalibrationContext) {
   if (!plcRuntime_) return;
+  const bool calibrationContext = preferCalibrationContext
+                               || isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
   QString err;
   if (!plcRuntime_->sendPcAck(1, &err)) {
     handlePlcRuntimeError(err);
     return;
   }
-  if (productionWidget_) {
-    productionWidget_->appendPlcLogMessage(QStringLiteral("手动写入 pc_ack=1"));
-  }
+  if (calibrationContext) appendCalibrationLog(QStringLiteral("手动写入 pc_ack=1"));
+  else appendProductionLog(QStringLiteral("手动写入 pc_ack=1"));
 }

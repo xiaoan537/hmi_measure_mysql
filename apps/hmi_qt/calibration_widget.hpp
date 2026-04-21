@@ -29,6 +29,7 @@ public:
     void setSlotSummary(const core::CalibrationSlotSummary &s);
     void setSlotSummaries(const QVector<core::CalibrationSlotSummary> &summaries);
     void appendLogMessage(const QString &text);
+    QString masterPartIdForType(QChar partType) const;
 
     QString selectedPartTypeText() const;
     quint32 selectedPartTypeArg() const;

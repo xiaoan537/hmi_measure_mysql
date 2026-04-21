@@ -51,9 +51,10 @@ private:
     void onPlcEventsRaised(const core::PlcPollEventsV26 &events);
     void handleUiCommandRequested(const QString &cmd, const QVariantMap &args);
     void handleWriteTrayPartIdRequested(int slotIndex, const QString &partId);
-    void handleReadMailboxRequested(QChar preferredPartType = QChar('A'));
+    void handleReadMailboxRequested(QChar preferredPartType = QChar('A'),
+                                    bool preferCalibrationContext = false);
     bool handleComputeResultRequested(QChar preferredPartType = QChar('A'));
-    void handleAckMailboxRequested();
+    void handleAckMailboxRequested(bool preferCalibrationContext = false);
     void refreshManualMaintainLiveStatus();
     void appendProductionLog(const QString &text);
     void appendCalibrationLog(const QString &text);
