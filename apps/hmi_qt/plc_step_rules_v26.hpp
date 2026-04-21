@@ -28,6 +28,19 @@ constexpr quint16 kStepUnloadAfterMeasureA = 201;
 constexpr quint16 kStepUnloadAfterMeasureB = 211;
 constexpr quint16 kStepArchiveAndCompute = 220;
 constexpr quint16 kStepReturnToRack = 231;
+
+// Calibration flow (v2.6)
+constexpr quint16 kStepCalPickFromRack = 411;
+constexpr quint16 kStepCalLoadMeasureStation = 421;
+constexpr quint16 kStepCalMeasureA = 440;
+constexpr quint16 kStepCalMeasureB = 441;
+constexpr quint16 kStepCalUnloadFromDiameterOrRunout = 451;
+constexpr quint16 kStepCalLoadLengthStation = 461;
+constexpr quint16 kStepCalMeasureLength = 471;
+constexpr quint16 kStepCalUnloadLengthStation = 481;
+constexpr quint16 kStepCalArchiveWaitDecisionA = 490;
+constexpr quint16 kStepCalArchiveWaitDecisionB = 491;
+constexpr quint16 kStepCalReturnToRack = 511;
 constexpr quint16 kStepAlarm = 900;
 constexpr quint16 kStepEStop = 910;
 
@@ -72,6 +85,49 @@ inline bool isNewCycleStep(quint16 step) {
     return true;
   default:
     return false;
+  }
+}
+
+inline bool isCalibrationStep(quint16 step) {
+  switch (step) {
+  case kStepCalPickFromRack:
+  case kStepCalLoadMeasureStation:
+  case kStepCalMeasureA:
+  case kStepCalMeasureB:
+  case kStepCalUnloadFromDiameterOrRunout:
+  case kStepCalLoadLengthStation:
+  case kStepCalMeasureLength:
+  case kStepCalUnloadLengthStation:
+  case kStepCalArchiveWaitDecisionA:
+  case kStepCalArchiveWaitDecisionB:
+  case kStepCalReturnToRack:
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline bool isCalibrationArchiveStep(quint16 step) {
+  return step == kStepCalArchiveWaitDecisionA || step == kStepCalArchiveWaitDecisionB;
+}
+
+inline QString calibrationStepText(quint16 step) {
+  switch (step) {
+  case kStepCalPickFromRack: return QStringLiteral("从料架抓料中");
+  case kStepCalLoadMeasureStation: return QStringLiteral("测量工位上料中");
+  case kStepCalMeasureA:
+  case kStepCalMeasureB: return QStringLiteral("标定测量中");
+  case kStepCalUnloadFromDiameterOrRunout: return QStringLiteral("取跳动/内外径工位物料中");
+  case kStepCalLoadLengthStation: return QStringLiteral("测长工位上料中");
+  case kStepCalMeasureLength: return QStringLiteral("标定测量中");
+  case kStepCalUnloadLengthStation: return QStringLiteral("取测长工位物料中");
+  case kStepCalArchiveWaitDecisionA:
+  case kStepCalArchiveWaitDecisionB: return QStringLiteral("数据归档，等待复测或下料指令");
+  case kStepCalReturnToRack: return QStringLiteral("下料回料架");
+  case kStepAlarm: return QStringLiteral("报警");
+  case kStepEStop: return QStringLiteral("急停");
+  default:
+    return QStringLiteral("STEP(%1)").arg(step);
   }
 }
 

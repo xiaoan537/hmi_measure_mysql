@@ -58,15 +58,7 @@ QString productionStepStateText(quint16 stepState, quint16 /*scanDone*/) {
 }
 
 QString calibrationStepStateText(quint16 stepState) {
-  switch (stepState) {
-  case 200: return QStringLiteral("标定等待16号槽上料");
-  case 210: return QStringLiteral("标定等待PC确认");
-  case 220: return QStringLiteral("标定测量中");
-  case 230: return QStringLiteral("标定等待PC读取");
-  case 240: return QStringLiteral("标定完成");
-  default:
-    return productionStepStateText(stepState, 0);
-  }
+  return plc_step_rules_v26::calibrationStepText(stepState);
 }
 
 QString stepStateText(quint16 stepState, quint16 scanDone, bool calibrationContext) {
@@ -87,7 +79,7 @@ QString interlockMaskText(quint32 mask) {
 }
 
 bool isCalibrationStepCode(quint16 stepState) {
-  return stepState >= 200 && stepState < 300;
+  return plc_step_rules_v26::isCalibrationStep(stepState);
 }
 
 quint32 mapArg(const QVariantMap &args, const QString &key, quint32 def = 0) {
@@ -609,6 +601,42 @@ void MainWindow::setupBusinessPageBindings() {
   }
 
   if (calibrationWidget_) {
+    connect(calibrationWidget_, &CalibrationWidget::requestReconnectPlc,
+            this, [this]{
+              if (!plcRuntime_) return;
+              appendCalibrationLog(QStringLiteral("手动重连 PLC..."));
+              QString err;
+              plcRuntime_->disconnectNow();
+              if (!plcRuntime_->connectNow(&err)) {
+                handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("PLC 重连失败") : err);
+                return;
+              }
+              reconnectAttemptLogged_ = false;
+              updatePlcStatusLabel();
+              plcRuntime_->pollOnce();
+            });
+    connect(calibrationWidget_, &CalibrationWidget::requestSetPlcMode,
+            this, [this](int mode){
+              if (!plcRuntime_) return;
+              QString err;
+              if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) {
+                handlePlcRuntimeError(err);
+                return;
+              }
+              appendCalibrationLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode)));
+              plcRuntime_->pollOnce();
+            });
+    connect(calibrationWidget_, &CalibrationWidget::requestWriteCategoryMode,
+            this, [this](int partTypeArg){
+              if (!plcRuntime_) return;
+              QString err;
+              if (!plcRuntime_->setCategoryMode(static_cast<qint16>(partTypeArg), &err)) {
+                handlePlcRuntimeError(err);
+                return;
+              }
+              appendCalibrationLog(QStringLiteral("写工件类型到 PLC：%1")
+                                       .arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型")));
+            });
     connect(calibrationWidget_, &CalibrationWidget::requestReadMailbox,
             this, [this] { handleReadMailboxRequested(calibrationWidget_ ? calibrationWidget_->selectedPartTypeText().at(0) : QChar('A')); });
     connect(calibrationWidget_, &CalibrationWidget::requestAckMailbox,
@@ -623,6 +651,12 @@ void MainWindow::appendProductionLog(const QString &text) {
   const QString trimmed = text.trimmed();
   if (trimmed.isEmpty()) return;
   if (productionWidget_) productionWidget_->appendPlcLogMessage(trimmed);
+}
+
+void MainWindow::appendCalibrationLog(const QString &text) {
+  const QString trimmed = text.trimmed();
+  if (trimmed.isEmpty()) return;
+  if (calibrationWidget_) calibrationWidget_->appendLogMessage(trimmed);
 }
 
 void MainWindow::attemptReconnectPlc(bool manual) {
@@ -672,6 +706,7 @@ void MainWindow::onPlcStatsUpdated(const core::PlcRuntimeStatsV2 &stats) {
   }
   if (calibrationWidget_) {
     calibrationWidget_->setPlcConnected(stats.connected);
+    if (hasLastStatus_) calibrationWidget_->setCurrentPlcMode(lastStatus_.control_mode);
   }
   if (diagnosticsWidget_) {
     const int pollHz = (stats.poll_interval_ms > 0) ? (1000 / stats.poll_interval_ms) : 0;
@@ -748,11 +783,14 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
 
   if (calibrationWidget_) {
     calibrationWidget_->setStepState(status.step_state);
+    calibrationWidget_->setAlarm(status.alarm_code, 0);
+    calibrationWidget_->setCurrentPlcMode(status.control_mode);
     calibrationWidget_->setTrayPresentMask(status.tray_present_mask);
-    if (status.mailbox_ready != lastMailboxReady_) {
+    // 标定页日志仅记录标定上下文内的 mailbox 变化，避免生产流程日志串入标定页。
+    if (calibrationContext && status.mailbox_ready != lastMailboxReady_) {
       calibrationWidget_->setMailboxReady(status.mailbox_ready != 0);
-      lastMailboxReady_ = status.mailbox_ready;
     }
+    lastMailboxReady_ = status.mailbox_ready;
   }
 }
 
@@ -886,7 +924,11 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
     productionWidget_->setMeasureDone(true);
   }
 
-  if (calibrationWidget_) {
+  const bool calibrationContext = hasLastStatus_
+                               && calibrationFlowExpected_
+                               && isCalibrationStepCode(lastStatus_.step_state);
+
+  if (calibrationWidget_ && calibrationContext) {
     for (const auto &item : snapshot.items) {
       if (item.slot_index == core::kCalibrationSlotIndex) {
         core::CalibrationSlotSummary s;
@@ -908,20 +950,17 @@ void MainWindow::onPlcMailboxSnapshotUpdated(const core::PlcMailboxSnapshot &sna
                                                .arg(mailboxPartTypeText(snapshot), slot0, slot1));
   }
 
-  const bool calibrationContext = hasLastStatus_
-                               && calibrationFlowExpected_
-                               && isCalibrationStepCode(lastStatus_.step_state);
   if (calibrationContext) {
     const bool singleItem = (snapshot.item_count == 1 && snapshot.items.size() == 1);
     const bool slot16Only = singleItem && snapshot.items.at(0).slot_index == core::kCalibrationSlotIndex;
     if (!slot16Only) {
-      appendProductionLog(QStringLiteral("标定邮箱规则异常：标定流程仅允许槽位16单件数据（item_count=%1, items=%2）")
-                              .arg(snapshot.item_count)
-                              .arg(snapshot.items.size()));
+      appendCalibrationLog(QStringLiteral("标定邮箱规则异常：标定流程仅允许槽位16单件数据（item_count=%1, items=%2）")
+                               .arg(snapshot.item_count)
+                               .arg(snapshot.items.size()));
       if (!snapshot.items.isEmpty()) {
-        appendProductionLog(QStringLiteral("标定邮箱异常详情：slot=%1 part_id=%2")
-                                .arg(snapshot.items.first().slot_index + 1)
-                                .arg(snapshot.items.first().part_id));
+        appendCalibrationLog(QStringLiteral("标定邮箱异常详情：slot=%1 part_id=%2")
+                                 .arg(snapshot.items.first().slot_index + 1)
+                                 .arg(snapshot.items.first().part_id));
       }
     }
   }
@@ -949,19 +988,20 @@ void MainWindow::updateCalibrationAutoState(quint16 stepState) {
   }
   CalibrationAutoState next = calibrationAutoState_;
   switch (stepState) {
-  case 200:
+  case plc_step_rules_v26::kStepCalPickFromRack:
+  case plc_step_rules_v26::kStepCalLoadMeasureStation:
     next = CalibrationAutoState::WaitLoadSlot16;
     break;
-  case 210:
-    next = CalibrationAutoState::WaitPcConfirm;
-    break;
-  case 220:
+  case plc_step_rules_v26::kStepCalMeasureA:
+  case plc_step_rules_v26::kStepCalMeasureB:
+  case plc_step_rules_v26::kStepCalMeasureLength:
     next = CalibrationAutoState::Measuring;
     break;
-  case 230:
+  case plc_step_rules_v26::kStepCalArchiveWaitDecisionA:
+  case plc_step_rules_v26::kStepCalArchiveWaitDecisionB:
     next = CalibrationAutoState::WaitPcRead;
     break;
-  case 240:
+  case plc_step_rules_v26::kStepCalReturnToRack:
     next = CalibrationAutoState::Completed;
     break;
   default:
@@ -982,7 +1022,7 @@ void MainWindow::updateCalibrationAutoState(quint16 stepState) {
   case CalibrationAutoState::WaitPcRead: text = QStringLiteral("等待PC读取"); break;
   case CalibrationAutoState::Completed: text = QStringLiteral("标定完成"); break;
   }
-  appendProductionLog(QStringLiteral("标定状态机切换：%1").arg(text));
+  appendCalibrationLog(QStringLiteral("标定状态机切换：%1").arg(text));
 }
 
 qint16 MainWindow::currentCategoryModeForAutoFlow() const {
@@ -1248,7 +1288,7 @@ void MainWindow::processAutoScanIdCheck() {
 void MainWindow::processAutoMailboxFlow() {
   if (!plcRuntime_ || !hasLastMailboxSnapshot_ || !lastMailboxSnapshot_) return;
   if (hasLastStatus_ && calibrationFlowExpected_ && isCalibrationStepCode(lastStatus_.step_state)) {
-    appendProductionLog(QStringLiteral("标定流程：检测到新测量包，按槽16单件规则处理，不进入生产自动分支"));
+    appendCalibrationLog(QStringLiteral("标定流程：检测到新测量包，按槽16单件规则处理，不进入生产自动分支"));
     return;
   }
 

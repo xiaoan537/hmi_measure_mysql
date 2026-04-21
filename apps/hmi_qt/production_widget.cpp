@@ -78,13 +78,19 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     ui_->groupSlotOps->setTitle(QStringLiteral("工件ID修正"));
     ui_->groupDataOps->hide();
     ui_->btnDevDemo->hide();
+    if (ui_->btnStartCal) ui_->btnStartCal->hide();
     ui_->btnOpenLastRaw->setMinimumHeight(32);
     ui_->btnWriteSlotIds->setMinimumHeight(32);
     if (ui_->gridRunCmd) {
+        // 生产页不再提供“开始标定”，按钮迁移到标定页
+        if (ui_->btnStop2) {
+            ui_->gridRunCmd->removeWidget(ui_->btnStop2);
+            ui_->gridRunCmd->addWidget(ui_->btnStop2, 0, 2, 1, 1);
+        }
         ui_->gridRunCmd->setColumnStretch(0, 1);
         ui_->gridRunCmd->setColumnStretch(1, 1);
         ui_->gridRunCmd->setColumnStretch(2, 1);
-        ui_->gridRunCmd->setColumnStretch(3, 1);
+        ui_->gridRunCmd->setColumnStretch(3, 0);
     }
     lbRuntimeMachine_ = ui_->lblRuntimeMachine;
     measureModeCombo_ = ui_->comboMeasureMode;
@@ -142,11 +148,6 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         batch_part_type_ = selectedPartTypeTextInternal();
         refreshSelectedDetail();
         QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("measure_mode"), measureModeText()); args.insert(QStringLiteral("part_type"), selectedPartTypeText()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_AUTO"), args); ui_->listMessages->addItem(QStringLiteral("开始生产测量：类型=%1，业务=%2").arg(selectedPartTypeText(), measureModeText()));
-    });
-    connect(ui_->btnStartCal, &QPushButton::clicked, this, [this]{
-        batch_part_type_ = selectedPartTypeTextInternal();
-        refreshSelectedDetail();
-        QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("START_CALIBRATION"), args);
     });
     connect(ui_->btnStop2, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("STOP"), args); });
     connect(ui_->btnResetAlarm, &QPushButton::clicked, this, [this]{ QVariantMap args; args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue()); args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg())); emit uiCommandRequested(QStringLiteral("RESET_ALARM"), args); });

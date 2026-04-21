@@ -1,4 +1,5 @@
 #include "calibration_widget_logic.hpp"
+#include "plc_step_rules_v26.hpp"
 
 namespace calibration_widget_logic {
 
@@ -11,16 +12,7 @@ QString plcConnStyle(bool connected)
 
 QString stepText(quint16 step)
 {
-    switch (step) {
-    case 200: return QStringLiteral("标定待上料(16号槽)");
-    case 210: return QStringLiteral("等待 PC 确认");
-    case 220: return QStringLiteral("标定测量中");
-    case 230: return QStringLiteral("等待 PC 读取");
-    case 240: return QStringLiteral("标定完成");
-    case 900: return QStringLiteral("报警");
-    case 910: return QStringLiteral("急停");
-    default: return QStringLiteral("标定流程(%1)").arg(step);
-    }
+    return plc_step_rules_v26::calibrationStepText(step);
 }
 
 QString slot15StateText(quint16 trayPresentMask)

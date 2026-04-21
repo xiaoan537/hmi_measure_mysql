@@ -56,6 +56,7 @@ private:
     void handleAckMailboxRequested();
     void refreshManualMaintainLiveStatus();
     void appendProductionLog(const QString &text);
+    void appendCalibrationLog(const QString &text);
     void attemptReconnectPlc(bool manual);
     void processAutoScanIdCheck();
     void processAutoMailboxFlow();
