@@ -697,6 +697,7 @@ void ProductionWidget::setSlotRuntimeState(int slot, SlotRuntimeState state, con
         hasFinalResult
         && !activeInProcessingStep
         && (state == SlotRuntimeState::Loaded
+            || state == SlotRuntimeState::Empty
             || state == SlotRuntimeState::Measuring
             || state == SlotRuntimeState::WaitingPcRead
             || state == SlotRuntimeState::Unknown);

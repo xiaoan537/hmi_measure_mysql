@@ -40,7 +40,7 @@ constexpr quint16 kStepCalMeasureLength = 471;
 constexpr quint16 kStepCalUnloadLengthStation = 481;
 constexpr quint16 kStepCalArchiveWaitDecisionA = 490;
 constexpr quint16 kStepCalArchiveWaitDecisionB = 491;
-constexpr quint16 kStepCalReturnToRack = 511;
+constexpr quint16 kStepCalReturnToRack = 501;
 constexpr quint16 kStepAlarm = 900;
 constexpr quint16 kStepEStop = 910;
 

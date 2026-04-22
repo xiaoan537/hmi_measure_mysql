@@ -12,6 +12,7 @@ class QListWidget;
 class QPushButton;
 class QComboBox;
 class QLineEdit;
+class QGroupBox;
 
 class CalibrationWidget : public QWidget
 {
@@ -54,6 +55,11 @@ private:
     QLineEdit *editMasterA_ = nullptr;
     QLineEdit *editMasterB_ = nullptr;
     QLabel *lblSummary_ = nullptr;
+    QLabel *lblResultJudge_ = nullptr;
+    QLabel *lblResultReason_ = nullptr;
+    QLabel *lblMeasureLine1_ = nullptr;
+    QLabel *lblMeasureLine2_ = nullptr;
+    QLabel *lblMeasureLine3_ = nullptr;
     QListWidget *listMessages_ = nullptr;
     QPushButton *btnStart_ = nullptr;
     QComboBox *partTypeCombo_ = nullptr;

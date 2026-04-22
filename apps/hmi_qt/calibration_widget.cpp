@@ -12,6 +12,14 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QtMath>
+
+namespace {
+QString formatValue(double v, int prec = 3) {
+    if (qIsNaN(v) || qIsInf(v)) return QStringLiteral("--");
+    return QString::number(v, 'f', prec);
+}
+} // namespace
 
 CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent)
     : QWidget(parent), cfg_(cfg)
@@ -68,6 +76,21 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     infoLay->addWidget(lblSummary_);
     infoLay->addWidget(tip);
     root->addWidget(infoBox);
+
+    auto *resultBox = new QGroupBox(QStringLiteral("标定结果详情"), this);
+    auto *resultLay = new QVBoxLayout(resultBox);
+    lblResultJudge_ = new QLabel(QStringLiteral("判定：—"), this);
+    lblResultReason_ = new QLabel(QStringLiteral("不合格原因：—"), this);
+    lblMeasureLine1_ = new QLabel(QStringLiteral("A型总长(mm)：--"), this);
+    lblMeasureLine2_ = new QLabel(QStringLiteral("左端内/外径：-- / --"), this);
+    lblMeasureLine3_ = new QLabel(QStringLiteral("右端内/外径：-- / --"), this);
+    lblResultReason_->setWordWrap(true);
+    resultLay->addWidget(lblResultJudge_);
+    resultLay->addWidget(lblResultReason_);
+    resultLay->addWidget(lblMeasureLine1_);
+    resultLay->addWidget(lblMeasureLine2_);
+    resultLay->addWidget(lblMeasureLine3_);
+    root->addWidget(resultBox);
 
     auto *ctrlBox = new QGroupBox(QStringLiteral("标定控制 / 自动流程"), this);
     auto *ctrlLay = new QVBoxLayout(ctrlBox);
@@ -255,6 +278,55 @@ void CalibrationWidget::setSlotSummary(const core::CalibrationSlotSummary &s)
     const QString summary = calibration_widget_logic::buildSummaryText(s);
     if (lblSummary_) lblSummary_->setText(summary);
     if (s.valid) appendLogMessage(summary);
+
+    const QString type = s.calibration_type.trimmed().toUpper();
+    QString judge = QStringLiteral("待计算");
+    if (s.judgement_known) {
+        judge = s.judgement_ok ? QStringLiteral("合格") : QStringLiteral("不合格");
+    } else if (s.valid && s.compute.judgement == core::MeasurementJudgement::Ok) {
+        judge = QStringLiteral("合格");
+    } else if (s.valid && s.compute.judgement == core::MeasurementJudgement::Ng) {
+        judge = QStringLiteral("不合格");
+    }
+    if (lblResultJudge_) lblResultJudge_->setText(QStringLiteral("判定：%1").arg(judge));
+    if (lblResultReason_) {
+        lblResultReason_->setText(QStringLiteral("不合格原因：%1")
+                                      .arg(s.fail_reason_text.trimmed().isEmpty()
+                                               ? QStringLiteral("—")
+                                               : s.fail_reason_text.trimmed()));
+    }
+
+    if (type == QStringLiteral("B")) {
+        if (lblMeasureLine1_) {
+            lblMeasureLine1_->setText(QStringLiteral("B_AD长度(mm)：%1")
+                                          .arg(formatValue(s.compute.values.ad_len_mm)));
+        }
+        if (lblMeasureLine2_) {
+            lblMeasureLine2_->setText(QStringLiteral("B_BC长度(mm)：%1")
+                                          .arg(formatValue(s.compute.values.bc_len_mm)));
+        }
+        if (lblMeasureLine3_) {
+            lblMeasureLine3_->setText(QStringLiteral("左/右跳动(mm)：%1 / %2")
+                                          .arg(formatValue(s.compute.values.runout_left_mm))
+                                          .arg(formatValue(s.compute.values.runout_right_mm)));
+        }
+        return;
+    }
+
+    if (lblMeasureLine1_) {
+        lblMeasureLine1_->setText(QStringLiteral("A型总长(mm)：%1")
+                                      .arg(formatValue(s.compute.values.total_len_mm)));
+    }
+    if (lblMeasureLine2_) {
+        lblMeasureLine2_->setText(QStringLiteral("左端内/外径：%1 / %2")
+                                      .arg(formatValue(s.compute.values.id_left_mm))
+                                      .arg(formatValue(s.compute.values.od_left_mm)));
+    }
+    if (lblMeasureLine3_) {
+        lblMeasureLine3_->setText(QStringLiteral("右端内/外径：%1 / %2")
+                                      .arg(formatValue(s.compute.values.id_right_mm))
+                                      .arg(formatValue(s.compute.values.od_right_mm)));
+    }
 }
 
 void CalibrationWidget::setSlotSummaries(const QVector<core::CalibrationSlotSummary> &summaries)
