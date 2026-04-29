@@ -298,6 +298,7 @@ double effectiveProbeBase(const DiameterAlgoParams &params)
     return effectiveOuterOffset(params) - params.k_in_mm;
 }
 
+// 轮廓插值加密，将闭合轮廓的点数增加到指定倍数
 PointSet2D densifyClosedPointSet(const PointSet2D &src, int factor)
 {
     PointSet2D out;
@@ -734,7 +735,7 @@ RunoutResult computeRunoutAnalysis(const QVector<double> &raw_runout_values_mm,
         }
     }
 
-    // v-block equivalent runout using dense contour and dense orientations
+    // v-block equivalent runout using dense contour and dense orientations，V型槽等效算法
     if (!result.dense_point_set.points.isEmpty()) {
         const int evalCount = std::max(36, result.dense_point_set.points.size());
         bool haveRead = false;

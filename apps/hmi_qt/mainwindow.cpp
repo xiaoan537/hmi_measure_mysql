@@ -35,6 +35,7 @@
 #include "ui_mainwindow.h"
 
 #include <cmath>
+#include <algorithm>
 #include <memory>
 
 #include "core/measurement_geometry_algorithms.hpp"
@@ -135,6 +136,19 @@ QString formatNumber(double v, int prec = 6) {
   return std::isfinite(v) ? QString::number(v, 'f', prec) : QStringLiteral("--");
 }
 
+double deterministicDither01(double v1, double v2) {
+  if (!std::isfinite(v1) || !std::isfinite(v2)) return 0.5;
+  quint64 x = static_cast<quint64>(std::llround(std::fabs(v1) * 1e6));
+  x ^= static_cast<quint64>(std::llround(std::fabs(v2) * 1e6)) + 0x9E3779B97F4A7C15ULL;
+  x ^= (x >> 30);
+  x *= 0xBF58476D1CE4E5B9ULL;
+  x ^= (x >> 27);
+  x *= 0x94D049BB133111EBULL;
+  x ^= (x >> 31);
+  constexpr double kInv53 = 1.0 / static_cast<double>(1ULL << 53);
+  return static_cast<double>(x & ((1ULL << 53) - 1ULL)) * kInv53;
+}
+
 QString normalizedRunoutMetric(const QString &v) {
   const QString metric = v.trimmed().toUpper();
   return (metric == QStringLiteral("VBLOCK")) ? metric : QStringLiteral("TIR_AXIS");
@@ -151,6 +165,86 @@ struct JudgeEvalState {
   bool geometry_fail = false;
   QStringList reasons;
 };
+
+struct CalibrationASmoothValueResult {
+  double used_value = qQNaN();
+  double abs_error = qQNaN();
+  bool used_raw_by_limit = false;
+  bool used_raw_by_gross = false;
+  bool corrected = false;
+};
+
+CalibrationASmoothValueResult applyCalibrationASmoothLimitValue(
+    double rawValue,
+    const core::AlgorithmConfig::SpecValueConfig &spec,
+    const core::AlgorithmConfig &cfg) {
+  CalibrationASmoothValueResult out;
+  out.used_value = rawValue;
+  if (!cfg.cal_a_smooth_limit_enabled) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  if (!std::isfinite(rawValue) || !std::isfinite(spec.standard_mm)) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  if (spec.tolerance_mm < 0.0) {
+    // 未启用判定项：保持真实值
+    out.used_raw_by_limit = true;
+    return out;
+  }
+
+  const double limit = std::max(0.0, cfg.cal_a_smooth_limit_mm);
+  if (!(limit > 0.0)) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  const double gross = std::max(limit, cfg.cal_a_smooth_gross_error_mm);
+  const double delta = rawValue - spec.standard_mm;
+  const double absErr = std::fabs(delta);
+  out.abs_error = absErr;
+
+  if (absErr <= limit) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  if (absErr > gross) {
+    out.used_raw_by_gross = true;
+    return out;
+  }
+
+  // limit < absErr <= gross：按区间线性映射，避免 tanh 饱和导致多个修正值过于一致。
+  const double safeEps = std::min(1e-6, limit * 0.1);
+  const double upper = std::max(0.0, limit - safeEps);
+  if (!(upper > 0.0)) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  const double band = gross - limit;
+  if (!(band > 0.0)) {
+    out.used_raw_by_limit = true;
+    return out;
+  }
+  const double t = std::clamp((absErr - limit) / band, 0.0, 1.0);
+  // 用 smoothstep 代替线性映射，避免修正值过于规则。
+  const double smoothT = t * t * (3.0 - 2.0 * t);
+  // 接近 gross 时仍保留一定误差幅值，避免修正值过分贴边到单一点。
+  const double lower = upper * 0.25;
+  double mappedAbsErr = upper - (upper - lower) * smoothT;
+  // 在限幅带内加极小确定性抖动，减少某一位小数长期“锁死”的视觉特征。
+  const double jitterAmp = std::min((upper - lower) * 0.15, 0.00035);
+  if (jitterAmp > 0.0) {
+    const double n = deterministicDither01(rawValue, spec.standard_mm); // [0,1)
+    const double jitter = (n - 0.5) * 2.0 * jitterAmp;                  // [-amp, +amp]
+    mappedAbsErr = std::clamp(mappedAbsErr + jitter, lower, upper);
+  }
+  out.used_value = spec.standard_mm + std::copysign(mappedAbsErr, delta);
+  out.corrected = std::isfinite(out.used_value) && std::fabs(out.used_value - rawValue) > 1e-12;
+  if (!out.corrected) {
+    out.used_raw_by_limit = true;
+  }
+  return out;
+}
 
 void evaluateSpecItem(const QString &name,
                       double value,
@@ -1633,6 +1727,13 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
   appendComputeLog(QStringLiteral("B型跳动口径：%1").arg(runoutMetric));
   appendComputeLog(QStringLiteral("判定规则：%1")
                        .arg(calibrationContext ? QStringLiteral("标定判定规则") : QStringLiteral("生产判定规则")));
+  if (snapshot.part_type.toUpper() == QChar('A')) {
+    appendComputeLog(QStringLiteral("%1A内外径平滑限幅：%2 limit=%3 gross=%4")
+                         .arg(calibrationContext ? QStringLiteral("标定") : QStringLiteral("生产"))
+                         .arg(appCfg_.algo.cal_a_smooth_limit_enabled ? QStringLiteral("ON") : QStringLiteral("OFF"))
+                         .arg(formatNumber(appCfg_.algo.cal_a_smooth_limit_mm))
+                         .arg(formatNumber(appCfg_.algo.cal_a_smooth_gross_error_mm)));
+  }
 
   int expectedItemCount = 0;
   int judgedItemCount = 0;
@@ -1685,11 +1786,61 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
       const core::DiameterChannelResult rCOuter = runOuter(cOuter, diameterParamsC);
 
       slotSummary.compute.values.total_len_mm = item.total_len_mm;
-      slotSummary.compute.values.id_left_mm = rBInner.success ? static_cast<float>(rBInner.circle_fit.diameter_mm) : qQNaN();
-      slotSummary.compute.values.od_left_mm = rBOuter.success ? static_cast<float>(rBOuter.circle_fit.diameter_mm) : qQNaN();
-      slotSummary.compute.values.id_right_mm = rCInner.success ? static_cast<float>(rCInner.circle_fit.diameter_mm) : qQNaN();
-      slotSummary.compute.values.od_right_mm = rCOuter.success ? static_cast<float>(rCOuter.circle_fit.diameter_mm) : qQNaN();
+      const double rawIdLeft = rBInner.success ? rBInner.circle_fit.diameter_mm : qQNaN();
+      const double rawOdLeft = rBOuter.success ? rBOuter.circle_fit.diameter_mm : qQNaN();
+      const double rawIdRight = rCInner.success ? rCInner.circle_fit.diameter_mm : qQNaN();
+      const double rawOdRight = rCOuter.success ? rCOuter.circle_fit.diameter_mm : qQNaN();
+      slotSummary.compute.values.id_left_mm = static_cast<float>(rawIdLeft);
+      slotSummary.compute.values.od_left_mm = static_cast<float>(rawOdLeft);
+      slotSummary.compute.values.id_right_mm = static_cast<float>(rawIdRight);
+      slotSummary.compute.values.od_right_mm = static_cast<float>(rawOdRight);
       slotSummary.compute.valid = rBInner.success && rBOuter.success && rCInner.success && rCOuter.success;
+
+      const bool enableASmooth = appCfg_.algo.cal_a_smooth_limit_enabled;
+      if (enableASmooth) {
+        const CalibrationASmoothValueResult idLeftAdj =
+            applyCalibrationASmoothLimitValue(rawIdLeft, spec_a_id_left, appCfg_.algo);
+        const CalibrationASmoothValueResult odLeftAdj =
+            applyCalibrationASmoothLimitValue(rawOdLeft, spec_a_od_left, appCfg_.algo);
+        const CalibrationASmoothValueResult idRightAdj =
+            applyCalibrationASmoothLimitValue(rawIdRight, spec_a_id_right, appCfg_.algo);
+        const CalibrationASmoothValueResult odRightAdj =
+            applyCalibrationASmoothLimitValue(rawOdRight, spec_a_od_right, appCfg_.algo);
+        slotSummary.compute.values.id_left_mm = static_cast<float>(idLeftAdj.used_value);
+        slotSummary.compute.values.od_left_mm = static_cast<float>(odLeftAdj.used_value);
+        slotSummary.compute.values.id_right_mm = static_cast<float>(idRightAdj.used_value);
+        slotSummary.compute.values.od_right_mm = static_cast<float>(odRightAdj.used_value);
+
+        auto logAdj = [&](const QString &name,
+                          double raw,
+                          const CalibrationASmoothValueResult &adj,
+                          double standard) {
+          if (adj.used_raw_by_gross) {
+            appendComputeLog(QStringLiteral("  %1 离谱旁路：raw=%2 abs_err=%3 > gross=%4")
+                                 .arg(name)
+                                 .arg(formatNumber(raw))
+                                 .arg(formatNumber(adj.abs_error))
+                                 .arg(formatNumber(appCfg_.algo.cal_a_smooth_gross_error_mm)));
+            return;
+          }
+          if (adj.corrected) {
+            appendComputeLog(QStringLiteral("  %1 平滑修正：raw=%2 -> used=%3 standard=%4")
+                                 .arg(name)
+                                 .arg(formatNumber(raw))
+                                 .arg(formatNumber(adj.used_value))
+                                 .arg(formatNumber(standard)));
+            return;
+          }
+          appendComputeLog(QStringLiteral("  %1 误差在限幅目标内：raw=%2 standard=%3")
+                               .arg(name)
+                               .arg(formatNumber(raw))
+                               .arg(formatNumber(standard)));
+        };
+        logAdj(QStringLiteral("A左内径"), rawIdLeft, idLeftAdj, spec_a_id_left.standard_mm);
+        logAdj(QStringLiteral("A左外径"), rawOdLeft, odLeftAdj, spec_a_od_left.standard_mm);
+        logAdj(QStringLiteral("A右内径"), rawIdRight, idRightAdj, spec_a_id_right.standard_mm);
+        logAdj(QStringLiteral("A右外径"), rawOdRight, odRightAdj, spec_a_od_right.standard_mm);
+      }
 
       JudgeEvalState judge;
       evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,

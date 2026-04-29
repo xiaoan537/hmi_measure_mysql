@@ -15,7 +15,7 @@
 #include <QtMath>
 
 namespace {
-QString formatValue(double v, int prec = 3) {
+QString formatValue(double v, int prec = 6) {
     if (qIsNaN(v) || qIsInf(v)) return QStringLiteral("--");
     return QString::number(v, 'f', prec);
 }

@@ -188,8 +188,11 @@ bool shouldShowComputedResult(const SlotMeasureSummary &summary,
                               quint32 currentCycleToken)
 {
     if (!summary.valid || !summary.judgement_known) return false;
-    if (slotResultToken == 0 || currentCycleToken == 0) return false;
-    if (slotResultToken != currentCycleToken) return false;
+    if (slotResultToken == 0) return false;
+    // 不再要求 token 与当前周期严格相等：
+    // PLC 步骤切换很快时，compute 结果可能在 token 变化后被立即隐藏。
+    // 新周期清理仍会把 token 清零，因此不会长期残留旧结果。
+    Q_UNUSED(currentCycleToken);
     return runtimeState != SlotRuntimeState::Empty;
 }
 

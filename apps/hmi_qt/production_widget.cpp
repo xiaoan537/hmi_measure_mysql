@@ -341,15 +341,15 @@ void ProductionWidget::refreshSelectedDetail()
         ui_->lblB_RunoutR->setText(QStringLiteral("--"));
     } else if (ms.part_type.toUpper() == QChar('B')) {
         ui_->stackMeasure->setCurrentIndex(1);
-        ui_->lblB_AD->setText(production_widget_logic::formatFloat(ms.b_ad_len_mm));
-        ui_->lblB_BC->setText(production_widget_logic::formatFloat(ms.b_bc_len_mm));
-        ui_->lblB_RunoutL->setText(production_widget_logic::formatFloat(ms.b_runout_left_mm));
-        ui_->lblB_RunoutR->setText(production_widget_logic::formatFloat(ms.b_runout_right_mm));
+        ui_->lblB_AD->setText(production_widget_logic::formatFloat(ms.b_ad_len_mm, 6));
+        ui_->lblB_BC->setText(production_widget_logic::formatFloat(ms.b_bc_len_mm, 6));
+        ui_->lblB_RunoutL->setText(production_widget_logic::formatFloat(ms.b_runout_left_mm, 6));
+        ui_->lblB_RunoutR->setText(production_widget_logic::formatFloat(ms.b_runout_right_mm, 6));
     } else {
         ui_->stackMeasure->setCurrentIndex(0);
-        ui_->lblA_Total->setText(production_widget_logic::formatFloat(ms.a_total_len_mm));
-        ui_->lblA_Left->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_left_mm)).arg(production_widget_logic::formatFloat(ms.a_od_left_mm)));
-        ui_->lblA_Right->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_right_mm)).arg(production_widget_logic::formatFloat(ms.a_od_right_mm)));
+        ui_->lblA_Total->setText(production_widget_logic::formatFloat(ms.a_total_len_mm, 6));
+        ui_->lblA_Left->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_left_mm, 6)).arg(production_widget_logic::formatFloat(ms.a_od_left_mm, 6)));
+        ui_->lblA_Right->setText(QStringLiteral("%1 / %2").arg(production_widget_logic::formatFloat(ms.a_id_right_mm, 6)).arg(production_widget_logic::formatFloat(ms.a_od_right_mm, 6)));
     }
 
     updateSlotEditability();

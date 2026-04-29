@@ -211,6 +211,12 @@
           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
            <item row="0" column="0"><widget class="QLabel" name="labelInvalidPointLimit"><property name="text"><string>无效点个数阈值</string></property></widget></item>
            <item row="0" column="1"><widget class="QSpinBox" name="spinInvalidPointLimit"><property name="minimum"><number>0</number></property><property name="maximum"><number>72</number></property><property name="value"><number>8</number></property></widget></item>
+           <item row="1" column="0"><widget class="QLabel" name="labelCalASmoothLimitEnabled"><property name="text"><string>标定A内外径平滑限幅</string></property></widget></item>
+           <item row="1" column="1"><widget class="QCheckBox" name="checkCalASmoothLimitEnabled"/></item>
+           <item row="2" column="0"><widget class="QLabel" name="labelCalASmoothLimitMm"><property name="text"><string>限幅目标(mm)</string></property></widget></item>
+           <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleCalASmoothLimitMm"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property><property name="value"><double>0.006000000000000</double></property></widget></item>
+           <item row="3" column="0"><widget class="QLabel" name="labelCalASmoothGrossErrorMm"><property name="text"><string>离谱阈值(mm)</string></property></widget></item>
+           <item row="3" column="1"><widget class="QDoubleSpinBox" name="doubleCalASmoothGrossErrorMm"><property name="decimals"><number>6</number></property><property name="minimum"><double>0.000000000000000</double></property><property name="maximum"><double>1000.000000000000000</double></property><property name="value"><double>0.030000000000000</double></property></widget></item>
           </layout>
          </widget>
         </item>

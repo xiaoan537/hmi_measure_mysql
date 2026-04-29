@@ -29,6 +29,10 @@ SettingsWidget::SettingsWidget(const core::AppConfig& cfg, const QString& iniPat
     ui_->doubleAlgoAKOut->setEnabled(on);
     ui_->doubleAlgoACKOut->setEnabled(on);
   });
+  connect(ui_->checkCalASmoothLimitEnabled, &QCheckBox::toggled, this, [this](bool on) {
+    ui_->doubleCalASmoothLimitMm->setEnabled(on);
+    ui_->doubleCalASmoothGrossErrorMm->setEnabled(on);
+  });
 
   ui_->lblIniPath->setText(iniPath_.isEmpty() ? "(unknown)" : iniPath_);
 }
@@ -173,6 +177,11 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
     ui_->comboAlgoBRunoutMetric->setCurrentIndex(metric == QStringLiteral("VBLOCK") ? 1 : 0);
   }
   ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
+  ui_->checkCalASmoothLimitEnabled->setChecked(c.algo.cal_a_smooth_limit_enabled);
+  ui_->doubleCalASmoothLimitMm->setValue(c.algo.cal_a_smooth_limit_mm);
+  ui_->doubleCalASmoothGrossErrorMm->setValue(c.algo.cal_a_smooth_gross_error_mm);
+  ui_->doubleCalASmoothLimitMm->setEnabled(c.algo.cal_a_smooth_limit_enabled);
+  ui_->doubleCalASmoothGrossErrorMm->setEnabled(c.algo.cal_a_smooth_limit_enabled);
 
   ui_->doubleSpecATotalLenStd->setValue(c.algo.spec_a_total_len.standard_mm);
   ui_->doubleSpecATotalLenTol->setValue(c.algo.spec_a_total_len.tolerance_mm);
@@ -275,6 +284,9 @@ core::AppConfig SettingsWidget::readFromUi() const
                        ? QStringLiteral("VBLOCK")
                        : QStringLiteral("TIR_AXIS");
   c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
+  c.algo.cal_a_smooth_limit_enabled = ui_->checkCalASmoothLimitEnabled->isChecked();
+  c.algo.cal_a_smooth_limit_mm = ui_->doubleCalASmoothLimitMm->value();
+  c.algo.cal_a_smooth_gross_error_mm = ui_->doubleCalASmoothGrossErrorMm->value();
 
   c.algo.spec_a_total_len.standard_mm = ui_->doubleSpecATotalLenStd->value();
   c.algo.spec_a_total_len.tolerance_mm = ui_->doubleSpecATotalLenTol->value();
@@ -405,6 +417,9 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("b_interpolation_factor", c.algo.b_interpolation_factor);
   s.setValue("runout_metric", c.algo.runout_metric);
   s.setValue("invalid_point_limit", c.algo.invalid_point_limit);
+  s.setValue("cal_a_smooth_limit_enabled", c.algo.cal_a_smooth_limit_enabled ? 1 : 0);
+  s.setValue("cal_a_smooth_limit_mm", c.algo.cal_a_smooth_limit_mm);
+  s.setValue("cal_a_smooth_gross_error_mm", c.algo.cal_a_smooth_gross_error_mm);
   s.setValue("spec_a_total_len_standard_mm", c.algo.spec_a_total_len.standard_mm);
   s.setValue("spec_a_total_len_tolerance_mm", c.algo.spec_a_total_len.tolerance_mm);
   s.setValue("spec_a_id_left_standard_mm", c.algo.spec_a_id_left.standard_mm);

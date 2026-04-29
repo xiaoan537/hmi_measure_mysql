@@ -192,6 +192,9 @@ namespace core
         c.algo.cal_spec_b_runout_left.tolerance_mm = s.value("cal_spec_b_runout_left_tolerance_mm", c.algo.spec_b_runout_left.tolerance_mm).toDouble();
         c.algo.cal_spec_b_runout_right.standard_mm = s.value("cal_spec_b_runout_right_standard_mm", c.algo.spec_b_runout_right.standard_mm).toDouble();
         c.algo.cal_spec_b_runout_right.tolerance_mm = s.value("cal_spec_b_runout_right_tolerance_mm", c.algo.spec_b_runout_right.tolerance_mm).toDouble();
+        c.algo.cal_a_smooth_limit_enabled = (s.value("cal_a_smooth_limit_enabled", 0).toInt() != 0);
+        c.algo.cal_a_smooth_limit_mm = s.value("cal_a_smooth_limit_mm", 0.006).toDouble();
+        c.algo.cal_a_smooth_gross_error_mm = s.value("cal_a_smooth_gross_error_mm", 0.03).toDouble();
         s.endGroup();
 
         // PLC 通讯配置解析

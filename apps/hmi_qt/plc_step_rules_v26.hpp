@@ -8,7 +8,7 @@ namespace plc_step_rules_v26 {
 constexpr quint16 kStepWaitStart = 0;
 constexpr quint16 kStepDataClear = 1;
 constexpr quint16 kStepInitPrepareA = 2;
-constexpr quint16 kStepInitPrepareB = 3;
+constexpr quint16 kStepInitPrepareB = 4;
 constexpr quint16 kStepInitDone = 9;
 constexpr quint16 kStepScan = 10;
 constexpr quint16 kStepScanContinue = 11;
