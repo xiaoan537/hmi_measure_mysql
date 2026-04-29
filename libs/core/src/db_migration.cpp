@@ -412,7 +412,6 @@ bool Db::ensureSchema(QString *err) {
         "CREATE TABLE IF NOT EXISTS plc_cycle ("
         "  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,"
         "  cycle_uuid CHAR(36) NOT NULL,"
-        "  meas_seq BIGINT UNSIGNED NOT NULL,"
         "  part_type CHAR(1) NOT NULL,"
         "  item_count TINYINT NOT NULL,"
         "  machine_state SMALLINT NULL,"
@@ -424,7 +423,6 @@ bool Db::ensureSchema(QString *err) {
         "  acked_at_utc DATETIME(3) NULL,"
         "  created_at_utc DATETIME(3) NOT NULL,"
         "  UNIQUE KEY uk_plc_cycle_uuid (cycle_uuid),"
-        "  UNIQUE KEY uk_plc_cycle_meas_seq (meas_seq),"
         "  KEY idx_plc_cycle_time (measured_at_utc)"
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
@@ -790,6 +788,36 @@ bool Db::ensureSchema(QString *err) {
       return fail(db_.lastError().text());
 
     cur = 9;
+  }
+
+  if (cur < 10) {
+    if (!db_.transaction())
+      return fail(db_.lastError().text());
+
+    // v2.6 现场通讯表已取消 meas_seq，落库唯一性改由 cycle_uuid 保证。
+    // 旧库保留列但改为可空，避免历史数据迁移风险；新库建表已不再创建该列。
+    if (indexExists("plc_cycle", "uk_plc_cycle_meas_seq")) {
+      if (!q.exec("ALTER TABLE plc_cycle DROP INDEX uk_plc_cycle_meas_seq;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+    if (columnExists("plc_cycle", "meas_seq")) {
+      if (!q.exec("ALTER TABLE plc_cycle MODIFY COLUMN meas_seq BIGINT UNSIGNED NULL;")) {
+        db_.rollback();
+        return fail(q.lastError().text());
+      }
+    }
+
+    if (!applyVersion(10)) {
+      db_.rollback();
+      return fail("Failed to write schema_migrations v10");
+    }
+
+    if (!db_.commit())
+      return fail(db_.lastError().text());
+
+    cur = 10;
   }
 
 

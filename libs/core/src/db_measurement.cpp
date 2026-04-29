@@ -7,8 +7,8 @@
 
 namespace core {
 
-bool Db::insertPlcCycle(const QString &cycle_uuid, quint64 meas_seq,
-                        const QString &part_type, int item_count,
+bool Db::insertPlcCycle(const QString &cycle_uuid, const QString &part_type,
+                        int item_count,
                         const QString &source_mode,
                         const QString &mailbox_header_json,
                         const QString &mailbox_meta_json,
@@ -17,15 +17,14 @@ bool Db::insertPlcCycle(const QString &cycle_uuid, quint64 meas_seq,
   QSqlQuery q(db_);
   q.prepare(
       "INSERT INTO plc_cycle("
-      " cycle_uuid, meas_seq, part_type, item_count, source_mode, "
+      " cycle_uuid, part_type, item_count, source_mode, "
       " mailbox_header_json, mailbox_meta_json, measured_at_utc, created_at_utc"
       ") VALUES ("
-      " :cycle_uuid, :meas_seq, :part_type, :item_count, :source_mode, "
+      " :cycle_uuid, :part_type, :item_count, :source_mode, "
       " :mailbox_header_json, :mailbox_meta_json, :measured_at_utc, NOW(3)"
       ");");
 
   q.bindValue(":cycle_uuid", cycle_uuid);
-  q.bindValue(":meas_seq", QVariant::fromValue<qulonglong>(meas_seq));
   q.bindValue(":part_type", part_type);
   q.bindValue(":item_count", item_count);
   q.bindValue(":source_mode", source_mode);

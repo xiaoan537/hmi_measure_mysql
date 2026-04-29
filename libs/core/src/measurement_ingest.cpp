@@ -123,7 +123,7 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
                                       ? req.cycle.measured_at_utc
                                       : QDateTime::currentDateTimeUtc();
 
-  if (!db_.insertPlcCycle(cycleUuid, req.cycle.meas_seq, req.cycle.part_type,
+  if (!db_.insertPlcCycle(cycleUuid, req.cycle.part_type,
                           req.cycle.item_count, req.cycle.source_mode,
                           req.cycle.mailbox_header_json,
                           req.cycle.mailbox_meta_json, measuredAtUtc, &cycleId,
@@ -161,7 +161,7 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
                       .arg(txErr));
     }
 
-    const QString measurementUuid = ensureUuid(QString());
+    const QString measurementUuid = ensureUuid(item.measurement_uuid);
 
     if (!db_.insertMeasurementEx(
             measurementUuid, QVariant::fromValue<qulonglong>(cycleId),

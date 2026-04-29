@@ -65,9 +65,9 @@ struct PlcMailboxItemSnapshot {
 
 // 仅表达 PLC 冻结出来的原始测量包，不携带业务上下文。
 struct PlcMailboxSnapshot {
-  quint32 meas_seq = 0;
   QChar part_type = QChar('A');
   int item_count = 0;
+  quint16 active_slot_mask = 0;
 
   quint16 raw_layout_ver = 1;
   int ring_count = 0;
@@ -76,7 +76,6 @@ struct PlcMailboxSnapshot {
 
   QVector<PlcMailboxItemSnapshot> items;
 
-  bool isFrozen() const { return meas_seq != 0; }
   bool isPartTypeA() const { return part_type.toUpper() == QChar('A'); }
   bool isPartTypeB() const { return part_type.toUpper() == QChar('B'); }
   int expectedChannels() const { return isPartTypeA() ? 4 : (isPartTypeB() ? 2 : 0); }

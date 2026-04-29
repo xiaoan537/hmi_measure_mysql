@@ -28,6 +28,15 @@ QString normalizedAsciiField(QString text) {
   return text.trimmed();
 }
 
+QString archivePartIdFromRaw(const QString &rawPartId) {
+  const QString trimmed = normalizedAsciiField(rawPartId);
+  const QString upper = trimmed.toUpper();
+  if (trimmed.isEmpty() || upper == QStringLiteral("NG")) {
+    return QStringLiteral("NG");
+  }
+  return trimmed;
+}
+
 QJsonArray toJsonFloatArray(const QVector<float> &values) {
   QJsonArray arr;
   for (float v : values) {
@@ -371,8 +380,6 @@ bool buildPlcStatusBlockV26(const QVector<quint16> &statusRegs,
   if (!plcReadUint16At(statusRegs, kStatusOffsetAfterMeasurementV26, &status.after_measurement_count, err)) return false;
   status.state_seq = 0;
   status.alarm_level = 0;
-  status.scan_seq = 0;
-  status.meas_seq = 0;
   const auto slotList = logicalSlotsFromMaskV26(status.active_slot_mask);
   status.active_slot_index[0] = slotList.size() >= 1 ? static_cast<quint16>(slotList.at(0)) : kInvalidSlotIndex;
   status.active_slot_index[1] = slotList.size() >= 2 ? static_cast<quint16>(slotList.at(1)) : kInvalidSlotIndex;
@@ -453,8 +460,8 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
   if (!plcReadFloat32ArrayAbcd(mailboxRegs, keyenceOffset + 16, 576, &rawValues, err)) return false;
   for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
   PlcMailboxSnapshot snapshot;
-  snapshot.meas_seq = 0;
   snapshot.part_type = pt;
+  snapshot.active_slot_mask = slotMask;
   snapshot.raw_layout_ver = 26;
   snapshot.ring_count = 1;
   snapshot.point_count = 72;
@@ -651,16 +658,22 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
     return false;
   }
 
+  const QString rawPartId = normalizedAsciiField(item->part_id);
+  const QString archivePartId = archivePartIdFromRaw(rawPartId);
+
   MeasurementSnapshot raw;
   raw.measurement_uuid = measurementUuid.trimmed().isEmpty()
                              ? QUuid::createUuid().toString(QUuid::WithoutBraces)
                              : measurementUuid.trimmed();
   raw.part_type = input.snapshot.part_type.toUpper();
   raw.measured_at_utc = input.context.measured_at_utc;
-  raw.meta_json = QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("meas_seq"), static_cast<qint64>(input.snapshot.meas_seq)},
+  raw.meta_json = QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("mailbox_layout_ver"), static_cast<int>(input.snapshot.raw_layout_ver)},
+                                                             {QStringLiteral("active_item_count"), input.snapshot.item_count},
+                                                             {QStringLiteral("active_slot_mask"), static_cast<int>(input.snapshot.active_slot_mask)},
                                                              {QStringLiteral("item_index"), itemIndex},
                                                              {QStringLiteral("slot_index"), item->slot_index},
-                                                             {QStringLiteral("part_id"), item->part_id},
+                                                             {QStringLiteral("part_id"), archivePartId},
+                                                             {QStringLiteral("raw_part_id"), rawPartId},
                                                              {QStringLiteral("run_kind"), toString(input.context.run_kind)},
                                                              {QStringLiteral("measure_mode"), toString(input.context.measure_mode)},
                                                              {QStringLiteral("attempt_kind"), toString(input.context.attempt_kind)}})
@@ -694,7 +707,7 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
   ingestItem.slot_id = (item->slot_index >= 0)
                           ? QStringLiteral("SLOT-%1").arg(item->slot_index, 2, 10, QLatin1Char('0'))
                           : QStringLiteral("UNKNOWN");
-  ingestItem.part_id = item->part_id;
+  ingestItem.part_id = archivePartId;
   ingestItem.result_ok = result.judgement == MeasurementJudgement::Unknown
                              ? QVariant()
                              : QVariant(result.judgement == MeasurementJudgement::Ok ? 1 : 0);
@@ -744,14 +757,12 @@ QJsonObject toJson(const PlcStatusBlockV2 &status) {
   obj.insert(QStringLiteral("alarm_level"), static_cast<int>(status.alarm_level));
   obj.insert(QStringLiteral("tray_present_mask"), static_cast<int>(status.tray_present_mask));
   obj.insert(QStringLiteral("scan_done"), static_cast<int>(status.scan_done));
-  obj.insert(QStringLiteral("scan_seq"), static_cast<qint64>(status.scan_seq));
   obj.insert(QStringLiteral("active_item_count"), static_cast<int>(status.active_item_count));
   QJsonArray active;
   active.push_back(static_cast<int>(status.active_slot_index[0]));
   active.push_back(static_cast<int>(status.active_slot_index[1]));
   obj.insert(QStringLiteral("active_slot_index"), active);
   obj.insert(QStringLiteral("mailbox_ready"), static_cast<int>(status.mailbox_ready));
-  obj.insert(QStringLiteral("meas_seq"), static_cast<qint64>(status.meas_seq));
   return obj;
 }
 
@@ -779,9 +790,9 @@ QJsonObject toJson(const PlcCommandBlockV2 &command) {
 
 QJsonObject toJson(const PlcMailboxSnapshot &snapshot) {
   QJsonObject obj;
-  obj.insert(QStringLiteral("meas_seq"), static_cast<qint64>(snapshot.meas_seq));
   obj.insert(QStringLiteral("part_type"), QString(snapshot.part_type));
   obj.insert(QStringLiteral("item_count"), snapshot.item_count);
+  obj.insert(QStringLiteral("active_slot_mask"), static_cast<int>(snapshot.active_slot_mask));
   obj.insert(QStringLiteral("raw_layout_ver"), static_cast<int>(snapshot.raw_layout_ver));
   obj.insert(QStringLiteral("ring_count"), snapshot.ring_count);
   obj.insert(QStringLiteral("point_count"), snapshot.point_count);

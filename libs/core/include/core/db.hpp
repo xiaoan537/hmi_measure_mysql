@@ -214,8 +214,8 @@ public:
                         const QString &error, int next_retry_seconds,
                         QString *err);
 
-  bool insertPlcCycle(const QString &cycle_uuid, quint64 meas_seq,
-                      const QString &part_type, int item_count,
+  bool insertPlcCycle(const QString &cycle_uuid, const QString &part_type,
+                      int item_count,
                       const QString &source_mode,
                       const QString &mailbox_header_json,
                       const QString &mailbox_meta_json,

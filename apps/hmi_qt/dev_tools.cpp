@@ -138,8 +138,8 @@ bool runDbSmokeTestNewSchema(core::Db &db, QString *err) {
       return fail(e);
 
     if (!db.insertPlcCycle(
-            QUuid::createUuid().toString(QUuid::WithoutBraces), 100001, "A", 1,
-            "AUTO", R"({"meas_seq":100001,"part_type":"A","item_count":1})",
+            QUuid::createUuid().toString(QUuid::WithoutBraces), "A", 1,
+            "AUTO", R"({"part_type":"A","item_count":1})",
             R"({"source":"smoke_test"})", now, &cycleId, &e)) {
       db.rollbackTx(nullptr);
       return fail("insertPlcCycle(A) failed: " + e);
@@ -217,8 +217,8 @@ bool runDbSmokeTestNewSchema(core::Db &db, QString *err) {
       return fail(e);
 
     if (!db.insertPlcCycle(
-            QUuid::createUuid().toString(QUuid::WithoutBraces), 100002, "B", 1,
-            "AUTO", R"({"meas_seq":100002,"part_type":"B","item_count":1})",
+            QUuid::createUuid().toString(QUuid::WithoutBraces), "B", 1,
+            "AUTO", R"({"part_type":"B","item_count":1})",
             R"({"source":"smoke_test"})", now.addSecs(1), &cycleId, &e)) {
       db.rollbackTx(nullptr);
       return fail("insertPlcCycle(B) failed: " + e);

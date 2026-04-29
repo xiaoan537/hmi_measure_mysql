@@ -11,7 +11,6 @@ class Db;
 
 struct IngestCycleInput {
   QString cycle_uuid; // 可空，服务内自动生成
-  quint64 meas_seq = 0;
   QString part_type;   // "A" / "B"
   int item_count = 0;  // 0 / 1 / 2
   QString source_mode; // AUTO / MANUAL / MIL_CHECK
@@ -25,6 +24,7 @@ struct IngestCycleInput {
 };
 
 struct IngestItemInput {
+  QString measurement_uuid; // 可空；写 RAW 时传入同一个 UUID，保证 raw_file_index 可追溯
   int item_index = 0; // 0 / 1
   QVariant slot_index;
   QString slot_id;

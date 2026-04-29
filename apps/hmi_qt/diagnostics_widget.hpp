@@ -17,7 +17,7 @@ signals:
 
 public slots:
   void setCommStats(int pollHz, int lastMs, int okCount, int errCount);
-  void setStatusFields(int stepState, int machineState, int alarmCode, int alarmLevel, quint32 interlockMask, int measSeq);
+  void setStatusFields(int stepState, int machineState, int alarmCode, int alarmLevel, quint32 interlockMask, int mailboxReady);
   void setMailboxPreview(const QString& partType, const QString& slot0, const QString& slot1, const QString& partId0, const QString& partId1);
 
 private:

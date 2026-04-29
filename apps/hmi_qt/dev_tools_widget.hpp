@@ -42,7 +42,7 @@ public slots:
   void setPlcFlowMode(int mode);
   void setPlcRuntimeSummary(bool connected, const QString &machineText,
                             const QString &stepText, quint32 scanSeq,
-                            quint32 measSeq);
+                            quint32 mailboxReady);
   void appendPlcLog(const QString &text);
 
 private slots:

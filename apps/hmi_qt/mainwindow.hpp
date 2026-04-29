@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "core/config.hpp"
+#include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
 
 class QLabel;
@@ -67,6 +68,8 @@ private:
     bool tryAutoContinueAfterIdCheck();
     bool tryAutoWritePcAck();
     void promptNgDecisionAndDispatch();
+    bool archivePendingMailbox();
+    void clearPendingMailboxArchive();
     qint16 currentCategoryModeForAutoFlow() const;
     bool evaluateIdCheckAgainstMes(QStringList *mismatchDetails, QVector<int> *mismatchSlots) const;
     bool loadMockExpectedPartIds(QVector<QString> *out, QString *err) const;
@@ -125,4 +128,16 @@ private:
     bool lastComputeHasItems_ = false;
     bool lastComputeOverallOk_ = false;
     QChar lastComputePartType_ = QChar('A');
+
+    struct PendingArchiveItem {
+        int item_index = -1;
+        core::ProductionSlotSummary summary;
+    };
+    struct PendingMailboxArchive {
+        bool valid = false;
+        bool calibration_context = false;
+        core::PlcMailboxSnapshot snapshot;
+        QVector<PendingArchiveItem> items;
+    };
+    PendingMailboxArchive pendingMailboxArchive_;
 };

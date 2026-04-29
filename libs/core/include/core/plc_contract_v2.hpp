@@ -48,14 +48,11 @@ struct PlcStatusBlockV2 {
   quint16 tray_present_mask = 0; // bit0..bit15 = slot0..slot15
 
   quint16 scan_done = 0;         // 1=PLC 已完成本轮扫码，工件ID块已稳定
-  quint32 scan_seq = 0;          // 每完成一轮扫码自增
-
   quint16 active_item_count = 0;                  // 当前流程正在处理的工件数：0/1/2
   quint16 active_slot_index[2] = {kInvalidSlotIndex, kInvalidSlotIndex};
   quint16 active_slot_mask = 0;
 
   quint16 mailbox_ready = 0;     // 1=PLC 已冻结原始测量包，可读
-  quint32 meas_seq = 0;          // 每冻结一帧测量包自增
   quint16 after_measurement_count = 0;
 };
 

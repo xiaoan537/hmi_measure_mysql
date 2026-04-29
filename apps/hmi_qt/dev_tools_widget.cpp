@@ -273,11 +273,11 @@ void DevToolsWidget::refreshPlcActionEnableStates() {
 
 void DevToolsWidget::setPlcRuntimeSummary(bool connected, const QString &machineText,
                                          const QString &stepText, quint32 scanSeq,
-                                         quint32 measSeq) {
+                                         quint32 mailboxReady) {
   if (lbPlcConn_) lbPlcConn_->setText(QStringLiteral("连接：%1").arg(connected ? QStringLiteral("已连接") : QStringLiteral("未连接")));
   if (lbPlcMachine_) lbPlcMachine_->setText(QStringLiteral("机器：%1").arg(machineText.isEmpty() ? QStringLiteral("-") : machineText));
   if (lbPlcStep_) lbPlcStep_->setText(QStringLiteral("步骤：%1").arg(stepText.isEmpty() ? QStringLiteral("-") : stepText));
-  if (lbPlcSeq_) lbPlcSeq_->setText(QStringLiteral("seq(scan/meas)：%1/%2").arg(scanSeq).arg(measSeq));
+  if (lbPlcSeq_) lbPlcSeq_->setText(QStringLiteral("scan_done/mailbox_ready：%1/%2").arg(scanSeq).arg(mailboxReady));
 }
 
 void DevToolsWidget::appendPlcLog(const QString &text) {
@@ -300,7 +300,6 @@ bool DevToolsWidget::insertViaIngest(const QString &partType,
   }
 
   core::MeasurementIngestRequest req;
-  req.cycle.meas_seq = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
   req.cycle.part_type = partType;
   req.cycle.item_count = 1;
   req.cycle.source_mode = "AUTO";

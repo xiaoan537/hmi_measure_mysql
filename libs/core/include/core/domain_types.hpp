@@ -27,7 +27,6 @@ enum class ReportStatus { Pending, Approved, Sent, Failed, Skipped };
 struct PlcCycle {
   quint64 id = 0;
   QString cycle_uuid;
-  quint64 meas_seq = 0;
   QString part_type;  // "A" / "B"
   int item_count = 0; // 0/1/2
   std::optional<int> machine_state;

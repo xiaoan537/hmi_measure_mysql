@@ -28,11 +28,6 @@ struct PlcRuntimeStatsV2 {
   int poll_error_count = 0;
   int consecutive_error_count = 0;
 
-  quint32 last_state_seq = 0;
-  quint32 last_scan_seq = 0;
-  quint32 last_meas_seq = 0;
-  quint32 last_cmd_ack_seq = 0;
-
   QString last_error;
 };
 

@@ -424,8 +424,6 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
   events.scan_ready = (status.scan_done != 0 && cache_.last_scan_done == 0);
   events.mailbox_ready = (status.mailbox_ready != 0);
   events.new_mailbox = (status.mailbox_ready != 0 && cache_.last_mailbox_ready == 0);
-  events.state_seq_advanced = false;
-  events.command_ack_advanced = false;
 
   emit statusUpdated(status);
   emit commandUpdated(command);
@@ -455,8 +453,6 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
   cache_.has_status = true;
   cache_.last_scan_done = status.scan_done;
   cache_.last_mailbox_ready = status.mailbox_ready;
-  stats_.last_scan_seq = status.scan_done;
-  stats_.last_meas_seq = status.mailbox_ready;
   return true;
 }
 

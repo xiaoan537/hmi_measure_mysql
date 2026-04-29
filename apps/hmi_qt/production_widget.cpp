@@ -443,6 +443,11 @@ QString ProductionWidget::selectedPartTypeText() const
     return selectedPartTypeTextInternal();
 }
 
+QString ProductionWidget::selectedMeasureModeText() const
+{
+    return measureModeText();
+}
+
 quint32 ProductionWidget::selectedPartTypeArg() const
 {
     // PLC 写入按当前下拉框选择值执行，避免被批次展示字段锁死。
@@ -813,8 +818,7 @@ void ProductionWidget::setCalibrationMode(bool enabled)
     }
 }
 
-void ProductionWidget::setMailboxPreview(quint32 meas_seq,
-                                         QChar part_type,
+void ProductionWidget::setMailboxPreview(QChar part_type,
                                          quint16 slot0, quint16 slot1,
                                          const QString &part_id0,
                                          const QString &part_id1,
@@ -825,7 +829,6 @@ void ProductionWidget::setMailboxPreview(quint32 meas_seq,
                                          float /*total_len0_mm*/,
                                          float /*total_len1_mm*/)
 {
-    Q_UNUSED(meas_seq);
     mb_part_type_ = part_type;
     mb_slot0_ = slot0;
     mb_slot1_ = slot1;

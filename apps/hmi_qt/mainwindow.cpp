@@ -25,6 +25,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QAbstractButton>
+#include <QUuid>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QVariantMap>
@@ -39,11 +40,14 @@
 #include <memory>
 
 #include "core/measurement_geometry_algorithms.hpp"
+#include "core/db.hpp"
+#include "core/measurement_ingest.hpp"
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
 #include "core/plc_runtime_v2.hpp"
 #include "core/plc_addresses_v26.hpp"
 #include "core/plc_codec_v26.hpp"
+#include "core/raw_v2.hpp"
 
 namespace {
 QString mailboxPartTypeText(const core::PlcMailboxSnapshot &snapshot) {
@@ -844,7 +848,7 @@ void MainWindow::onPlcStatusUpdated(const core::PlcStatusBlockV2 &status) {
                                         static_cast<int>(status.alarm_code),
                                         0,
                                         static_cast<quint32>(status.interlock_mask),
-                                        0);
+                                        static_cast<int>(status.mailbox_ready));
   }
 
   if (hadPrev && prev.step_state != status.step_state) {
@@ -1311,11 +1315,146 @@ void MainWindow::promptNgDecisionAndDispatch() {
   args.insert(QStringLiteral("part_type_arg"), static_cast<int>(currentCategoryModeForAutoFlow()));
   if (decide == QMessageBox::Yes) {
     appendProductionLog(QStringLiteral("NG自动分支：用户选择当前件复测"));
+    clearPendingMailboxArchive();
+    if (!tryAutoWritePcAck()) {
+      appendProductionLog(QStringLiteral("NG自动分支：iPc_Ack写入失败，未发送复测命令"));
+      return;
+    }
     handleUiCommandRequested(QStringLiteral("START_RETEST_CURRENT"), args);
     return;
   }
   appendProductionLog(QStringLiteral("NG自动分支：用户选择继续（不复测）"));
+  if (!archivePendingMailbox()) {
+    appendProductionLog(QStringLiteral("NG自动分支：RAW/DB归档失败，未发送继续命令"));
+    return;
+  }
+  if (!tryAutoWritePcAck()) {
+    appendProductionLog(QStringLiteral("NG自动分支：iPc_Ack写入失败，未发送继续命令"));
+    return;
+  }
   handleUiCommandRequested(QStringLiteral("CONTINUE_NO_RETEST"), args);
+}
+
+void MainWindow::clearPendingMailboxArchive() {
+  pendingMailboxArchive_ = PendingMailboxArchive{};
+}
+
+bool MainWindow::archivePendingMailbox() {
+  if (!pendingMailboxArchive_.valid || pendingMailboxArchive_.items.isEmpty()) {
+    return true;
+  }
+
+  auto appendArchiveLog = [this](bool calibrationContext, const QString &line) {
+    if (calibrationContext) appendCalibrationLog(line);
+    else appendProductionLog(line);
+  };
+
+  const bool calibrationContext = pendingMailboxArchive_.calibration_context;
+  core::Db db;
+  QString err;
+  if (!db.open(appCfg_.db, &err)) {
+    handlePlcRuntimeError(QStringLiteral("打开数据库失败，无法归档测量数据：%1").arg(err));
+    return false;
+  }
+  if (!db.ensureSchema(&err)) {
+    handlePlcRuntimeError(QStringLiteral("更新数据库结构失败，无法归档测量数据：%1").arg(err));
+    return false;
+  }
+
+  core::MeasurementComputeInput input;
+  input.snapshot = pendingMailboxArchive_.snapshot;
+  input.context.run_kind = calibrationContext ? core::BusinessRunKind::Calibration
+                                              : core::BusinessRunKind::Production;
+  input.context.measure_mode = calibrationContext
+                                   ? core::BusinessMeasureMode::Unknown
+                                   : core::businessMeasureModeFromString(
+                                         productionWidget_ ? productionWidget_->selectedMeasureModeText()
+                                                           : QStringLiteral("NORMAL"));
+  input.context.attempt_kind = core::BusinessAttemptKind::Primary;
+  input.context.source_mode = QStringLiteral("AUTO");
+  input.context.measured_at_utc = QDateTime::currentDateTimeUtc();
+  if (calibrationContext && calibrationWidget_) {
+    input.context.calibration_type = QString(input.snapshot.part_type.toUpper());
+    input.context.calibration_master_part_id =
+        calibrationWidget_->masterPartIdForType(input.snapshot.part_type);
+  }
+  const QString rawKindDir = calibrationContext ? QStringLiteral("calibration")
+                                                : QStringLiteral("production");
+  const QString rawDateDir =
+      input.context.measured_at_utc.date().toString(QStringLiteral("yyyy-MM-dd"));
+  const QString rawOutputDir = QDir(appCfg_.paths.raw_dir).filePath(
+      QDir(rawKindDir).filePath(rawDateDir));
+
+  core::MeasurementIngestRequest req;
+  req.cycle.cycle_uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+  req.cycle.part_type = QString(input.snapshot.part_type.toUpper());
+  req.cycle.item_count = pendingMailboxArchive_.items.size();
+  req.cycle.source_mode = input.context.source_mode;
+  req.cycle.measured_at_utc = input.context.measured_at_utc;
+  req.cycle.mailbox_header_json =
+      QString::fromUtf8(QJsonDocument(core::toJson(input.snapshot)).toJson(QJsonDocument::Compact));
+
+  QJsonObject meta;
+  meta.insert(QStringLiteral("schema"), QStringLiteral("v2.6"));
+  meta.insert(QStringLiteral("run_kind"), core::toString(input.context.run_kind));
+  meta.insert(QStringLiteral("measure_mode"), core::toString(input.context.measure_mode));
+  if (hasLastStatus_) {
+    meta.insert(QStringLiteral("plc_step_state"), static_cast<int>(lastStatus_.step_state));
+    meta.insert(QStringLiteral("plc_machine_state"), static_cast<int>(lastStatus_.machine_state));
+  }
+  req.cycle.mailbox_meta_json =
+      QString::fromUtf8(QJsonDocument(meta).toJson(QJsonDocument::Compact));
+
+  for (const PendingArchiveItem &pendingItem : pendingMailboxArchive_.items) {
+    const QString measurementUuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    core::RawLoopItemBuildResult built;
+    if (!core::buildRawLoopItem(input, pendingItem.item_index,
+                                pendingItem.summary.compute, measurementUuid,
+                                &built, &err)) {
+      handlePlcRuntimeError(QStringLiteral("构建RAW归档数据失败：%1").arg(err));
+      return false;
+    }
+    built.ingest_item.measurement_uuid = measurementUuid;
+
+    core::RawWriteInfoV2 rawInfo;
+    if (!core::writeRawV2(rawOutputDir, built.raw_snapshot, &rawInfo, &err)) {
+      handlePlcRuntimeError(QStringLiteral("写RAW文件失败：%1").arg(err));
+      return false;
+    }
+
+    core::IngestRawInput raw;
+    raw.enabled = true;
+    raw.file_path = rawInfo.final_path;
+    raw.file_size_bytes = rawInfo.file_size_bytes;
+    raw.format_version = rawInfo.format_version;
+    raw.file_crc32 = rawInfo.file_crc32;
+    raw.chunk_mask = rawInfo.chunk_mask;
+    raw.scan_kind = rawInfo.scan_kind;
+    raw.main_channels = rawInfo.main_channels;
+    raw.rings = rawInfo.rings;
+    raw.points_per_ring = rawInfo.points_per_ring;
+    raw.angle_step_deg = rawInfo.angle_step_deg;
+    raw.meta_json = rawInfo.meta_json;
+    raw.raw_kind = QStringLiteral("MAILBOX_V26");
+
+    req.items.push_back(built.ingest_item);
+    req.results.push_back(built.ingest_result);
+    req.raws.push_back(raw);
+  }
+
+  core::MeasurementIngestResponse resp;
+  core::MeasurementIngestService svc(db);
+  if (!svc.ingest(req, &resp, &err)) {
+    handlePlcRuntimeError(QStringLiteral("RAW/DB归档失败：%1").arg(err));
+    return false;
+  }
+
+  appendArchiveLog(calibrationContext,
+                   QStringLiteral("RAW/DB归档完成：cycle_id=%1 item_count=%2")
+                       .arg(resp.plc_cycle_id)
+                       .arg(resp.items.size()));
+  clearPendingMailboxArchive();
+  return true;
 }
 
 void MainWindow::processAutoScanIdCheck() {
@@ -1413,12 +1552,15 @@ void MainWindow::processAutoMailboxFlow() {
     return;
   }
 
-  if (!tryAutoWritePcAck()) {
-    appendProductionLog(QStringLiteral("自动流：iPc_Ack写入失败，终止后续分支"));
-    return;
-  }
-
   if (lastComputeOverallOk_) {
+    if (!archivePendingMailbox()) {
+      appendProductionLog(QStringLiteral("自动流：RAW/DB归档失败，终止后续分支"));
+      return;
+    }
+    if (!tryAutoWritePcAck()) {
+      appendProductionLog(QStringLiteral("自动流：iPc_Ack写入失败，终止后续分支"));
+      return;
+    }
     appendProductionLog(QStringLiteral("自动流：判定OK，自动发送继续（不复测）"));
     QVariantMap args;
     const qint16 plcMode = (hasLastStatus_
@@ -1485,6 +1627,14 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (needRewriteModeAndCategory) {
     if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
     if (!plcRuntime_->setCategoryMode(categoryMode, &err)) { handlePlcRuntimeError(err); return; }
+  }
+  if (cmd == QStringLiteral("CONTINUE_NO_RETEST")) {
+    if (!archivePendingMailbox()) {
+      appendCmdLog(QStringLiteral("继续（不复测）：RAW/DB归档失败，未发送PLC命令"));
+      return;
+    }
+  } else if (cmd == QStringLiteral("START_RETEST_CURRENT")) {
+    clearPendingMailboxArchive();
   }
   if (cmd == QStringLiteral("START_RETEST_CURRENT")
       || cmd == QStringLiteral("CONTINUE_NO_RETEST")) {
@@ -1657,6 +1807,7 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
   lastComputeHasItems_ = false;
   lastComputeOverallOk_ = false;
   lastComputePartType_ = preferredPartType.toUpper();
+  clearPendingMailboxArchive();
 
   core::PlcMailboxSnapshot snapshot;
   if (!forceReloadMailbox && hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
@@ -1738,6 +1889,9 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
   int expectedItemCount = 0;
   int judgedItemCount = 0;
   bool overallOk = true;
+  PendingMailboxArchive pendingArchive;
+  pendingArchive.calibration_context = calibrationContext;
+  pendingArchive.snapshot = snapshot;
   for (const auto &item : snapshot.items) {
     if (item.present) ++expectedItemCount;
   }
@@ -1959,6 +2113,10 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
       calSummary.compute = slotSummary.compute;
       calibrationWidget_->setSlotSummary(calSummary);
     }
+    PendingArchiveItem pendingItem;
+    pendingItem.item_index = item.item_index;
+    pendingItem.summary = slotSummary;
+    pendingArchive.items.push_back(pendingItem);
   }
 
   if (expectedItemCount > 0 && judgedItemCount < expectedItemCount) {
@@ -1970,6 +2128,8 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
   lastComputeHasItems_ = (expectedItemCount > 0);
   lastComputeOverallOk_ = (expectedItemCount > 0) ? overallOk : false;
   lastComputePartType_ = snapshot.part_type.toUpper();
+  pendingArchive.valid = !pendingArchive.items.isEmpty();
+  pendingMailboxArchive_ = pendingArchive;
   if (expectedItemCount > 0) {
     const quint16 judgeResult = overallOk ? core::plc_v26::kJudgeOk : core::plc_v26::kJudgeNg;
     QString err;
@@ -1993,6 +2153,11 @@ void MainWindow::handleAckMailboxRequested(bool preferCalibrationContext) {
   if (!plcRuntime_) return;
   const bool calibrationContext = preferCalibrationContext
                                || isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  if (!archivePendingMailbox()) {
+    if (calibrationContext) appendCalibrationLog(QStringLiteral("手动ACK前RAW/DB归档失败，未写入pc_ack"));
+    else appendProductionLog(QStringLiteral("手动ACK前RAW/DB归档失败，未写入pc_ack"));
+    return;
+  }
   QString err;
   if (!plcRuntime_->sendPcAck(1, &err)) {
     handlePlcRuntimeError(err);

@@ -19,13 +19,13 @@ void DiagnosticsWidget::setCommStats(int pollHz, int lastMs, int okCount, int er
   ui_->lbErrCount->setText(QString::number(errCount));
 }
 
-void DiagnosticsWidget::setStatusFields(int stepState, int machineState, int alarmCode, int alarmLevel, quint32 interlockMask, int measSeq) {
+void DiagnosticsWidget::setStatusFields(int stepState, int machineState, int alarmCode, int alarmLevel, quint32 interlockMask, int mailboxReady) {
   ui_->lbStep->setText(QString::number(stepState));
   ui_->lbMachine->setText(QString::number(machineState));
   ui_->lbAlarmCode->setText(QString::number(alarmCode));
   ui_->lbAlarmLevel->setText(QString::number(alarmLevel));
   ui_->lbInterlock->setText(QString("0x%1").arg(QString::number(interlockMask, 16).toUpper()));
-  ui_->lbMeasSeq->setText(QString::number(measSeq));
+  ui_->lbMailboxReady->setText(QString::number(mailboxReady));
 }
 
 void DiagnosticsWidget::setMailboxPreview(const QString& partType, const QString& slot0, const QString& slot1,

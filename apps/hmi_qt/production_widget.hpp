@@ -48,8 +48,7 @@ public:
     void setCalibrationMode(bool enabled);
 
     // Mailbox header preview（生产页只展示“选中槽位”概要；详细请到诊断页）
-    void setMailboxPreview(quint32 meas_seq,
-                           QChar part_type,
+    void setMailboxPreview(QChar part_type,
                            quint16 slot0, quint16 slot1,
                            const QString &part_id0,
                            const QString &part_id1,
@@ -61,6 +60,7 @@ public:
                            float total_len1_mm);
 
     QString selectedPartTypeText() const;
+    QString selectedMeasureModeText() const;
     quint32 selectedPartTypeArg() const;
     int selectedPlcModeValue() const;
     void appendPlcLogMessage(const QString &text);
