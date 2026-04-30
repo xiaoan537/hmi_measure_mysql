@@ -210,18 +210,20 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   connect(btnAlgoRun_, &QPushButton::clicked, this, &DevToolsWidget::onRunAlgorithmFromInput);
   connect(btnAlgoFillExample_, &QPushButton::clicked, this, &DevToolsWidget::onFillAlgorithmExample);
 
-  connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index){
-    const int mode = plcFlowCombo_->itemData(index).toInt();
-    refreshPlcActionEnableStates();
-    emit plcFlowModeChanged(mode);
-    appendPlcLog(QStringLiteral("PLC流程模式切换为：%1").arg(plcFlowModeText(mode)));
-  });
-  connect(btnPlcPoll_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcPollOnce);
-  connect(btnPlcReloadIds_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReloadSlotIds);
-  connect(btnPlcContinue_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcContinueAfterIdCheck);
-  connect(btnPlcRescan_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcRequestRescanIds);
-  connect(btnPlcReadMailbox_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReadMailbox);
-  connect(btnPlcAck_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcAckMailbox);
+  if (plcFlowCombo_) {
+    connect(plcFlowCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index){
+      const int mode = plcFlowCombo_->itemData(index).toInt();
+      refreshPlcActionEnableStates();
+      emit plcFlowModeChanged(mode);
+      appendPlcLog(QStringLiteral("PLC流程模式切换为：%1").arg(plcFlowModeText(mode)));
+    });
+  }
+  if (btnPlcPoll_) connect(btnPlcPoll_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcPollOnce);
+  if (btnPlcReloadIds_) connect(btnPlcReloadIds_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReloadSlotIds);
+  if (btnPlcContinue_) connect(btnPlcContinue_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcContinueAfterIdCheck);
+  if (btnPlcRescan_) connect(btnPlcRescan_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcRequestRescanIds);
+  if (btnPlcReadMailbox_) connect(btnPlcReadMailbox_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcReadMailbox);
+  if (btnPlcAck_) connect(btnPlcAck_, &QPushButton::clicked, this, &DevToolsWidget::requestPlcAckMailbox);
 
   setPlcFlowMode(static_cast<int>(PlcFlowModeUi::Manual));
 }
@@ -303,7 +305,7 @@ bool DevToolsWidget::insertViaIngest(const QString &partType,
   req.cycle.part_type = partType;
   req.cycle.item_count = 1;
   req.cycle.source_mode = "AUTO";
-  req.cycle.measured_at_utc = QDateTime::currentDateTimeUtc();
+  req.cycle.measured_at_utc = QDateTime::currentDateTime();
   req.cycle.mailbox_header_json =
       QString(R"({"source":"dev_tools","part_type":"%1","item_count":1})")
           .arg(partType);

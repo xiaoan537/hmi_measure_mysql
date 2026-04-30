@@ -59,7 +59,7 @@ namespace core
         c.db.name = s.value("name").toString();                 // 数据库名称，必须配置
         c.db.user = s.value("user").toString();
         c.db.pass = s.value("pass").toString();
-        c.db.options = s.value("options", "MYSQL_OPT_RECONNECT=1").toString();
+        c.db.options = s.value("options", "").toString();
         s.endGroup();                                           // 结束 "db" 配置组
 
         // 路径配置解析

@@ -1,6 +1,7 @@
 #include "core/db.hpp"
 
 #include <QVariant>
+#include <QStringList>
 #include <QtSql/QSqlError>
 #include <QtSql/QSqlQuery>
 #include <QtSql/QSqlRecord>
@@ -72,8 +73,17 @@ bool Db::open(const DbConfig &cfg, QString *err) {
   db_.setDatabaseName(cfg.name);
   db_.setUserName(cfg.user);
   db_.setPassword(cfg.pass);
-  if (!cfg.options.trimmed().isEmpty()) {
-    db_.setConnectOptions(cfg.options);
+  QStringList connectOptions;
+  for (const QString &option : cfg.options.split(';', Qt::SkipEmptyParts)) {
+    const QString trimmed = option.trimmed();
+    if (trimmed.startsWith(QStringLiteral("MYSQL_OPT_RECONNECT"),
+                           Qt::CaseInsensitive)) {
+      continue;
+    }
+    connectOptions.push_back(trimmed);
+  }
+  if (!connectOptions.isEmpty()) {
+    db_.setConnectOptions(connectOptions.join(';'));
   }
 
   /*

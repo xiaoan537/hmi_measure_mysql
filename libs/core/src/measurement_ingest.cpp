@@ -119,14 +119,14 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
 
   quint64 cycleId = 0;
   const QString cycleUuid = ensureUuid(req.cycle.cycle_uuid);
-  const QDateTime measuredAtUtc = req.cycle.measured_at_utc.isValid()
-                                      ? req.cycle.measured_at_utc
-                                      : QDateTime::currentDateTimeUtc();
+  const QDateTime measuredAt = req.cycle.measured_at_utc.isValid()
+                                   ? req.cycle.measured_at_utc
+                                   : QDateTime::currentDateTime();
 
   if (!db_.insertPlcCycle(cycleUuid, req.cycle.part_type,
                           req.cycle.item_count, req.cycle.source_mode,
                           req.cycle.mailbox_header_json,
-                          req.cycle.mailbox_meta_json, measuredAtUtc, &cycleId,
+                          req.cycle.mailbox_meta_json, measuredAt, &cycleId,
                           &txErr)) {
     db_.rollbackTx(nullptr);
     return fail(QStringLiteral("insertPlcCycle failed: %1").arg(txErr));
@@ -169,7 +169,7 @@ bool MeasurementIngestService::ingest(const MeasurementIngestRequest &req,
             item.task_item_id, item.part_id, req.cycle.part_type, item.slot_id,
             item.slot_index, QVariant(item.item_index), item.measure_mode,
             item.measure_round, item.result_judgement, item.upload_kind,
-            measuredAtUtc, item.operator_id, item.review_status,
+            measuredAt, item.operator_id, item.review_status,
             item.fail_reason_code, item.fail_reason_text, item.status,
             &measurementId, &txErr, item.run_kind, item.attempt_kind,
             item.fail_class, item.is_effective, item.superseded_by)) {

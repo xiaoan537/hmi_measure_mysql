@@ -21,8 +21,8 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
     db_.ensureSchema(&e);
 
     // filters init
-    ui_->dtFrom->setDateTime(QDateTime::currentDateTimeUtc().addDays(-7));
-    ui_->dtTo->setDateTime(QDateTime::currentDateTimeUtc());
+    ui_->dtFrom->setDateTime(QDateTime::currentDateTime().addDays(-7));
+    ui_->dtTo->setDateTime(QDateTime::currentDateTime());
     ui_->dtFrom->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
     ui_->dtTo->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
 
@@ -49,7 +49,7 @@ MesUploadWidget::MesUploadWidget(const core::AppConfig &cfg, MesWorker *worker, 
 
     // table
     model_ = new QStandardItemModel(this);
-    model_->setHorizontalHeaderLabels({"SEL", "measured_at_utc", "part_id", "task_card_no", "type", "mode", "attempt", "interface_code", "ok",
+    model_->setHorizontalHeaderLabels({"SEL", "measured_at", "part_id", "task_card_no", "type", "mode", "attempt", "interface_code", "ok",
                                        "total_len_mm", "bc_len_mm", "mes_status",
                                        "attempts", "last_error", "uuid"});
     ui_->tableView->setModel(model_);
@@ -71,8 +71,8 @@ MesUploadWidget::~MesUploadWidget()
 void MesUploadWidget::onQuery()
 {
     core::MesUploadFilter f;
-    f.from_utc = ui_->dtFrom->dateTime().toUTC();
-    f.to_utc = ui_->dtTo->dateTime().toUTC();
+    f.from_utc = ui_->dtFrom->dateTime();
+    f.to_utc = ui_->dtTo->dateTime();
     f.part_id_like = ui_->edPartId->text().trimmed();
     f.task_card_no_like = edTaskCard_ ? edTaskCard_->text().trimmed() : QString();
     f.part_type = (ui_->cbType->currentText() == "ALL") ? "" : ui_->cbType->currentText();
@@ -106,7 +106,7 @@ void MesUploadWidget::fillTable(const QVector<core::MesUploadRow> &rows)
         sel->setCheckState(Qt::Unchecked);
 
         items << sel;
-        items << new QStandardItem(r.measured_at_utc.toUTC().toString(Qt::ISODateWithMs));
+        items << new QStandardItem(r.measured_at_utc.toString(Qt::ISODateWithMs));
         items << new QStandardItem(r.part_id);
         items << new QStandardItem(r.task_card_no);
         items << new QStandardItem(r.part_type);

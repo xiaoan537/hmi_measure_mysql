@@ -29,7 +29,7 @@ namespace core
         o["part_id"] = r.part_id;
         o["part_type"] = r.part_type;
         o["ok"] = r.ok;
-        o["measured_at_utc"] = r.measured_at_utc.toUTC().toString(Qt::ISODateWithMs);
+        o["measured_at"] = r.measured_at_utc.toString(Qt::ISODateWithMs);
         o["total_len_mm"] = r.total_len_mm;
 
         // A型 bc_len 允许 null；B型通常有值
@@ -71,7 +71,7 @@ namespace core
     "part_id": "part-id",
     "part_type": "A",
     "ok": true,
-    "measured_at_utc": "2023-01-01T12:00:00.000Z",
+    "measured_at": "2023-01-01T20:00:00.000",
     "total_len_mm": 100.5,
     "bc_len_mm": null,
     "status": "READY",

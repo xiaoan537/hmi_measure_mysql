@@ -435,8 +435,8 @@ bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err) {
       up.prepare("UPDATE mes_outbox SET "
                  " mes_report_id=:rid, measurement_uuid=:u, "
                  " event_type='MEASURE_RESULT_READY', payload_json=:payload, "
-                 " status='PENDING', next_retry_at_utc=UTC_TIMESTAMP(3), "
-                 " last_error=NULL, updated_at_utc=UTC_TIMESTAMP(3) "
+                 " status='PENDING', next_retry_at_utc=NOW(3), "
+                 " last_error=NULL, updated_at_utc=NOW(3) "
                  "WHERE id=:id;");
       up.bindValue(":rid", QVariant::fromValue<qulonglong>(mesReportId));
       up.bindValue(":u", uuid);
@@ -456,7 +456,7 @@ bool core::Db::queueMesUploadByUuid(const QString &uuid, QString *err) {
                   " created_at_utc, updated_at_utc"
                   ") VALUES ("
                   " :u, 'MEASURE_RESULT_READY', :rid, :payload,"
-                  " 'PENDING', 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)"
+                  " 'PENDING', 0, NOW(3), NOW(3), NOW(3)"
                   ");");
       ins.bindValue(":u", uuid);
       ins.bindValue(":rid", QVariant::fromValue<qulonglong>(mesReportId));
@@ -487,7 +487,7 @@ int core::Db::retryFailed(const QVector<QString> &uuids, QString *err) {
   for (const auto &u : uuids) {
     QSqlQuery q(db_);
     q.prepare("UPDATE mes_outbox SET status='PENDING', last_error=NULL, "
-              "next_retry_at_utc=UTC_TIMESTAMP(3), updated_at_utc=UTC_TIMESTAMP(3) "
+              "next_retry_at_utc=NOW(3), updated_at_utc=NOW(3) "
               "WHERE measurement_uuid=:u AND status='FAILED';");
     q.bindValue(":u", u);
     if (!q.exec()) {
@@ -503,8 +503,8 @@ int core::Db::retryFailed(const QVector<QString> &uuids, QString *err) {
 bool core::Db::resetStaleSending(int stale_seconds, QString *err) {
   QSqlQuery q(db_);
   q.prepare("UPDATE mes_outbox SET status='FAILED', "
-            "updated_at_utc=UTC_TIMESTAMP(3), last_error=IFNULL(last_error,'') "
-            "WHERE status='SENDING' AND updated_at_utc < (UTC_TIMESTAMP(3) - "
+            "updated_at_utc=NOW(3), last_error=IFNULL(last_error,'') "
+            "WHERE status='SENDING' AND updated_at_utc < (NOW(3) - "
             "INTERVAL :s SECOND);");
   q.bindValue(":s", stale_seconds);
   if (!q.exec()) {
@@ -516,8 +516,8 @@ bool core::Db::resetStaleSending(int stale_seconds, QString *err) {
   QSqlQuery q2(db_);
   q2.prepare("UPDATE mes_report mr "
              "JOIN mes_outbox o ON o.mes_report_id = mr.id "
-             "SET mr.report_status='FAILED', mr.updated_at_utc=UTC_TIMESTAMP(3) "
-             "WHERE o.status='FAILED' AND o.updated_at_utc >= (UTC_TIMESTAMP(3) - INTERVAL :s SECOND);");
+             "SET mr.report_status='FAILED', mr.updated_at_utc=NOW(3) "
+             "WHERE o.status='FAILED' AND o.updated_at_utc >= (NOW(3) - INTERVAL :s SECOND);");
   q2.bindValue(":s", stale_seconds);
   if (!q2.exec()) {
     if (err)
@@ -546,7 +546,7 @@ bool core::Db::fetchNextDueOutbox(MesOutboxTask *task, QString *err) {
       "LEFT JOIN mes_report mr ON mr.id = o.mes_report_id "
       "LEFT JOIN measurement m ON m.measurement_uuid = o.measurement_uuid "
       "WHERE o.status IN ('PENDING','FAILED') "
-      "  AND o.next_retry_at_utc <= UTC_TIMESTAMP(3) "
+      "  AND o.next_retry_at_utc <= NOW(3) "
       "ORDER BY o.id ASC LIMIT 1;").arg(ifaceExpr));
   if (!q.exec()) {
     if (err)
@@ -570,7 +570,7 @@ bool core::Db::fetchNextDueOutbox(MesOutboxTask *task, QString *err) {
 bool core::Db::markOutboxSending(quint64 id, QString *err) {
   QSqlQuery q(db_);
   q.prepare("UPDATE mes_outbox SET status='SENDING', "
-            "updated_at_utc=UTC_TIMESTAMP(3) WHERE id=:id;");
+            "updated_at_utc=NOW(3) WHERE id=:id;");
   q.bindValue(":id", QVariant::fromValue<qulonglong>(id));
   if (!q.exec()) {
     if (err)
@@ -581,7 +581,7 @@ bool core::Db::markOutboxSending(quint64 id, QString *err) {
   QSqlQuery q2(db_);
   q2.prepare("UPDATE mes_report mr "
              "JOIN mes_outbox o ON o.mes_report_id = mr.id "
-             "SET mr.report_status='SENDING', mr.updated_at_utc=UTC_TIMESTAMP(3) "
+             "SET mr.report_status='SENDING', mr.updated_at_utc=NOW(3) "
              "WHERE o.id=:id;");
   q2.bindValue(":id", QVariant::fromValue<qulonglong>(id));
   if (!q2.exec()) {
@@ -597,7 +597,7 @@ bool core::Db::markOutboxSent(quint64 id, int http_code, const QString &resp,
   QSqlQuery q(db_);
   q.prepare("UPDATE mes_outbox SET "
             " status='SENT', last_http_code=:c, last_response_body=:r, "
-            " last_error=NULL, updated_at_utc=UTC_TIMESTAMP(3) "
+            " last_error=NULL, updated_at_utc=NOW(3) "
             "WHERE id=:id;");
   q.bindValue(":c", http_code);
   q.bindValue(":r", resp.left(4000));
@@ -611,7 +611,7 @@ bool core::Db::markOutboxSent(quint64 id, int http_code, const QString &resp,
   QSqlQuery q2(db_);
   q2.prepare("UPDATE mes_report mr "
              "JOIN mes_outbox o ON o.mes_report_id = mr.id "
-             "SET mr.report_status='SENT', mr.response_json=:resp, mr.updated_at_utc=UTC_TIMESTAMP(3) "
+             "SET mr.report_status='SENT', mr.response_json=:resp, mr.updated_at_utc=NOW(3) "
              "WHERE o.id=:id;");
   q2.bindValue(":resp", resp.left(4000));
   q2.bindValue(":id", QVariant::fromValue<qulonglong>(id));
@@ -630,8 +630,8 @@ bool core::Db::markOutboxFailed(quint64 id, int http_code, const QString &resp,
   q.prepare("UPDATE mes_outbox SET "
             " status='FAILED', attempt_count=attempt_count+1, "
             " last_http_code=:c, last_response_body=:r, last_error=:e, "
-            " next_retry_at_utc=(UTC_TIMESTAMP(3) + INTERVAL :s SECOND), "
-            " updated_at_utc=UTC_TIMESTAMP(3) "
+            " next_retry_at_utc=(NOW(3) + INTERVAL :s SECOND), "
+            " updated_at_utc=NOW(3) "
             "WHERE id=:id;");
   q.bindValue(":c", http_code);
   q.bindValue(":r", resp.left(4000));
@@ -647,7 +647,7 @@ bool core::Db::markOutboxFailed(quint64 id, int http_code, const QString &resp,
   QSqlQuery q2(db_);
   q2.prepare("UPDATE mes_report mr "
              "JOIN mes_outbox o ON o.mes_report_id = mr.id "
-             "SET mr.report_status='FAILED', mr.response_json=:resp, mr.updated_at_utc=UTC_TIMESTAMP(3) "
+             "SET mr.report_status='FAILED', mr.response_json=:resp, mr.updated_at_utc=NOW(3) "
              "WHERE o.id=:id;");
   q2.bindValue(":resp", error.left(4000));
   q2.bindValue(":id", QVariant::fromValue<qulonglong>(id));

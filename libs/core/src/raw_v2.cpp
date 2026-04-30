@@ -515,7 +515,7 @@ namespace core
         // 创建测量快照对象s，用于存储读取到的测量数据
         MeasurementSnapshot s;
         s.measurement_uuid = QString::fromUtf8(QByteArray(uuid36, 36));
-        s.measured_at_utc = QDateTime::fromMSecsSinceEpoch((qint64)ms, Qt::UTC);
+        s.measured_at_utc = QDateTime::fromMSecsSinceEpoch((qint64)ms, Qt::LocalTime);
         s.part_type = QChar(char(part));
 
         // read chunks until EOF

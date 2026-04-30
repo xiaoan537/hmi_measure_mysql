@@ -196,7 +196,7 @@ const PlcMailboxItemSnapshot *PlcMailboxSnapshot::findItem(int itemIndex) const 
 
 bool MeasurementContext::isValid(QString *err) const {
   if (!measured_at_utc.isValid()) {
-    failWith(err, QStringLiteral("context.measured_at_utc 不能为空"));
+    failWith(err, QStringLiteral("context.measured_at 不能为空"));
     return false;
   }
   if (run_kind == BusinessRunKind::Production &&
@@ -668,6 +668,7 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
   raw.part_type = input.snapshot.part_type.toUpper();
   raw.measured_at_utc = input.context.measured_at_utc;
   raw.meta_json = QString::fromUtf8(QJsonDocument(QJsonObject{{QStringLiteral("mailbox_layout_ver"), static_cast<int>(input.snapshot.raw_layout_ver)},
+                                                             {QStringLiteral("time_basis"), QStringLiteral("LOCAL")},
                                                              {QStringLiteral("active_item_count"), input.snapshot.item_count},
                                                              {QStringLiteral("active_slot_mask"), static_cast<int>(input.snapshot.active_slot_mask)},
                                                              {QStringLiteral("item_index"), itemIndex},
@@ -822,7 +823,8 @@ QJsonObject toJson(const MeasurementContext &context) {
   obj.insert(QStringLiteral("attempt_kind"), toString(context.attempt_kind));
   obj.insert(QStringLiteral("operator_id"), context.operator_id);
   obj.insert(QStringLiteral("source_mode"), context.source_mode);
-  obj.insert(QStringLiteral("measured_at_utc"), context.measured_at_utc.toString(Qt::ISODateWithMs));
+  obj.insert(QStringLiteral("time_basis"), QStringLiteral("LOCAL"));
+  obj.insert(QStringLiteral("measured_at"), context.measured_at_utc.toString(Qt::ISODateWithMs));
   obj.insert(QStringLiteral("calibration_slot_index"), context.calibration_slot_index);
   obj.insert(QStringLiteral("calibration_type"), context.calibration_type);
   obj.insert(QStringLiteral("calibration_master_part_id"), context.calibration_master_part_id);

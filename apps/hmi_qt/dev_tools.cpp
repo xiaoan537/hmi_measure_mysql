@@ -55,7 +55,7 @@ static core::MeasurementSnapshot makeSnapshotA(const core::AppConfig &cfg,
   core::MeasurementSnapshot s;
   s.measurement_uuid = uuid;
   s.part_type = 'A';
-  s.measured_at_utc = QDateTime::currentDateTimeUtc();
+  s.measured_at_utc = QDateTime::currentDateTime();
   s.meta_json = makeMetaJson(partId, 'A');
 
   // 扫描参数由 app.ini 配置（与 PLC 约定一致）
@@ -91,7 +91,7 @@ static core::MeasurementSnapshot makeSnapshotB(const core::AppConfig &cfg,
   core::MeasurementSnapshot s;
   s.measurement_uuid = uuid;
   s.part_type = 'B';
-  s.measured_at_utc = QDateTime::currentDateTimeUtc();
+  s.measured_at_utc = QDateTime::currentDateTime();
   s.meta_json = makeMetaJson(partId, 'B');
 
   s.run_spec.rings = cfg.scan_b.rings;
@@ -123,7 +123,7 @@ bool runDbSmokeTestNewSchema(core::Db &db, QString *err) {
     return false;
   };
 
-  auto now = QDateTime::currentDateTimeUtc();
+  auto now = QDateTime::currentDateTime();
 
   // ---------- A型 ----------
   {

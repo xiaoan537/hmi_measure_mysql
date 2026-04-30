@@ -4,7 +4,6 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDateTimeEdit>
-#include <QDebug>
 #include <QHeaderView>
 #include <QItemSelectionModel>
 #include <QGridLayout>
@@ -167,15 +166,14 @@ void DataWidget::reloadFromNewMeasurementSchema() {
   if (okFilterIndex == 1)
     f.result_judgement = "OK";
 
-  f.from_utc = ui_->dateFrom->dateTime().toUTC();
-  f.to_utc = ui_->dateTo->dateTime().toUTC();
+  f.from_utc = ui_->dateFrom->dateTime();
+  f.to_utc = ui_->dateTo->dateTime();
   f.effective_only = -1;
 
   const int limit = qMax(1, ui_->spinLimit->value());
 
   QString qerr;
   const auto rows = db.queryMeasurementsEx(f, limit, &qerr);
-  qDebug() << "[DATA] query err =" << qerr << ", rows =" << rows.size();
   if (!qerr.isEmpty()) {
     QMessageBox::warning(this, QStringLiteral("查询"), qerr);
     return;
@@ -191,7 +189,7 @@ void DataWidget::reloadFromNewMeasurementSchema() {
     model_->setItem(outRow, 0,
                     new QStandardItem(QString::number(r.measurement_id)));
     model_->setItem(outRow, 1,
-                    new QStandardItem(r.measured_at_utc.toLocalTime().toString(
+                    new QStandardItem(r.measured_at_utc.toString(
                         "yyyy-MM-dd HH:mm:ss")));
     model_->setItem(outRow, 2, new QStandardItem(r.part_id));
     model_->setItem(outRow, 3, new QStandardItem(r.task_card_no));
@@ -275,7 +273,7 @@ void DataWidget::showMeasurementDetail(quint64 measurementId) {
   text += QStringLiteral("复核状态: %1\n").arg(d.review_status);
   text += QStringLiteral("失败码: %1\n").arg(d.fail_reason_code);
   text += QStringLiteral("失败原因: %1\n").arg(d.fail_reason_text);
-  text += QStringLiteral("测量时间(UTC): %1\n")
+  text += QStringLiteral("测量时间: %1\n")
               .arg(d.measured_at_utc.toString("yyyy-MM-dd HH:mm:ss"));
 
   if (d.part_type == "A") {

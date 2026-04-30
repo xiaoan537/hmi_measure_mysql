@@ -1372,7 +1372,7 @@ bool MainWindow::archivePendingMailbox() {
                                                            : QStringLiteral("NORMAL"));
   input.context.attempt_kind = core::BusinessAttemptKind::Primary;
   input.context.source_mode = QStringLiteral("AUTO");
-  input.context.measured_at_utc = QDateTime::currentDateTimeUtc();
+  input.context.measured_at_utc = QDateTime::currentDateTime();
   if (calibrationContext && calibrationWidget_) {
     input.context.calibration_type = QString(input.snapshot.part_type.toUpper());
     input.context.calibration_master_part_id =
@@ -1396,6 +1396,7 @@ bool MainWindow::archivePendingMailbox() {
 
   QJsonObject meta;
   meta.insert(QStringLiteral("schema"), QStringLiteral("v2.6"));
+  meta.insert(QStringLiteral("time_basis"), QStringLiteral("LOCAL"));
   meta.insert(QStringLiteral("run_kind"), core::toString(input.context.run_kind));
   meta.insert(QStringLiteral("measure_mode"), core::toString(input.context.measure_mode));
   if (hasLastStatus_) {

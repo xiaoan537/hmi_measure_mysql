@@ -12,7 +12,7 @@ namespace core
         QString part_type;        // "A" / "B"
         bool ok = true;           // OK/NG
 
-        QDateTime measured_at_utc; // 统一存UTC（MySQL DATETIME不带时区）
+        QDateTime measured_at_utc; // 历史字段名；当前按设备/MES本地时间保存
         double total_len_mm = 0.0; // 先占位：后面扩展更多字段
         double bc_len_mm = 0.0;    // A型可不使用（后面写库时写NULL更合适）
 
