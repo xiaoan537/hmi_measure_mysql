@@ -31,6 +31,21 @@
     </widget>
    </item>
    <item>
+    <widget class="QGroupBox" name="groupRawPoints">
+     <property name="title"><string>通道数据预览</string></property>
+     <layout class="QVBoxLayout" name="verticalLayoutPoints">
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutPoints">
+        <item><widget class="QLabel" name="labelPointCount"><property name="text"><string>未加载 RAW 点数据</string></property></widget></item>
+        <item><spacer name="horizontalSpacerPoints"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+        <item><widget class="QPushButton" name="btnExportCsv"><property name="text"><string>导出CSV</string></property></widget></item>
+       </layout>
+      </item>
+      <item><widget class="QTableWidget" name="tableRawPoints"><property name="minimumHeight"><number>220</number></property></widget></item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="QGroupBox" name="groupReplay">
      <property name="title"><string>RAW 回放计算</string></property>
      <layout class="QVBoxLayout" name="verticalLayout_4">

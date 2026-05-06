@@ -76,6 +76,7 @@ private:
     void openRawFileForViewer(const QString &path);
     void openRawUuidForViewer(const QString &measurementUuid);
     void computeLoadedRawForViewer();
+    void exportLoadedRawCsvForViewer();
     bool computeRawReplayForViewer(const core::MeasurementSnapshot &raw,
                                    QString *resultText,
                                    QString *err) const;

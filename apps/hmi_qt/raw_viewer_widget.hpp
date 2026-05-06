@@ -1,5 +1,8 @@
 #pragma once
+#include <QStringList>
+#include <QVector>
 #include <QWidget>
+
 #include "core/config.hpp"
 
 namespace Ui { class RawViewerWidget; }
@@ -13,6 +16,7 @@ public:
 signals:
   void requestOpenRaw(const QString& path);
   void requestComputeRaw();
+  void requestExportCsv();
 
 public slots:
   void setRawPath(const QString& path);
@@ -20,6 +24,9 @@ public slots:
   void setSummaryText(const QString& text);
   void setReplayResultText(const QString& text);
   void setComputeEnabled(bool enabled);
+  void setExportEnabled(bool enabled);
+  void setRawPointRows(const QVector<QStringList>& rows);
+  void clearRawPointRows();
 
 private:
   Ui::RawViewerWidget* ui_{};
