@@ -287,6 +287,10 @@ public:
       int rings, int points_per_ring, double angle_step_deg,
       const QString &meta_json, const QString &raw_kind, QString *err);
 
+  bool getRawFilePathByMeasurementUuid(const QString &measurement_uuid,
+                                       QString *file_path,
+                                       QString *err);
+
 private:
   QSqlDatabase db_; // QT 数据库连接对象 （私有，隐藏实现细节）
 };

@@ -431,7 +431,8 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   calibrationWidget_ = new CalibrationWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(productionWidget_);
   ui_->stackedWidget->addWidget(calibrationWidget_);
-  ui_->stackedWidget->addWidget(new DataWidget(cfg, ui_->stackedWidget));
+  dataWidget_ = new DataWidget(cfg, ui_->stackedWidget);
+  ui_->stackedWidget->addWidget(dataWidget_);
   ui_->stackedWidget->addWidget(
       new MesUploadWidget(cfg, worker, ui_->stackedWidget));
   settingsWidget_ = new SettingsWidget(cfg, iniPath_, ui_->stackedWidget);
@@ -457,9 +458,17 @@ MainWindow::MainWindow(const core::AppConfig &cfg, const QString &iniPath,
   ui_->stackedWidget->addWidget(new AlarmWidget(cfg, ui_->stackedWidget));
   diagnosticsWidget_ = new DiagnosticsWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(diagnosticsWidget_);
-  ui_->stackedWidget->addWidget(new RawViewerWidget(cfg, ui_->stackedWidget));
+  rawViewerWidget_ = new RawViewerWidget(cfg, ui_->stackedWidget);
+  ui_->stackedWidget->addWidget(rawViewerWidget_);
   devToolsWidget_ = new DevToolsWidget(cfg, ui_->stackedWidget);
   ui_->stackedWidget->addWidget(devToolsWidget_);
+
+  connect(dataWidget_, &DataWidget::requestOpenRaw, this,
+          &MainWindow::openRawUuidForViewer);
+  connect(rawViewerWidget_, &RawViewerWidget::requestOpenRaw, this,
+          &MainWindow::openRawFileForViewer);
+  connect(rawViewerWidget_, &RawViewerWidget::requestComputeRaw, this,
+          &MainWindow::computeLoadedRawForViewer);
 
   manualMaintainWidget_ = new ManualMaintainWidget(ui_->stackedWidget);
   ui_->stackedWidget->addWidget(manualMaintainWidget_);
@@ -1337,6 +1346,342 @@ void MainWindow::promptNgDecisionAndDispatch() {
 
 void MainWindow::clearPendingMailboxArchive() {
   pendingMailboxArchive_ = PendingMailboxArchive{};
+}
+
+void MainWindow::openRawUuidForViewer(const QString &measurementUuid) {
+  core::Db db;
+  QString err;
+  if (!db.open(appCfg_.db, &err)) {
+    QMessageBox::warning(this, QStringLiteral("RAW查看"),
+                         QStringLiteral("打开数据库失败：%1").arg(err));
+    return;
+  }
+  if (!db.ensureSchema(&err)) {
+    QMessageBox::warning(this, QStringLiteral("RAW查看"),
+                         QStringLiteral("检查数据库结构失败：%1").arg(err));
+    return;
+  }
+  QString path;
+  if (!db.getRawFilePathByMeasurementUuid(measurementUuid, &path, &err)) {
+    QMessageBox::warning(this, QStringLiteral("RAW查看"), err);
+    return;
+  }
+  openRawFileForViewer(path);
+}
+
+void MainWindow::openRawFileForViewer(const QString &path) {
+  if (!rawViewerWidget_) return;
+  const QString trimmedPath = path.trimmed();
+  if (trimmedPath.isEmpty()) return;
+
+  QFileInfo fi(trimmedPath);
+  const QString absPath = fi.absoluteFilePath();
+  rawViewerWidget_->setRawPath(absPath);
+  rawViewerWidget_->setReplayResultText(QString());
+  rawViewerWidget_->setMetaJson(QString());
+  rawViewerWidget_->setComputeEnabled(false);
+  rawViewerSnapshot_.reset();
+  rawViewerPath_.clear();
+
+  if (!fi.exists() || !fi.isFile()) {
+    const QString err = QStringLiteral("RAW 文件不存在：%1").arg(absPath);
+    rawViewerWidget_->setSummaryText(err);
+    QMessageBox::warning(this, QStringLiteral("RAW查看"), err);
+    return;
+  }
+
+  core::MeasurementSnapshot raw;
+  QString err;
+  if (!core::readRawV2(absPath, &raw, &err)) {
+    const QString text = QStringLiteral("读取 RAW 失败：%1").arg(err);
+    rawViewerWidget_->setSummaryText(text);
+    QMessageBox::warning(this, QStringLiteral("RAW查看"), text);
+    return;
+  }
+
+  QJsonObject meta;
+  QString prettyMeta = raw.meta_json;
+  if (!raw.meta_json.trimmed().isEmpty()) {
+    QJsonParseError parseErr;
+    const QJsonDocument doc = QJsonDocument::fromJson(raw.meta_json.toUtf8(), &parseErr);
+    if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+      meta = doc.object();
+      prettyMeta = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+    }
+  }
+
+  QStringList summary;
+  summary << QStringLiteral("RAW 文件已加载");
+  summary << QStringLiteral("路径：%1").arg(absPath);
+  summary << QStringLiteral("UUID：%1").arg(raw.measurement_uuid);
+  summary << QStringLiteral("类型：%1").arg(QString(raw.part_type.toUpper()));
+  summary << QStringLiteral("测量时间：%1").arg(raw.measured_at_utc.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")));
+  summary << QStringLiteral("工件ID：%1").arg(meta.value(QStringLiteral("part_id")).toString(QStringLiteral("-")));
+  summary << QStringLiteral("槽位：%1").arg(meta.contains(QStringLiteral("slot_index"))
+                                      ? QString::number(meta.value(QStringLiteral("slot_index")).toInt() + 1)
+                                      : QStringLiteral("-"));
+  summary << QStringLiteral("原始item：%1").arg(meta.contains(QStringLiteral("item_index"))
+                                         ? QString::number(meta.value(QStringLiteral("item_index")).toInt())
+                                         : QStringLiteral("-"));
+  summary << QStringLiteral("流程：%1").arg(meta.value(QStringLiteral("run_kind")).toString(QStringLiteral("-")));
+  if (raw.part_type.toUpper() == QChar('A')) {
+    summary << QStringLiteral("CONF4：rings=%1 points=%2 angle=%3 raw_points=%4")
+                   .arg(raw.conf_spec.rings)
+                   .arg(raw.conf_spec.points_per_ring)
+                   .arg(raw.conf_spec.angle_step_deg, 0, 'f', 3)
+                   .arg(raw.confocal4.size());
+    summary << QStringLiteral("长度：L=%1")
+                   .arg(formatNumber(raw.gt2r_mm3.value(0, qQNaN())));
+  } else {
+    summary << QStringLiteral("RUNO2：rings=%1 points=%2 angle=%3 raw_points=%4")
+                   .arg(raw.run_spec.rings)
+                   .arg(raw.run_spec.points_per_ring)
+                   .arg(raw.run_spec.angle_step_deg, 0, 'f', 3)
+                   .arg(raw.runout2.size());
+    summary << QStringLiteral("长度：AD=%1 BC=%2")
+                   .arg(formatNumber(raw.gt2r_mm3.value(0, qQNaN())))
+                   .arg(formatNumber(raw.gt2r_mm3.value(1, qQNaN())));
+  }
+
+  rawViewerSnapshot_ = std::make_unique<core::MeasurementSnapshot>(raw);
+  rawViewerPath_ = absPath;
+  rawViewerWidget_->setSummaryText(summary.join(QStringLiteral("\n")));
+  rawViewerWidget_->setMetaJson(prettyMeta);
+  rawViewerWidget_->setComputeEnabled(true);
+
+  const int page = ui_->stackedWidget->indexOf(rawViewerWidget_);
+  if (page >= 0) {
+    ui_->navList->setCurrentRow(page);
+    ui_->stackedWidget->setCurrentIndex(page);
+  }
+}
+
+void MainWindow::computeLoadedRawForViewer() {
+  if (!rawViewerWidget_) return;
+  if (!rawViewerSnapshot_) {
+    rawViewerWidget_->setReplayResultText(QStringLiteral("请先打开 RAW 文件。"));
+    return;
+  }
+  QString text;
+  QString err;
+  if (!computeRawReplayForViewer(*rawViewerSnapshot_, &text, &err)) {
+    rawViewerWidget_->setReplayResultText(QStringLiteral("RAW 回放计算失败：%1").arg(err));
+    return;
+  }
+  rawViewerWidget_->setReplayResultText(text);
+}
+
+bool MainWindow::computeRawReplayForViewer(const core::MeasurementSnapshot &raw,
+                                           QString *resultText,
+                                           QString *err) const {
+  if (!resultText) {
+    if (err) *err = QStringLiteral("resultText 不能为空");
+    return false;
+  }
+
+  core::PlcMailboxSnapshot snapshot;
+  if (!core::buildMailboxSnapshotFromRawV2(raw, &snapshot, err)) {
+    return false;
+  }
+  const auto *item = snapshot.items.isEmpty() ? nullptr : &snapshot.items.first();
+  if (!item || !item->present) {
+    if (err) *err = QStringLiteral("RAW 中没有有效 item");
+    return false;
+  }
+
+  QJsonObject meta;
+  if (!raw.meta_json.trimmed().isEmpty()) {
+    const QJsonDocument doc = QJsonDocument::fromJson(raw.meta_json.toUtf8());
+    if (doc.isObject()) meta = doc.object();
+  }
+  const bool calibrationContext =
+      meta.value(QStringLiteral("run_kind")).toString().trimmed().toUpper() == QStringLiteral("CALIBRATION") ||
+      rawViewerPath_.contains(QStringLiteral("/calibration/"), Qt::CaseInsensitive);
+
+  const int invalidLimit = qBound(0, appCfg_.algo.invalid_point_limit, 72);
+  const int minValidPoints = qBound(3, 72 - invalidLimit, 72);
+  const core::DiameterAlgoParams diameterParamsB =
+      buildDiameterAlgoParams(appCfg_.algo, minValidPoints,
+                              appCfg_.algo.a_b_k_in_mm, appCfg_.algo.a_b_k_out_mm);
+  const core::DiameterAlgoParams diameterParamsC =
+      buildDiameterAlgoParams(appCfg_.algo, minValidPoints,
+                              appCfg_.algo.a_c_k_in_mm, appCfg_.algo.a_c_k_out_mm);
+  const core::RunoutAlgoParams runoutParamsA =
+      buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_a_k_runout_mm);
+  const core::RunoutAlgoParams runoutParamsD =
+      buildRunoutAlgoParams(appCfg_.algo, minValidPoints, appCfg_.algo.b_d_k_runout_mm);
+
+  const auto &spec_a_total_len = calibrationContext ? appCfg_.algo.cal_spec_a_total_len : appCfg_.algo.spec_a_total_len;
+  const auto &spec_a_id_left = calibrationContext ? appCfg_.algo.cal_spec_a_id_left : appCfg_.algo.spec_a_id_left;
+  const auto &spec_a_od_left = calibrationContext ? appCfg_.algo.cal_spec_a_od_left : appCfg_.algo.spec_a_od_left;
+  const auto &spec_a_id_right = calibrationContext ? appCfg_.algo.cal_spec_a_id_right : appCfg_.algo.spec_a_id_right;
+  const auto &spec_a_od_right = calibrationContext ? appCfg_.algo.cal_spec_a_od_right : appCfg_.algo.spec_a_od_right;
+  const auto &spec_b_ad_len = calibrationContext ? appCfg_.algo.cal_spec_b_ad_len : appCfg_.algo.spec_b_ad_len;
+  const auto &spec_b_bc_len = calibrationContext ? appCfg_.algo.cal_spec_b_bc_len : appCfg_.algo.spec_b_bc_len;
+  const auto &spec_b_runout_left = calibrationContext ? appCfg_.algo.cal_spec_b_runout_left : appCfg_.algo.spec_b_runout_left;
+  const auto &spec_b_runout_right = calibrationContext ? appCfg_.algo.cal_spec_b_runout_right : appCfg_.algo.spec_b_runout_right;
+
+  core::ProductionSlotSummary slotSummary;
+  slotSummary.slot_index = item->slot_index;
+  slotSummary.part_id = item->part_id.trimmed().isEmpty() ? QStringLiteral("NG") : item->part_id.trimmed();
+  slotSummary.part_type = snapshot.part_type.toUpper();
+  slotSummary.valid = true;
+  slotSummary.compute.valid = true;
+
+  QStringList lines;
+  lines << QStringLiteral("RAW 回放计算（不写PLC、不落库）");
+  lines << QStringLiteral("规则：%1").arg(calibrationContext ? QStringLiteral("标定判定规则") : QStringLiteral("生产判定规则"));
+  lines << QStringLiteral("UUID：%1").arg(raw.measurement_uuid);
+  lines << QStringLiteral("类型：%1  槽位：%2  工件ID：%3")
+               .arg(QString(snapshot.part_type.toUpper()))
+               .arg(item->slot_index >= 0 ? QString::number(item->slot_index + 1) : QStringLiteral("-"))
+               .arg(slotSummary.part_id);
+  lines << QStringLiteral("无效点阈值：%1  最小有效点：%2").arg(invalidLimit).arg(minValidPoints);
+
+  if (snapshot.part_type.toUpper() == QChar('A')) {
+    if (item->raw_points_um.size() < 72 * 4) {
+      if (err) *err = QStringLiteral("A型 raw点数不足，期望>=288，实际=%1").arg(item->raw_points_um.size());
+      return false;
+    }
+    Channel72Series bInner = buildChannel72Series(item->raw_points_um, 0, invalidLimit);
+    Channel72Series bOuter = buildChannel72Series(item->raw_points_um, 72, invalidLimit);
+    Channel72Series cInner = buildChannel72Series(item->raw_points_um, 144, invalidLimit);
+    Channel72Series cOuter = buildChannel72Series(item->raw_points_um, 216, invalidLimit);
+    applyChannelOffset(&bInner, appCfg_.algo.a_inner_input_offset_mm);
+    applyChannelOffset(&cInner, appCfg_.algo.a_inner_input_offset_mm);
+    applyChannelOffset(&bOuter, appCfg_.algo.a_outer_input_offset_mm);
+    applyChannelOffset(&cOuter, appCfg_.algo.a_outer_input_offset_mm);
+
+    auto runInner = [&](const Channel72Series &ch, const core::DiameterAlgoParams &params) -> core::DiameterChannelResult {
+      if (ch.invalid_too_many) return core::DiameterChannelResult{};
+      return core::computeInnerDiameter(ch.values_mm, ch.valid_mask, params);
+    };
+    auto runOuter = [&](const Channel72Series &ch, const core::DiameterAlgoParams &params) -> core::DiameterChannelResult {
+      if (ch.invalid_too_many) return core::DiameterChannelResult{};
+      return core::computeOuterDiameter(ch.values_mm, ch.valid_mask, params);
+    };
+
+    const core::DiameterChannelResult rBInner = runInner(bInner, diameterParamsB);
+    const core::DiameterChannelResult rBOuter = runOuter(bOuter, diameterParamsB);
+    const core::DiameterChannelResult rCInner = runInner(cInner, diameterParamsC);
+    const core::DiameterChannelResult rCOuter = runOuter(cOuter, diameterParamsC);
+    const double rawIdLeft = rBInner.success ? rBInner.circle_fit.diameter_mm : qQNaN();
+    const double rawOdLeft = rBOuter.success ? rBOuter.circle_fit.diameter_mm : qQNaN();
+    const double rawIdRight = rCInner.success ? rCInner.circle_fit.diameter_mm : qQNaN();
+    const double rawOdRight = rCOuter.success ? rCOuter.circle_fit.diameter_mm : qQNaN();
+
+    slotSummary.compute.values.total_len_mm = item->total_len_mm;
+    slotSummary.compute.values.id_left_mm = static_cast<float>(rawIdLeft);
+    slotSummary.compute.values.od_left_mm = static_cast<float>(rawOdLeft);
+    slotSummary.compute.values.id_right_mm = static_cast<float>(rawIdRight);
+    slotSummary.compute.values.od_right_mm = static_cast<float>(rawOdRight);
+    slotSummary.compute.valid = rBInner.success && rBOuter.success && rCInner.success && rCOuter.success;
+
+    if (appCfg_.algo.cal_a_smooth_limit_enabled) {
+      const CalibrationASmoothValueResult idLeftAdj =
+          applyCalibrationASmoothLimitValue(rawIdLeft, spec_a_id_left, appCfg_.algo);
+      const CalibrationASmoothValueResult odLeftAdj =
+          applyCalibrationASmoothLimitValue(rawOdLeft, spec_a_od_left, appCfg_.algo);
+      const CalibrationASmoothValueResult idRightAdj =
+          applyCalibrationASmoothLimitValue(rawIdRight, spec_a_id_right, appCfg_.algo);
+      const CalibrationASmoothValueResult odRightAdj =
+          applyCalibrationASmoothLimitValue(rawOdRight, spec_a_od_right, appCfg_.algo);
+      slotSummary.compute.values.id_left_mm = static_cast<float>(idLeftAdj.used_value);
+      slotSummary.compute.values.od_left_mm = static_cast<float>(odLeftAdj.used_value);
+      slotSummary.compute.values.id_right_mm = static_cast<float>(idRightAdj.used_value);
+      slotSummary.compute.values.od_right_mm = static_cast<float>(odRightAdj.used_value);
+      auto appendSmooth = [&](const QString &name, double rawValue, const CalibrationASmoothValueResult &adj) {
+        if (adj.corrected) {
+          lines << QStringLiteral("%1 平滑修正：raw=%2 -> used=%3")
+                       .arg(name)
+                       .arg(formatNumber(rawValue))
+                       .arg(formatNumber(adj.used_value));
+        } else if (adj.used_raw_by_gross) {
+          lines << QStringLiteral("%1 离谱旁路：raw=%2").arg(name).arg(formatNumber(rawValue));
+        }
+      };
+      appendSmooth(QStringLiteral("A左内径"), rawIdLeft, idLeftAdj);
+      appendSmooth(QStringLiteral("A左外径"), rawOdLeft, odLeftAdj);
+      appendSmooth(QStringLiteral("A右内径"), rawIdRight, idRightAdj);
+      appendSmooth(QStringLiteral("A右外径"), rawOdRight, odRightAdj);
+    }
+
+    JudgeEvalState judge;
+    evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,
+                     spec_a_total_len, true, &judge);
+    evaluateSpecItem(QStringLiteral("A左内径"), slotSummary.compute.values.id_left_mm,
+                     spec_a_id_left, false, &judge);
+    evaluateSpecItem(QStringLiteral("A左外径"), slotSummary.compute.values.od_left_mm,
+                     spec_a_od_left, false, &judge);
+    evaluateSpecItem(QStringLiteral("A右内径"), slotSummary.compute.values.id_right_mm,
+                     spec_a_id_right, false, &judge);
+    evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
+                     spec_a_od_right, false, &judge);
+    finalizeSlotJudgement(&slotSummary, &judge);
+
+    lines << QStringLiteral("有效点：B内=%1/72 B外=%2/72 C内=%3/72 C外=%4/72")
+                 .arg(countValidMask(bInner.valid_mask))
+                 .arg(countValidMask(bOuter.valid_mask))
+                 .arg(countValidMask(cInner.valid_mask))
+                 .arg(countValidMask(cOuter.valid_mask));
+    lines << QStringLiteral("结果：%1").arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
+    lines << QStringLiteral("原因：%1").arg(slotSummary.fail_reason_text.isEmpty() ? QStringLiteral("-") : slotSummary.fail_reason_text);
+    lines << QStringLiteral("A总长(mm)：%1").arg(formatNumber(slotSummary.compute.values.total_len_mm));
+    lines << QStringLiteral("左端 内/外径(mm)：%1 / %2")
+                 .arg(formatNumber(slotSummary.compute.values.id_left_mm))
+                 .arg(formatNumber(slotSummary.compute.values.od_left_mm));
+    lines << QStringLiteral("右端 内/外径(mm)：%1 / %2")
+                 .arg(formatNumber(slotSummary.compute.values.id_right_mm))
+                 .arg(formatNumber(slotSummary.compute.values.od_right_mm));
+  } else {
+    if (item->raw_points_um.size() < 72 * 2) {
+      if (err) *err = QStringLiteral("B型 raw点数不足，期望>=144，实际=%1").arg(item->raw_points_um.size());
+      return false;
+    }
+    const Channel72Series aRunout = buildChannel72Series(item->raw_points_um, 0, invalidLimit);
+    const Channel72Series dRunout = buildChannel72Series(item->raw_points_um, 72, invalidLimit);
+    auto runRunout = [&](const Channel72Series &ch, const core::RunoutAlgoParams &params) -> core::RunoutResult {
+      if (ch.invalid_too_many) return core::RunoutResult{};
+      return core::computeRunoutAnalysis(ch.values_mm, ch.valid_mask, params);
+    };
+    const core::RunoutResult rA = runRunout(aRunout, runoutParamsA);
+    const core::RunoutResult rD = runRunout(dRunout, runoutParamsD);
+    const QString runoutMetric = normalizedRunoutMetric(appCfg_.algo.runout_metric);
+
+    slotSummary.compute.values.ad_len_mm = item->ad_len_mm;
+    slotSummary.compute.values.bc_len_mm = item->bc_len_mm;
+    slotSummary.compute.values.runout_left_mm = static_cast<float>(selectedRunoutValue(rA, runoutMetric));
+    slotSummary.compute.values.runout_right_mm = static_cast<float>(selectedRunoutValue(rD, runoutMetric));
+    slotSummary.compute.valid = rA.success && rD.success;
+
+    JudgeEvalState judge;
+    evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
+                     spec_b_ad_len, true, &judge);
+    evaluateSpecItem(QStringLiteral("B_BC长度"), slotSummary.compute.values.bc_len_mm,
+                     spec_b_bc_len, true, &judge);
+    evaluateSpecItem(QStringLiteral("B左跳动"), slotSummary.compute.values.runout_left_mm,
+                     spec_b_runout_left, false, &judge);
+    evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
+                     spec_b_runout_right, false, &judge);
+    finalizeSlotJudgement(&slotSummary, &judge);
+
+    lines << QStringLiteral("跳动算法：%1").arg(runoutMetric == QStringLiteral("VBLOCK")
+                                                ? QStringLiteral("V型槽等效算法")
+                                                : QStringLiteral("峰峰值算法"));
+    lines << QStringLiteral("有效点：A点=%1/72 D点=%2/72")
+                 .arg(countValidMask(aRunout.valid_mask))
+                 .arg(countValidMask(dRunout.valid_mask));
+    lines << QStringLiteral("结果：%1").arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
+    lines << QStringLiteral("原因：%1").arg(slotSummary.fail_reason_text.isEmpty() ? QStringLiteral("-") : slotSummary.fail_reason_text);
+    lines << QStringLiteral("AD长度(mm)：%1").arg(formatNumber(slotSummary.compute.values.ad_len_mm));
+    lines << QStringLiteral("BC长度(mm)：%1").arg(formatNumber(slotSummary.compute.values.bc_len_mm));
+    lines << QStringLiteral("左/右跳动(mm)：%1 / %2")
+                 .arg(formatNumber(slotSummary.compute.values.runout_left_mm))
+                 .arg(formatNumber(slotSummary.compute.values.runout_right_mm));
+  }
+
+  *resultText = lines.join(QStringLiteral("\n"));
+  return true;
 }
 
 bool MainWindow::archivePendingMailbox() {

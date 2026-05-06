@@ -31,10 +31,16 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupTodo">
-     <property name="title"><string>数据预览（待实现）</string></property>
+    <widget class="QGroupBox" name="groupReplay">
+     <property name="title"><string>RAW 回放计算</string></property>
      <layout class="QVBoxLayout" name="verticalLayout_4">
-      <item><widget class="QLabel" name="labelTodo"><property name="text"><string>后续将增加 ring/channel/point 数据表格与曲线预览。</string></property></widget></item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayoutReplay">
+        <item><widget class="QPushButton" name="btnCompute"><property name="text"><string>计算结果</string></property></widget></item>
+        <item><spacer name="horizontalSpacerReplay"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item><widget class="QPlainTextEdit" name="txtReplayResult"><property name="readOnly"><bool>true</bool></property><property name="placeholderText"><string>打开 RAW 后可在此回放计算；该操作不写 PLC、不落库。</string></property></widget></item>
      </layout>
     </widget>
    </item>

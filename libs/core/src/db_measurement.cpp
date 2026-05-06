@@ -531,6 +531,29 @@ bool Db::insertRawFileIndexForMeasurement(
   return true;
 }
 
+bool Db::getRawFilePathByMeasurementUuid(const QString &measurement_uuid,
+                                         QString *file_path,
+                                         QString *err) {
+  if (!file_path) {
+    if (err) *err = QStringLiteral("file_path 不能为空");
+    return false;
+  }
+  QSqlQuery q(db_);
+  q.prepare("SELECT file_path FROM raw_file_index "
+            "WHERE measurement_uuid=:uuid ORDER BY id DESC LIMIT 1;");
+  q.bindValue(":uuid", measurement_uuid.trimmed());
+  if (!q.exec()) {
+    if (err) *err = q.lastError().text();
+    return false;
+  }
+  if (!q.next()) {
+    if (err) *err = QStringLiteral("未找到 RAW 文件索引：%1").arg(measurement_uuid);
+    return false;
+  }
+  *file_path = q.value(0).toString();
+  return true;
+}
+
 /*
 SQL查询的作用
     这段SQL查询（固定部分 + 动态部分）的核心作用是：

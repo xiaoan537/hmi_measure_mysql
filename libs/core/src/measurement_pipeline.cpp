@@ -748,6 +748,77 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
   return true;
 }
 
+bool buildMailboxSnapshotFromRawV2(const MeasurementSnapshot &raw,
+                                   PlcMailboxSnapshot *out,
+                                   QString *err) {
+  if (!out) {
+    failWith(err, QStringLiteral("out 不能为空"));
+    return false;
+  }
+
+  const QChar partType = raw.part_type.toUpper();
+  if (partType != QChar('A') && partType != QChar('B')) {
+    failWith(err, QStringLiteral("RAW part_type 无效：%1").arg(QString(raw.part_type)));
+    return false;
+  }
+
+  QJsonObject meta;
+  if (!raw.meta_json.trimmed().isEmpty()) {
+    const QJsonDocument doc = QJsonDocument::fromJson(raw.meta_json.toUtf8());
+    if (doc.isObject()) meta = doc.object();
+  }
+
+  const int slotIndex = meta.value(QStringLiteral("slot_index")).toInt(-1);
+  QString partId = normalizedAsciiField(meta.value(QStringLiteral("part_id")).toString());
+  if (partId.isEmpty()) {
+    partId = normalizedAsciiField(meta.value(QStringLiteral("raw_part_id")).toString());
+  }
+  if (partId.isEmpty()) {
+    partId = QStringLiteral("NG");
+  }
+
+  PlcMailboxSnapshot snapshot;
+  snapshot.part_type = partType;
+  snapshot.item_count = 1;
+  snapshot.raw_layout_ver = meta.value(QStringLiteral("mailbox_layout_ver")).toInt(26);
+  if (slotIndex >= 0 && slotIndex < kLogicalSlotCount) {
+    snapshot.active_slot_mask = static_cast<quint16>(1u << slotIndex);
+  }
+
+  PlcMailboxItemSnapshot item;
+  item.present = true;
+  // RAW 文件只保存单件数据。回放时重建的是单件 mailbox，
+  // 因此 item_index 必须重新映射为 0，否则会和 items[0] 校验规则冲突。
+  item.item_index = 0;
+  item.slot_index = slotIndex;
+  item.part_id = partId;
+
+  if (partType == QChar('A')) {
+    snapshot.ring_count = raw.conf_spec.rings > 0 ? raw.conf_spec.rings : 1;
+    snapshot.point_count = raw.conf_spec.points_per_ring > 0 ? raw.conf_spec.points_per_ring : 72;
+    snapshot.channel_count = 4;
+    item.raw_points_um = raw.confocal4;
+    item.total_len_mm = raw.gt2r_mm3.value(0, std::numeric_limits<float>::quiet_NaN());
+  } else {
+    snapshot.ring_count = raw.run_spec.rings > 0 ? raw.run_spec.rings : 1;
+    snapshot.point_count = raw.run_spec.points_per_ring > 0 ? raw.run_spec.points_per_ring : 72;
+    snapshot.channel_count = 2;
+    item.raw_points_um = raw.runout2;
+    item.ad_len_mm = raw.gt2r_mm3.value(0, std::numeric_limits<float>::quiet_NaN());
+    item.bc_len_mm = raw.gt2r_mm3.value(1, std::numeric_limits<float>::quiet_NaN());
+  }
+
+  snapshot.items.push_back(item);
+  QString validErr;
+  if (!snapshot.isValid(&validErr)) {
+    failWith(err, QStringLiteral("RAW 转测量包失败：%1").arg(validErr));
+    return false;
+  }
+
+  *out = snapshot;
+  return true;
+}
+
 QJsonObject toJson(const PlcStatusBlockV2 &status) {
   QJsonObject obj;
   obj.insert(QStringLiteral("machine_state"), static_cast<int>(status.machine_state));

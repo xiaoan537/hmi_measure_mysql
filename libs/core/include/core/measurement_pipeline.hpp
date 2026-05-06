@@ -207,6 +207,10 @@ bool buildRawLoopItem(const MeasurementComputeInput &input, int itemIndex,
                       RawLoopItemBuildResult *out,
                       QString *err = nullptr);
 
+bool buildMailboxSnapshotFromRawV2(const MeasurementSnapshot &raw,
+                                   PlcMailboxSnapshot *out,
+                                   QString *err = nullptr);
+
 bool buildPlcStatusBlockV26(const QVector<quint16> &statusRegs,
                             PlcStatusBlockV2 *out,
                             QString *err = nullptr);

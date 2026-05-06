@@ -12,12 +12,14 @@
 #include "core/plc_contract_v2.hpp"
 
 class QLabel;
+class DataWidget;
 class DiagnosticsWidget;
 class MesWorker;
 class ProductionWidget;
 class CalibrationWidget;
 class DevToolsWidget;
 class ManualMaintainWidget;
+class RawViewerWidget;
 class SettingsWidget;
 
 namespace core {
@@ -27,6 +29,7 @@ struct PlcPollEventsV26;
 struct PlcRuntimeStatsV2;
 struct PlcStatusBlockV2;
 struct PlcTrayPartIdBlockV2;
+struct MeasurementSnapshot;
 }
 
 namespace Ui { class MainWindow; }
@@ -70,6 +73,12 @@ private:
     void promptNgDecisionAndDispatch();
     bool archivePendingMailbox();
     void clearPendingMailboxArchive();
+    void openRawFileForViewer(const QString &path);
+    void openRawUuidForViewer(const QString &measurementUuid);
+    void computeLoadedRawForViewer();
+    bool computeRawReplayForViewer(const core::MeasurementSnapshot &raw,
+                                   QString *resultText,
+                                   QString *err) const;
     qint16 currentCategoryModeForAutoFlow() const;
     bool evaluateIdCheckAgainstMes(QStringList *mismatchDetails, QVector<int> *mismatchSlots) const;
     bool loadMockExpectedPartIds(QVector<QString> *out, QString *err) const;
@@ -95,10 +104,12 @@ private:
     Ui::MainWindow *ui_ = nullptr;
     QString iniPath_;
     DiagnosticsWidget *diagnosticsWidget_ = nullptr;
+    DataWidget *dataWidget_ = nullptr;
     DevToolsWidget *devToolsWidget_ = nullptr;
     ManualMaintainWidget *manualMaintainWidget_ = nullptr;
     ProductionWidget *productionWidget_ = nullptr;
     CalibrationWidget *calibrationWidget_ = nullptr;
+    RawViewerWidget *rawViewerWidget_ = nullptr;
     SettingsWidget *settingsWidget_ = nullptr;
     QLabel *lbDb_ = nullptr;
     QLabel *lbPlc_ = nullptr;
@@ -128,6 +139,8 @@ private:
     bool lastComputeHasItems_ = false;
     bool lastComputeOverallOk_ = false;
     QChar lastComputePartType_ = QChar('A');
+    std::unique_ptr<core::MeasurementSnapshot> rawViewerSnapshot_;
+    QString rawViewerPath_;
 
     struct PendingArchiveItem {
         int item_index = -1;
