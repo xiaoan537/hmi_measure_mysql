@@ -35,7 +35,7 @@ namespace
     QString normalizedRunoutMetric(const QString &v)
     {
         const QString metric = v.trimmed().toUpper();
-        if (metric == QStringLiteral("VBLOCK"))
+        if (metric == QStringLiteral("FIT_RESIDUAL") || metric == QStringLiteral("VBLOCK"))
             return metric;
         return QStringLiteral("TIR_AXIS");
     }
@@ -144,6 +144,8 @@ namespace core
         c.algo.b_k_runout_mm = s.value("b_k_runout_mm", 20.0).toDouble();
         c.algo.b_a_k_runout_mm = s.value("b_a_k_runout_mm", c.algo.b_k_runout_mm).toDouble();
         c.algo.b_d_k_runout_mm = s.value("b_d_k_runout_mm", c.algo.b_k_runout_mm).toDouble();
+        c.algo.b_a_input_offset_mm = s.value("b_a_input_offset_mm", 0.0).toDouble();
+        c.algo.b_d_input_offset_mm = s.value("b_d_input_offset_mm", 0.0).toDouble();
         c.algo.b_angle_offset_deg = s.value("b_angle_offset_deg", 0.0).toDouble();
         c.algo.b_residual_threshold_mm = s.value("b_residual_threshold_mm", 0.03).toDouble();
         c.algo.b_v_block_angle_deg = s.value("b_v_block_angle_deg", 90.0).toDouble();

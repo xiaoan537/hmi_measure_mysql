@@ -168,13 +168,21 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
 
   ui_->doubleAlgoBKRunout->setValue(c.algo.b_a_k_runout_mm);
   ui_->doubleAlgoBKRunoutD->setValue(c.algo.b_d_k_runout_mm);
+  ui_->doubleAlgoBAInputOffset->setValue(c.algo.b_a_input_offset_mm);
+  ui_->doubleAlgoBDInputOffset->setValue(c.algo.b_d_input_offset_mm);
   ui_->doubleAlgoBAngleOffset->setValue(c.algo.b_angle_offset_deg);
   ui_->doubleAlgoBResidual->setValue(c.algo.b_residual_threshold_mm);
   ui_->doubleAlgoBVAngle->setValue(c.algo.b_v_block_angle_deg);
   ui_->spinAlgoBInterp->setValue(c.algo.b_interpolation_factor);
   {
     const QString metric = c.algo.runout_metric.trimmed().toUpper();
-    ui_->comboAlgoBRunoutMetric->setCurrentIndex(metric == QStringLiteral("VBLOCK") ? 1 : 0);
+    if (metric == QStringLiteral("FIT_RESIDUAL")) {
+      ui_->comboAlgoBRunoutMetric->setCurrentIndex(1);
+    } else if (metric == QStringLiteral("VBLOCK")) {
+      ui_->comboAlgoBRunoutMetric->setCurrentIndex(2);
+    } else {
+      ui_->comboAlgoBRunoutMetric->setCurrentIndex(0);
+    }
   }
   ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
   ui_->checkCalASmoothLimitEnabled->setChecked(c.algo.cal_a_smooth_limit_enabled);
@@ -274,15 +282,26 @@ core::AppConfig SettingsWidget::readFromUi() const
 
   c.algo.b_a_k_runout_mm = ui_->doubleAlgoBKRunout->value();
   c.algo.b_d_k_runout_mm = ui_->doubleAlgoBKRunoutD->value();
+  c.algo.b_a_input_offset_mm = ui_->doubleAlgoBAInputOffset->value();
+  c.algo.b_d_input_offset_mm = ui_->doubleAlgoBDInputOffset->value();
   // 兼容旧字段：保留A点值
   c.algo.b_k_runout_mm = c.algo.b_a_k_runout_mm;
   c.algo.b_angle_offset_deg = ui_->doubleAlgoBAngleOffset->value();
   c.algo.b_residual_threshold_mm = ui_->doubleAlgoBResidual->value();
   c.algo.b_v_block_angle_deg = ui_->doubleAlgoBVAngle->value();
   c.algo.b_interpolation_factor = ui_->spinAlgoBInterp->value();
-  c.algo.runout_metric = (ui_->comboAlgoBRunoutMetric->currentIndex() == 1)
-                       ? QStringLiteral("VBLOCK")
-                       : QStringLiteral("TIR_AXIS");
+  switch (ui_->comboAlgoBRunoutMetric->currentIndex()) {
+  case 1:
+    c.algo.runout_metric = QStringLiteral("FIT_RESIDUAL");
+    break;
+  case 2:
+    c.algo.runout_metric = QStringLiteral("VBLOCK");
+    break;
+  case 0:
+  default:
+    c.algo.runout_metric = QStringLiteral("TIR_AXIS");
+    break;
+  }
   c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
   c.algo.cal_a_smooth_limit_enabled = ui_->checkCalASmoothLimitEnabled->isChecked();
   c.algo.cal_a_smooth_limit_mm = ui_->doubleCalASmoothLimitMm->value();
@@ -411,6 +430,8 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("b_k_runout_mm", c.algo.b_k_runout_mm);
   s.setValue("b_a_k_runout_mm", c.algo.b_a_k_runout_mm);
   s.setValue("b_d_k_runout_mm", c.algo.b_d_k_runout_mm);
+  s.setValue("b_a_input_offset_mm", c.algo.b_a_input_offset_mm);
+  s.setValue("b_d_input_offset_mm", c.algo.b_d_input_offset_mm);
   s.setValue("b_angle_offset_deg", c.algo.b_angle_offset_deg);
   s.setValue("b_residual_threshold_mm", c.algo.b_residual_threshold_mm);
   s.setValue("b_v_block_angle_deg", c.algo.b_v_block_angle_deg);

@@ -110,11 +110,14 @@ struct MesConfig
         // B型按通道K参数：A点与D点分别标定
         double b_a_k_runout_mm = 20.0;
         double b_d_k_runout_mm = 20.0;
+        // B型跳动输入点偏置：在拟合/V型槽模拟前对72点原始值做加/减（单位mm）
+        double b_a_input_offset_mm = 0.0;
+        double b_d_input_offset_mm = 0.0;
         double b_angle_offset_deg = 0.0;
         double b_residual_threshold_mm = 0.03;
         double b_v_block_angle_deg = 90.0;
         int b_interpolation_factor = 5;
-        // 跳动口径开关：TIR_AXIS | VBLOCK
+        // 跳动口径开关：TIR_AXIS | FIT_RESIDUAL | VBLOCK
         QString runout_metric = QStringLiteral("TIR_AXIS");
 
         // 72点通道中，超过该无效点个数则判该通道无效

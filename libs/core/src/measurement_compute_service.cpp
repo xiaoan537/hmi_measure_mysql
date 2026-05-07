@@ -33,12 +33,31 @@ double deterministicDither01(double v1, double v2) {
 
 QString normalizedRunoutMetric(const QString &v) {
   const QString metric = v.trimmed().toUpper();
-  return (metric == QStringLiteral("VBLOCK")) ? metric : QStringLiteral("TIR_AXIS");
+  if (metric == QStringLiteral("FIT_RESIDUAL") || metric == QStringLiteral("VBLOCK")) {
+    return metric;
+  }
+  return QStringLiteral("TIR_AXIS");
 }
 
 double selectedRunoutValue(const RunoutResult &r, const QString &metric) {
   if (!r.success) return qQNaN();
-  return (metric == QStringLiteral("VBLOCK")) ? r.runout_vblock_mm : r.tir_axis_mm;
+  if (metric == QStringLiteral("FIT_RESIDUAL")) {
+    return r.circle_fit.success ? r.fit_residual_peak_to_peak_mm : qQNaN();
+  }
+  if (metric == QStringLiteral("VBLOCK")) {
+    return r.runout_vblock_mm;
+  }
+  return r.tir_axis_mm;
+}
+
+QString runoutMetricDisplayName(const QString &metric) {
+  if (metric == QStringLiteral("FIT_RESIDUAL")) {
+    return QStringLiteral("拟合圆残差算法");
+  }
+  if (metric == QStringLiteral("VBLOCK")) {
+    return QStringLiteral("V型槽等效算法");
+  }
+  return QStringLiteral("峰峰值算法");
 }
 
 struct JudgeEvalState {
@@ -330,10 +349,14 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                          .arg(calibration_context ? QStringLiteral("标定") : QStringLiteral("生产"));
     }
   } else if (partType == QChar('B')) {
+    result.logs << QStringLiteral("B型输入偏置：A点=%1 mm D点=%2 mm")
+                       .arg(measurementFormatNumber(algo.b_a_input_offset_mm))
+                       .arg(measurementFormatNumber(algo.b_d_input_offset_mm));
     result.logs << QStringLiteral("B型通道K：A点(K=%1) D点(K=%2)")
                        .arg(measurementFormatNumber(algo.b_a_k_runout_mm))
                        .arg(measurementFormatNumber(algo.b_d_k_runout_mm));
-    result.logs << QStringLiteral("B型跳动口径：%1").arg(runoutMetric);
+    result.logs << QStringLiteral("B型跳动口径：%1(%2)")
+                       .arg(runoutMetricDisplayName(runoutMetric), runoutMetric);
   }
 
   for (const auto &item : snapshot.items) {
@@ -487,20 +510,28 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
 
       const Channel72Series aRunout = buildChannel72Series(item.raw_points_um, 0, invalidLimit);
       const Channel72Series dRunout = buildChannel72Series(item.raw_points_um, 72, invalidLimit);
+      Channel72Series aRunoutAdjusted = aRunout;
+      Channel72Series dRunoutAdjusted = dRunout;
+      applyChannelOffset(&aRunoutAdjusted, algo.b_a_input_offset_mm);
+      applyChannelOffset(&dRunoutAdjusted, algo.b_d_input_offset_mm);
 
       auto runRunout = [&](const Channel72Series &ch, const RunoutAlgoParams &params) -> RunoutResult {
         if (ch.invalid_too_many) return RunoutResult{};
         return computeRunoutAnalysis(ch.values_mm, ch.valid_mask, params);
       };
 
-      const RunoutResult rA = runRunout(aRunout, runoutParamsA);
-      const RunoutResult rD = runRunout(dRunout, runoutParamsD);
+      const RunoutResult rA = runRunout(aRunoutAdjusted, runoutParamsA);
+      const RunoutResult rD = runRunout(dRunoutAdjusted, runoutParamsD);
 
       slotSummary.compute.values.ad_len_mm = item.ad_len_mm;
       slotSummary.compute.values.bc_len_mm = item.bc_len_mm;
-      slotSummary.compute.values.runout_left_mm = static_cast<float>(selectedRunoutValue(rA, runoutMetric));
-      slotSummary.compute.values.runout_right_mm = static_cast<float>(selectedRunoutValue(rD, runoutMetric));
-      slotSummary.compute.valid = rA.success && rD.success;
+      const double selectedLeftRunout = selectedRunoutValue(rA, runoutMetric);
+      const double selectedRightRunout = selectedRunoutValue(rD, runoutMetric);
+      slotSummary.compute.values.runout_left_mm = static_cast<float>(selectedLeftRunout);
+      slotSummary.compute.values.runout_right_mm = static_cast<float>(selectedRightRunout);
+      slotSummary.compute.valid = rA.success && rD.success
+                               && std::isfinite(selectedLeftRunout)
+                               && std::isfinite(selectedRightRunout);
 
       JudgeEvalState judge;
       evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
@@ -523,6 +554,16 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                          .arg(measurementFormatNumber(item.bc_len_mm))
                          .arg(measurementFormatNumber(slotSummary.compute.values.runout_left_mm))
                          .arg(measurementFormatNumber(slotSummary.compute.values.runout_right_mm));
+      result.logs << QStringLiteral("  B型跳动明细: A点峰峰值=%1 残差峰峰值=%2 V型槽=%3；D点峰峰值=%4 残差峰峰值=%5 V型槽=%6")
+                         .arg(measurementFormatNumber(rA.tir_axis_mm))
+                         .arg(measurementFormatNumber(rA.fit_residual_peak_to_peak_mm))
+                         .arg(measurementFormatNumber(rA.runout_vblock_mm))
+                         .arg(measurementFormatNumber(rD.tir_axis_mm))
+                         .arg(measurementFormatNumber(rD.fit_residual_peak_to_peak_mm))
+                         .arg(measurementFormatNumber(rD.runout_vblock_mm));
+      result.logs << QStringLiteral("  B型拟合圆直径: A点=%1 D点=%2")
+                         .arg(measurementFormatNumber(rA.circle_fit.diameter_mm))
+                         .arg(measurementFormatNumber(rD.circle_fit.diameter_mm));
       result.logs << QStringLiteral("  B型通道有效点: A点=%1/72 D点=%2/72")
                          .arg(countValidMask(aRunout.valid_mask))
                          .arg(countValidMask(dRunout.valid_mask));

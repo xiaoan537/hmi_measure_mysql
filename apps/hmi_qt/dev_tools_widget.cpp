@@ -589,10 +589,11 @@ QString DevToolsWidget::summarizeRunout(const core::RunoutResult &r, int primary
   lines << QStringLiteral("  拟合圆残差峰峰值 = %1 mm").arg(r.fit_residual_peak_to_peak_mm, 0, 'f', 6);
   lines << QStringLiteral("  拟合残差RMS = %1 mm").arg(r.fit_residual_rms_mm, 0, 'f', 6);
   if (r.circle_fit.success) {
-    lines << QStringLiteral("  拟合圆心 = (%1, %2) mm, 半径 = %3 mm")
+    lines << QStringLiteral("  拟合圆心 = (%1, %2) mm, 半径 = %3 mm, 直径 = %4 mm")
                 .arg(r.circle_fit.center_x_mm, 0, 'f', 6)
                 .arg(r.circle_fit.center_y_mm, 0, 'f', 6)
-                .arg(r.circle_fit.radius_mm, 0, 'f', 6);
+                .arg(r.circle_fit.radius_mm, 0, 'f', 6)
+                .arg(r.circle_fit.diameter_mm, 0, 'f', 6);
   }
   return lines.join('\n');
 }
