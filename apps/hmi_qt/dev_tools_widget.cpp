@@ -1,13 +1,9 @@
 #include "dev_tools_widget.hpp"
-#include "dev_tools.hpp"
-
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
-#include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -26,9 +22,9 @@
 #include <QVBoxLayout>
 #include <QtMath>
 
-#include "core/db.hpp"
+#include <cmath>
+
 #include "core/measurement_geometry_algorithms.hpp"
-#include "core/measurement_ingest.hpp"
 #include "ui_dev_tools_widget.h"
 
 namespace {
@@ -51,21 +47,37 @@ QString joinDoubleList(const QVector<double> &values) {
   return parts.join(',');
 }
 
+void addParamCell(QGridLayout *grid, int row, int columnPair, const QString &labelText, QWidget *field) {
+  const int baseColumn = columnPair * 2;
+  auto *label = new QLabel(labelText);
+  label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  grid->addWidget(label, row, baseColumn);
+  grid->addWidget(field, row, baseColumn + 1);
+}
+
+constexpr double kRawInvalidThresholdMm = 5.0;
+
+bool isRawPointValid(double v) {
+  return std::isfinite(v) && v <= kRawInvalidThresholdMm;
+}
+
+void applyRawThresholdMask(const QVector<double> &values, QVector<bool> *mask) {
+  if (!mask) return;
+  if (mask->size() < values.size()) {
+    mask->resize(values.size());
+  }
+  for (int i = 0; i < values.size(); ++i) {
+    if (!isRawPointValid(values.at(i))) {
+      (*mask)[i] = false;
+    }
+  }
+}
+
 } // namespace
 
 DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
     : QWidget(parent), ui_(new Ui::DevToolsWidget), cfg_(cfg) {
   ui_->setupUi(this);
-  connect(ui_->btnInsertA, &QPushButton::clicked, this,
-          &DevToolsWidget::onInsertATest);
-  connect(ui_->btnInsertB, &QPushButton::clicked, this,
-          &DevToolsWidget::onInsertBTest);
-  connect(ui_->btnSmoke, &QPushButton::clicked, this,
-          &DevToolsWidget::onRunSmoke);
-  connect(ui_->btnQueryLatest, &QPushButton::clicked, this,
-          &DevToolsWidget::onQueryLatest);
-  connect(ui_->btnClearLog, &QPushButton::clicked, this,
-          &DevToolsWidget::onClearLog);
 
   auto *algoBox = new QGroupBox(QStringLiteral("算法调试 / 几何回放"), this);
   auto *algoLay = new QVBoxLayout(algoBox);
@@ -80,7 +92,11 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   algoBtnLay->addStretch(1);
   algoLay->addLayout(algoBtnLay);
 
-  auto *paramForm = new QFormLayout();
+  auto *paramGrid = new QGridLayout();
+  paramGrid->setHorizontalSpacing(12);
+  paramGrid->setVerticalSpacing(6);
+  paramGrid->setColumnStretch(1, 1);
+  paramGrid->setColumnStretch(3, 1);
   spAlgoKIn_ = new QDoubleSpinBox(algoBox);
   spAlgoKIn_->setDecimals(6);
   spAlgoKIn_->setRange(-100000.0, 100000.0);
@@ -120,13 +136,13 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   kOutLay->addWidget(cbAlgoUseExplicitKOut_);
   kOutLay->addWidget(spAlgoKOut_, 1);
 
-  paramForm->addRow(QStringLiteral("K_in(mm)"), spAlgoKIn_);
-  paramForm->addRow(QStringLiteral("K_out(mm，主参数)"), kOutRow);
-  paramForm->addRow(QStringLiteral("探头基距L(mm，辅助/校验)"), spAlgoProbeBase_);
-  paramForm->addRow(QStringLiteral("角度偏移(°)"), spAlgoAngleOffset_);
-  paramForm->addRow(QStringLiteral("内径残差阈值(mm)"), spAlgoResidualIn_);
-  paramForm->addRow(QStringLiteral("外径残差阈值(mm)"), spAlgoResidualOut_);
-  algoLay->addLayout(paramForm);
+  addParamCell(paramGrid, 0, 0, QStringLiteral("K_in(mm)"), spAlgoKIn_);
+  addParamCell(paramGrid, 0, 1, QStringLiteral("K_out(mm，主参数)"), kOutRow);
+  addParamCell(paramGrid, 1, 0, QStringLiteral("探头基距L(mm，辅助/校验)"), spAlgoProbeBase_);
+  addParamCell(paramGrid, 1, 1, QStringLiteral("角度偏移(°)"), spAlgoAngleOffset_);
+  addParamCell(paramGrid, 2, 0, QStringLiteral("内径残差阈值(mm)"), spAlgoResidualIn_);
+  addParamCell(paramGrid, 2, 1, QStringLiteral("外径残差阈值(mm)"), spAlgoResidualOut_);
+  algoLay->addLayout(paramGrid);
 
   auto *seriesLay = new QHBoxLayout();
   auto makeSeriesColumn = [algoBox](const QString &title, QPlainTextEdit **rawEdit,
@@ -162,7 +178,11 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   runoutBtnLay->addStretch(1);
   runoutLay->addLayout(runoutBtnLay);
 
-  auto *runoutParamForm = new QFormLayout();
+  auto *runoutParamGrid = new QGridLayout();
+  runoutParamGrid->setHorizontalSpacing(12);
+  runoutParamGrid->setVerticalSpacing(6);
+  runoutParamGrid->setColumnStretch(1, 1);
+  runoutParamGrid->setColumnStretch(3, 1);
   spRunoutK_ = new QDoubleSpinBox(runoutBox);
   spRunoutK_->setDecimals(6); spRunoutK_->setRange(-1000000.0, 1000000.0); spRunoutK_->setValue(20.0);
   spRunoutAngleOffset_ = new QDoubleSpinBox(runoutBox);
@@ -177,13 +197,13 @@ DevToolsWidget::DevToolsWidget(const core::AppConfig &cfg, QWidget *parent)
   cbRunoutPrimary_->addItem(QStringLiteral("同时显示（推荐）"), 0);
   cbRunoutPrimary_->addItem(QStringLiteral("V型块等效跳动优先"), 1);
   cbRunoutPrimary_->addItem(QStringLiteral("拟合圆残差峰峰值优先"), 2);
-  runoutParamForm->addRow(QStringLiteral("K_runout(mm)"), spRunoutK_);
-  runoutParamForm->addRow(QStringLiteral("角度偏移(°)"), spRunoutAngleOffset_);
-  runoutParamForm->addRow(QStringLiteral("拟合残差阈值(mm)"), spRunoutResidual_);
-  runoutParamForm->addRow(QStringLiteral("V型块夹角(°)"), spRunoutVAngle_);
-  runoutParamForm->addRow(QStringLiteral("轮廓插值倍率"), spRunoutInterp_);
-  runoutParamForm->addRow(QStringLiteral("主显示算法"), cbRunoutPrimary_);
-  runoutLay->addLayout(runoutParamForm);
+  addParamCell(runoutParamGrid, 0, 0, QStringLiteral("K_runout(mm)"), spRunoutK_);
+  addParamCell(runoutParamGrid, 0, 1, QStringLiteral("角度偏移(°)"), spRunoutAngleOffset_);
+  addParamCell(runoutParamGrid, 1, 0, QStringLiteral("拟合残差阈值(mm)"), spRunoutResidual_);
+  addParamCell(runoutParamGrid, 1, 1, QStringLiteral("V型块夹角(°)"), spRunoutVAngle_);
+  addParamCell(runoutParamGrid, 2, 0, QStringLiteral("轮廓插值倍率"), spRunoutInterp_);
+  addParamCell(runoutParamGrid, 2, 1, QStringLiteral("主显示算法"), cbRunoutPrimary_);
+  runoutLay->addLayout(runoutParamGrid);
 
   auto *runoutSeriesLay = new QHBoxLayout();
   auto *runoutSeriesBox = new QGroupBox(QStringLiteral("跳动输入 m_runout"), runoutBox);
@@ -285,163 +305,6 @@ void DevToolsWidget::setPlcRuntimeSummary(bool connected, const QString &machine
 void DevToolsWidget::appendPlcLog(const QString &text) {
   appendLog(QStringLiteral("[PLC] %1").arg(text));
 }
-
-bool DevToolsWidget::insertViaIngest(const QString &partType,
-                                     const QString &partId, QString *err) {
-  core::Db db;
-  QString dberr;
-  if (!db.open(cfg_.db, &dberr)) {
-    if (err)
-      *err = dberr;
-    return false;
-  }
-  if (!db.ensureSchema(&dberr)) {
-    if (err)
-      *err = dberr;
-    return false;
-  }
-
-  core::MeasurementIngestRequest req;
-  req.cycle.part_type = partType;
-  req.cycle.item_count = 1;
-  req.cycle.source_mode = "AUTO";
-  req.cycle.measured_at_utc = QDateTime::currentDateTime();
-  req.cycle.mailbox_header_json =
-      QString(R"({"source":"dev_tools","part_type":"%1","item_count":1})")
-          .arg(partType);
-  req.cycle.mailbox_meta_json = R"({"note":"dev tools page ingest"})";
-
-  core::IngestItemInput item;
-  item.item_index = 0;
-  item.slot_index = (partType == "A") ? QVariant(1) : QVariant(2);
-  item.slot_id = (partType == "A") ? "DEV-SLOT-A" : "DEV-SLOT-B";
-  item.part_id = partId;
-  item.result_ok = 1;
-  item.measure_mode = "NORMAL";
-  item.measure_round = 1;
-  item.result_judgement = "OK";
-  item.upload_kind = "FIRST_MEASURE";
-  item.operator_id = "dev_tools";
-  item.review_status = "PENDING";
-  item.status = "READY";
-  req.items.push_back(item);
-
-  core::IngestResultInput result;
-  if (partType == "A") {
-    result.total_len_mm = 123.456;
-    result.id_left_mm = 16.111;
-    result.id_right_mm = 15.999;
-    result.od_left_mm = 20.333;
-    result.od_right_mm = 19.888;
-    result.extra_json = R"({"source":"dev_tools","kind":"A"})";
-  } else {
-    result.ad_len_mm = 88.123;
-    result.bc_len_mm = 33.456;
-    result.runout_left_mm = 0.012;
-    result.runout_right_mm = 0.018;
-    result.extra_json = R"({"source":"dev_tools","kind":"B"})";
-  }
-  result.tolerance_json = "{}";
-  req.results.push_back(result);
-
-  core::IngestRawInput raw;
-  raw.enabled = false;
-  req.raws.push_back(raw);
-
-  core::IngestReportInput report;
-  report.create_mes_report = false;
-  req.reports.push_back(report);
-
-  core::MeasurementIngestResponse resp;
-  core::MeasurementIngestService svc(db);
-  QString ingestErr;
-  if (!svc.ingest(req, &resp, &ingestErr)) {
-    if (err)
-      *err = ingestErr;
-    return false;
-  }
-
-  appendLog(QStringLiteral("写入成功: part=%1, cycle_id=%2, item_count=%3")
-                .arg(partId)
-                .arg(resp.plc_cycle_id)
-                .arg(resp.items.size()));
-  return true;
-}
-
-void DevToolsWidget::onInsertATest() {
-  QString err;
-  const QString partId =
-      QString("A-DEV-%1").arg(QDateTime::currentSecsSinceEpoch());
-  if (!insertViaIngest("A", partId, &err)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"),
-                         QStringLiteral("插入A型测试数据失败:\n%1").arg(err));
-    appendLog(QStringLiteral("A型写入失败: %1").arg(err));
-    return;
-  }
-}
-
-void DevToolsWidget::onInsertBTest() {
-  QString err;
-  const QString partId =
-      QString("B-DEV-%1").arg(QDateTime::currentSecsSinceEpoch());
-  if (!insertViaIngest("B", partId, &err)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"),
-                         QStringLiteral("插入B型测试数据失败:\n%1").arg(err));
-    appendLog(QStringLiteral("B型写入失败: %1").arg(err));
-    return;
-  }
-}
-
-void DevToolsWidget::onRunSmoke() {
-  core::Db db;
-  QString err;
-  if (!db.open(cfg_.db, &err)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"), err);
-    appendLog(QStringLiteral("DB打开失败: %1").arg(err));
-    return;
-  }
-  if (!db.ensureSchema(&err)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"), err);
-    appendLog(QStringLiteral("Schema失败: %1").arg(err));
-    return;
-  }
-  QString smokeErr;
-  if (!runDbSmokeTestNewSchema(db, &smokeErr)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"),
-                         QStringLiteral("数据库冒烟测试失败:\n%1").arg(smokeErr));
-    appendLog(QStringLiteral("Smoke失败: %1").arg(smokeErr));
-    return;
-  }
-  appendLog(QStringLiteral("数据库冒烟测试成功"));
-}
-
-void DevToolsWidget::onQueryLatest() {
-  core::Db db;
-  QString err;
-  if (!db.open(cfg_.db, &err) || !db.ensureSchema(&err)) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"), err);
-    appendLog(QStringLiteral("查询准备失败: %1").arg(err));
-    return;
-  }
-  const auto rows = db.queryLatestMeasurementsEx(10, &err);
-  if (!err.isEmpty()) {
-    QMessageBox::warning(this, QStringLiteral("开发调试"), err);
-    appendLog(QStringLiteral("查询失败: %1").arg(err));
-    return;
-  }
-  appendLog(QStringLiteral("最新 %1 条 measurement:").arg(rows.size()));
-  for (const auto &r : rows) {
-    appendLog(QStringLiteral("  #%1 %2 %3 %4 round=%5 judge=%6")
-                  .arg(r.measurement_id)
-                  .arg(r.part_id)
-                  .arg(r.part_type)
-                  .arg(r.measure_mode)
-                  .arg(r.measure_round)
-                  .arg(r.result_judgement));
-  }
-}
-
-void DevToolsWidget::onClearLog() { ui_->textLog->clear(); }
 
 bool DevToolsWidget::parseDoubleSeriesText(const QString &text,
                                            QVector<double> *values,
@@ -733,6 +596,7 @@ void DevToolsWidget::onRunRunoutFromInput() {
     QMessageBox::warning(this, QStringLiteral("跳动算法调试"), QStringLiteral("跳动有效mask解析失败：\n%1").arg(err));
     return;
   }
+  applyRawThresholdMask(m, &valid);
 
   core::RunoutAlgoParams params;
   params.k_runout_mm = spRunoutK_ ? spRunoutK_->value() : 0.0;
@@ -783,6 +647,8 @@ void DevToolsWidget::onRunAlgorithmFromInput() {
     QMessageBox::warning(this, QStringLiteral("算法调试"), QStringLiteral("外径有效mask解析失败：\n%1").arg(err));
     return;
   }
+  if (!mIn.isEmpty()) applyRawThresholdMask(mIn, &validIn);
+  if (!mOut.isEmpty()) applyRawThresholdMask(mOut, &validOut);
 
   core::DiameterAlgoParams params;
   params.k_in_mm = spAlgoKIn_ ? spAlgoKIn_->value() : 0.0;

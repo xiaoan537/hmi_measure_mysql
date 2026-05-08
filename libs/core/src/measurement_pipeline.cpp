@@ -5,6 +5,7 @@
 #include <QUuid>
 #include <QVector>
 
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -116,7 +117,7 @@ double doubleFromBits(quint64 bits) {
 }
 
 float normalizedFirstStageRawValue(float v) {
-  return (qAbs(v - plc_v26::kInvalidRawValue) < 1e-3f) ? qQNaN() : v;
+  return (!std::isfinite(v) || v > plc_v26::kInvalidRawThreshold) ? qQNaN() : v;
 }
 
 QByteArray mbBytesFromRegs(const QVector<quint16> &regs) {

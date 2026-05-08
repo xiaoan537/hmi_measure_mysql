@@ -78,7 +78,7 @@ constexpr int kCommandOffCmdCode = 1;
 constexpr int kCommandOffCmdResult = 2;
 constexpr int kCommandOffRejectInstruction = 3;
 
-constexpr float kInvalidRawValue = 2147.48364f;
+constexpr float kInvalidRawThreshold = 5.0f;
 
 constexpr std::array<quint32, 10> kAxisCtrlBoolMbBase = {162u,370u,578u,786u,994u,1202u,1410u,1618u,1826u,2034u};
 constexpr std::array<quint32, 10> kAxisCtrlParamMbBase = {176u,384u,592u,800u,1008u,1216u,1424u,1632u,1840u,2048u};

@@ -133,6 +133,12 @@ QString formatNumber(double v, int prec = 6) {
   return std::isfinite(v) ? QString::number(v, 'f', prec) : QStringLiteral("--");
 }
 
+constexpr double kRawInvalidThresholdMm = 5.0;
+
+bool isRawPointValidForDisplay(double v) {
+  return std::isfinite(v) && v <= kRawInvalidThresholdMm;
+}
+
 QStringList rawChannelNames(QChar partType) {
   if (partType.toUpper() == QChar('A')) {
     return {QStringLiteral("B端内径"), QStringLiteral("B端外径"),
@@ -180,11 +186,13 @@ QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw) {
         const double v = (idx >= 0 && idx < values.size())
                              ? static_cast<double>(values.at(idx))
                              : qQNaN();
+        const bool valid = isRawPointValidForDisplay(v);
         rows.push_back({names.at(ch),
                         QString::number(ring + 1),
                         QString::number(pt + 1),
                         QString::number(stepDeg * pt, 'f', 3),
-                        formatNumber(v)});
+                        formatNumber(v),
+                        valid ? QStringLiteral("Y") : QStringLiteral("N")});
       }
     }
   }
@@ -203,7 +211,7 @@ QString csvEscape(const QString &text) {
 
 QString buildRawCsvText(const core::MeasurementSnapshot &raw) {
   QStringList lines;
-  lines << QStringLiteral("measurement_uuid,part_type,channel,ring,point,angle_deg,value_mm");
+  lines << QStringLiteral("measurement_uuid,part_type,channel,ring,point,angle_deg,value_mm,valid");
   const QVector<QStringList> rows = buildRawPointRows(raw);
   for (const QStringList &row : rows) {
     QStringList cols;

@@ -46,11 +46,6 @@ public slots:
   void appendPlcLog(const QString &text);
 
 private slots:
-  void onInsertATest();
-  void onInsertBTest();
-  void onRunSmoke();
-  void onQueryLatest();
-  void onClearLog();
   void onLoadAlgorithmJson();
   void onRunAlgorithmFromInput();
   void onFillAlgorithmExample();
@@ -58,8 +53,6 @@ private slots:
   void onFillRunoutExample();
 
 private:
-  bool insertViaIngest(const QString &partType, const QString &partId,
-                       QString *err);
   void appendLog(const QString &text);
   QString plcFlowModeText(int mode) const;
   void refreshPlcActionEnableStates();

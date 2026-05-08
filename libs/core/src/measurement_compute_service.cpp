@@ -18,6 +18,12 @@ struct Channel72Series {
   bool invalid_too_many = false;
 };
 
+constexpr double kRawInvalidThresholdMm = 5.0;
+
+bool isRawPointValid(double v) {
+  return std::isfinite(v) && v <= kRawInvalidThresholdMm;
+}
+
 double deterministicDither01(double v1, double v2) {
   if (!std::isfinite(v1) || !std::isfinite(v2)) return 0.5;
   quint64 x = static_cast<quint64>(std::llround(std::fabs(v1) * 1e6));
@@ -219,7 +225,7 @@ Channel72Series buildChannel72Series(const QVector<float> &all, int offset, int 
   for (int i = 0; i < 72; ++i) {
     const int idx = offset + i;
     const double v = (idx >= 0 && idx < all.size()) ? static_cast<double>(all.at(idx)) : qQNaN();
-    const bool valid = std::isfinite(v);
+    const bool valid = isRawPointValid(v);
     s.values_mm.push_back(v);
     s.valid_mask.push_back(valid);
     if (!valid) ++s.invalid_points;
