@@ -116,10 +116,6 @@ double doubleFromBits(quint64 bits) {
   return value;
 }
 
-float normalizedFirstStageRawValue(float v) {
-  return (!std::isfinite(v) || v > plc_v26::kInvalidRawThreshold) ? qQNaN() : v;
-}
-
 QByteArray mbBytesFromRegs(const QVector<quint16> &regs) {
   QByteArray bytes;
   bytes.reserve(regs.size() * 2);
@@ -459,7 +455,6 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
   }
   QVector<float> rawValues;
   if (!plcReadFloat32ArrayAbcd(mailboxRegs, keyenceOffset + 16, 576, &rawValues, err)) return false;
-  for (float &v : rawValues) v = normalizedFirstStageRawValue(v);
   PlcMailboxSnapshot snapshot;
   snapshot.part_type = pt;
   snapshot.active_slot_mask = slotMask;

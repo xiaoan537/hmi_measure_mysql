@@ -48,6 +48,34 @@ bool PlcRepositoryV26::writeMbBytes(quint32 mbByteAddress, const QByteArray &byt
   return writeHolding(startReg, plc_codec_v26::mbBytesToRegs(raw), err);
 }
 
+bool PlcRepositoryV26::writeMbBit(quint32 mbByteAddress, quint32 bitOffset,
+                                  bool value, QString *err) const {
+  const quint32 byteAddress = mbByteAddress + bitOffset / 8u;
+  const quint8 mask = static_cast<quint8>(1u << (bitOffset % 8u));
+
+  QByteArray bytes;
+  if (!readMbBytes(byteAddress, 1, &bytes, err)) return false;
+  if (bytes.size() < 1) {
+    setErr(err, QStringLiteral("读取 MB 位所在字节失败"));
+    return false;
+  }
+
+  quint8 byte = static_cast<quint8>(bytes.at(0));
+  if (value) {
+    byte = static_cast<quint8>(byte | mask);
+  } else {
+    byte = static_cast<quint8>(byte & ~mask);
+  }
+  return writeMbBytes(byteAddress, QByteArray(1, static_cast<char>(byte)), err);
+}
+
+bool PlcRepositoryV26::pulseMbBit(quint32 mbByteAddress, quint32 bitOffset,
+                                  QString *err) const {
+  if (!writeMbBit(mbByteAddress, bitOffset, true, err)) return false;
+  QThread::msleep(50);
+  return writeMbBit(mbByteAddress, bitOffset, false, err);
+}
+
 bool PlcRepositoryV26::writeTrayPartIdSlot(int slotIndex, const QString &partId, QString *err) const {
   if (slotIndex < 0 || slotIndex >= plc_v26::kLogicalSlotCount) { setErr(err, QStringLiteral("slotIndex 越界")); return false; }
   const QByteArray bytes = plc_codec_v26::asciiToMbBytes(partId, plc_v26::kTraySlotBytes);
@@ -56,45 +84,58 @@ bool PlcRepositoryV26::writeTrayPartIdSlot(int slotIndex, const QString &partId,
 
 bool PlcRepositoryV26::readAxisState(int axisIndex, PlcAxisStateV26 *out, QString *err) const {
   if (!out) { setErr(err, QStringLiteral("readAxisState.out 不能为空")); return false; }
+  if (!plc_v26::isValidAxisIndex(axisIndex)) { setErr(err, QStringLiteral("axisIndex 越界")); return false; }
   QVector<quint16> regs; if (!readHolding(mbToReg(plc_v26::axisStateMbAddress(axisIndex)), static_cast<quint16>(plc_v26::kAxisStateRegCount), &regs, err)) return false;
   QByteArray bytes = plc_codec_v26::regsToMbBytes(regs);
   auto u8=[&](int off){ return off < bytes.size() ? static_cast<unsigned char>(bytes.at(off)) : 0; };
   auto u16le=[&](int off){ return static_cast<quint16>(u8(off) | (u8(off+1)<<8)); };
-  PlcAxisStateV26 s; s.axis_index = axisIndex; s.axis_name = plc_v26::axisName(axisIndex); s.enabled = u8(plc_v26::kAxisStateByteEnabled) != 0; s.homed = u8(plc_v26::kAxisStateByteHomed) != 0; s.error = u8(plc_v26::kAxisStateByteError) != 0; s.busy = u8(plc_v26::kAxisStateByteBusy) != 0; s.done = u8(plc_v26::kAxisStateByteDone) != 0; s.error_id = u16le(plc_v26::kAxisStateByteErrorId); plc_codec_v26::readFloat64WordSwapped(regs, static_cast<int>(plc_v26::kAxisStateByteActPosition/2u), &s.act_position, nullptr); plc_codec_v26::readFloat64WordSwapped(regs, static_cast<int>(plc_v26::kAxisStateByteActVelocity/2u), &s.act_velocity, nullptr); *out = s; return true;
+  auto bit=[&](quint32 bitOffset){ return (u8(static_cast<int>(bitOffset / 8u)) & (1u << (bitOffset % 8u))) != 0; };
+  PlcAxisStateV26 s; s.axis_index = axisIndex; s.axis_name = plc_v26::axisName(axisIndex); s.enabled = bit(plc_v26::kAxisStateBitEnabled); s.homed = bit(plc_v26::kAxisStateBitHomed); s.error = bit(plc_v26::kAxisStateBitError); s.busy = bit(plc_v26::kAxisStateBitBusy); s.done = bit(plc_v26::kAxisStateBitDone); s.error_id = u16le(plc_v26::kAxisStateByteErrorId); plc_codec_v26::readFloat64WordSwapped(regs, static_cast<int>(plc_v26::kAxisStateByteActPosition/2u), &s.act_position, nullptr); plc_codec_v26::readFloat64WordSwapped(regs, static_cast<int>(plc_v26::kAxisStateByteActVelocity/2u), &s.act_velocity, nullptr); *out = s; return true;
 }
 
-bool PlcRepositoryV26::writeAxisBoolByte(int axisIndex, quint32 byteOffset, quint8 value, QString *err) const { return writeMbBytes(plc_v26::axisCtrlBoolMbAddress(axisIndex, byteOffset), QByteArray(1, static_cast<char>(value)), err); }
+bool PlcRepositoryV26::writeAxisBoolByte(int axisIndex, quint32 byteOffset, quint8 value, QString *err) const {
+  if (!plc_v26::isValidAxisIndex(axisIndex)) { setErr(err, QStringLiteral("axisIndex 越界")); return false; }
+  return writeMbBit(plc_v26::axisCtrlMbAddress(axisIndex), byteOffset, value != 0, err);
+}
 
 bool PlcRepositoryV26::pulseAxisBoolByte(int axisIndex, quint32 byteOffset, QString *err) const {
-  if (!writeAxisBoolByte(axisIndex, byteOffset, 1, err)) return false; QThread::msleep(50); return writeAxisBoolByte(axisIndex, byteOffset, 0, err);
+  if (!plc_v26::isValidAxisIndex(axisIndex)) { setErr(err, QStringLiteral("axisIndex 越界")); return false; }
+  return pulseMbBit(plc_v26::axisCtrlMbAddress(axisIndex), byteOffset, err);
 }
 
 bool PlcRepositoryV26::writeAxisMotionParams(int axisIndex, double acc, double dec, double pos, double vel, QString *err) const {
+  if (!plc_v26::isValidAxisIndex(axisIndex)) { setErr(err, QStringLiteral("axisIndex 越界")); return false; }
   QByteArray bytes; auto add=[&](double v){ quint64 bits=0; std::memcpy(&bits,&v,sizeof(bits)); for(int i=0;i<8;++i) bytes.append(static_cast<char>((bits>>(8*i))&0xFFu)); }; add(acc); add(dec); add(pos); add(vel); return writeMbBytes(plc_v26::axisCtrlParamMbAddress(axisIndex, plc_v26::kAxisCtrlParamByteAcc), bytes, err);
 }
 
 bool PlcRepositoryV26::readCylinderState(const QString &group, int index, PlcCylinderStateV26 *out, QString *err) const {
   if (!out) { setErr(err, QStringLiteral("readCylinderState.out 不能为空")); return false; }
-  quint32 mb = 0; if (group == QStringLiteral("LM")) mb = plc_v26::kLmStateMbBase; else if (group == QStringLiteral("CL")) mb = plc_v26::clStateMbAddress(index); else mb = plc_v26::gt2StateMbAddress(index);
+  QString effectiveGroup = group;
+  int effectiveIndex = index;
+  if (effectiveGroup == QStringLiteral("LM")) { effectiveGroup = QStringLiteral("CL"); effectiveIndex = 3; }
+  quint32 mb = 0; if (effectiveGroup == QStringLiteral("CL")) mb = plc_v26::clStateMbAddress(effectiveIndex); else mb = plc_v26::gt2StateMbAddress(effectiveIndex);
+  if (mb == 0u) { setErr(err, QStringLiteral("气缸索引越界")); return false; }
   QByteArray bytes; if (!readMbBytes(mb, static_cast<quint16>(plc_v26::kCylinderStateBytes), &bytes, err)) return false; auto u8=[&](int off){ return off < bytes.size() ? static_cast<unsigned char>(bytes.at(off)) : 0; };
-  PlcCylinderStateV26 s; s.group = group; s.index = index; s.name = plc_v26::cylinderName(group, index); s.p = u8(0) != 0; s.n = u8(1) != 0; s.error = u8(2) != 0; s.error_id = static_cast<quint16>(u8(4) | (u8(5) << 8)); *out = s; return true;
+  auto bit=[&](quint32 bitOffset){ return (u8(static_cast<int>(bitOffset / 8u)) & (1u << (bitOffset % 8u))) != 0; };
+  PlcCylinderStateV26 s; s.group = effectiveGroup; s.index = effectiveIndex; s.name = plc_v26::cylinderName(effectiveGroup, effectiveIndex); s.p = bit(plc_v26::kCylinderBitP); s.n = bit(plc_v26::kCylinderBitN); s.error = bit(plc_v26::kCylinderBitError); s.error_id = static_cast<quint16>(u8(plc_v26::kCylinderStateByteErrorId) | (u8(plc_v26::kCylinderStateByteErrorId + 1) << 8)); *out = s; return true;
 }
 
 bool PlcRepositoryV26::pulseCylinder(const QString &group, int index, int whichByte, QString *err) const {
+  QString effectiveGroup = group;
+  int effectiveIndex = index;
+  if (effectiveGroup == QStringLiteral("LM")) { effectiveGroup = QStringLiteral("CL"); effectiveIndex = 3; }
   quint32 mb = 0;
-  if (group == QStringLiteral("LM")) {
-    mb = plc_v26::kLmCtrlMbBase;
-  } else if (group == QStringLiteral("CL")) {
-    mb = plc_v26::clCtrlMbAddress(index);
+  if (effectiveGroup == QStringLiteral("CL")) {
+    mb = plc_v26::clCtrlMbAddress(effectiveIndex);
   } else {
-    mb = plc_v26::gt2CtrlMbAddress(index);
+    mb = plc_v26::gt2CtrlMbAddress(effectiveIndex);
   }
-
-  QByteArray bytes(plc_v26::kCylinderCtrlBytes, static_cast<char>(0));
-  if (whichByte >= 0 && whichByte < bytes.size()) bytes[whichByte] = 1;
-  if (!writeMbBytes(mb, bytes, err)) return false;
-  QThread::msleep(50);
-  return writeMbBytes(mb, QByteArray(plc_v26::kCylinderCtrlBytes, static_cast<char>(0)), err);
+  if (mb == 0u) { setErr(err, QStringLiteral("气缸索引越界")); return false; }
+  if (whichByte < 0 || whichByte > static_cast<int>(plc_v26::kCylinderBitReset)) {
+    setErr(err, QStringLiteral("气缸动作位越界"));
+    return false;
+  }
+  return pulseMbBit(mb, static_cast<quint32>(whichByte), err);
 }
 
 } // namespace core

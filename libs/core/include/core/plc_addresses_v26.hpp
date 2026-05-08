@@ -80,18 +80,22 @@ constexpr int kCommandOffRejectInstruction = 3;
 
 constexpr float kInvalidRawThreshold = 5.0f;
 
-constexpr std::array<quint32, 10> kAxisCtrlBoolMbBase = {162u,370u,578u,786u,994u,1202u,1410u,1618u,1826u,2034u};
-constexpr std::array<quint32, 10> kAxisCtrlParamMbBase = {176u,384u,592u,800u,1008u,1216u,1424u,1632u,1840u,2048u};
-constexpr std::array<quint32, 10> kAxisStateMbBase = {2080u,2104u,2128u,2152u,2176u,2200u,2224u,2248u,2272u,2296u};
+constexpr int kAxisCount = 11;
+constexpr quint32 kAxisCtrlMbBase = 0u;       // g_aPC_AxisCtrl[1] = MB0
+constexpr quint32 kAxisCtrlStrideBytes = 40u; // AxisIN stride
+constexpr quint32 kAxisStateMbBase = 600u;    // g_aPC_AxisSta[1] = MB600
+constexpr quint32 kAxisStateStrideBytes = 24u; // AxisOUT stride
 
-constexpr std::array<quint32, 3> kClCtrlMbBase = {2324u,2327u,2330u};
-constexpr std::array<quint32, 4> kGt2CtrlMbBase = {2334u,2337u,2340u,2343u};
-constexpr quint32 kLmCtrlMbBase = 2320u;
+constexpr int kClCylinderCount = 4;  // g_aPC_CLCtrl[4] is the original grab cylinder.
+constexpr int kGt2CylinderCount = 4;
+constexpr quint32 kClCtrlMbBase = 1000u;
+constexpr quint32 kGt2CtrlMbBase = 1004u;
+constexpr quint32 kClStateMbBase = 1200u;
+constexpr quint32 kGt2StateMbBase = 1216u;
+constexpr quint32 kCylinderStateStrideBytes = 4u;
 
-constexpr quint32 kLmStateMbBase = 2346u;
-constexpr std::array<quint32, 3> kClStateMbBase = {2352u,2358u,2364u};
-constexpr std::array<quint32, 4> kGt2StateMbBase = {2370u,2376u,2382u,2388u};
-
+// Historical names kept for service compatibility. These are bit offsets now,
+// matching %MX(base).0 ... %MX(base+1).0 in the v2.6 motion table.
 constexpr quint32 kAxisCtrlByteEnable = 0;
 constexpr quint32 kAxisCtrlByteReset = 1;
 constexpr quint32 kAxisCtrlByteHome = 2;
@@ -102,57 +106,75 @@ constexpr quint32 kAxisCtrlByteMoveRel = 6;
 constexpr quint32 kAxisCtrlByteJogForward = 7;
 constexpr quint32 kAxisCtrlByteJogBackward = 8;
 
-constexpr quint32 kAxisCtrlParamByteAcc = 0;
-constexpr quint32 kAxisCtrlParamByteDec = 8;
-constexpr quint32 kAxisCtrlParamBytePosition = 16;
-constexpr quint32 kAxisCtrlParamByteVelocity = 24;
+constexpr quint32 kAxisCtrlParamByteAcc = 8;
+constexpr quint32 kAxisCtrlParamByteDec = 16;
+constexpr quint32 kAxisCtrlParamBytePosition = 24;
+constexpr quint32 kAxisCtrlParamByteVelocity = 32;
 
 constexpr quint32 kAxisStateBytes = 24;
 constexpr quint32 kAxisStateRegCount = 12;
-constexpr quint32 kAxisStateByteEnabled = 0;
-constexpr quint32 kAxisStateByteHomed = 1;
-constexpr quint32 kAxisStateByteError = 2;
-constexpr quint32 kAxisStateByteBusy = 3;
-constexpr quint32 kAxisStateByteDone = 4;
-constexpr quint32 kAxisStateByteErrorId = 6;
+constexpr quint32 kAxisStateBitEnabled = 0;
+constexpr quint32 kAxisStateBitHomed = 1;
+constexpr quint32 kAxisStateBitError = 2;
+constexpr quint32 kAxisStateBitBusy = 3;
+constexpr quint32 kAxisStateBitDone = 4;
+constexpr quint32 kAxisStateByteErrorId = 2;
 constexpr quint32 kAxisStateByteActPosition = 8;
 constexpr quint32 kAxisStateByteActVelocity = 16;
 
-constexpr quint32 kCylinderCtrlBytes = 3;
-constexpr quint32 kCylinderStateBytes = 6;
+constexpr quint32 kCylinderCtrlBytes = 1;
+constexpr quint32 kCylinderStateBytes = 4;
+constexpr quint32 kCylinderBitP = 0;
+constexpr quint32 kCylinderBitN = 1;
+constexpr quint32 kCylinderBitReset = 2;
+constexpr quint32 kCylinderBitError = 2;
+constexpr quint32 kCylinderStateByteErrorId = 2;
 
-inline quint32 axisCtrlBoolMbAddress(int axisIndex, quint32 byteOffset) {
-  return (axisIndex >= 0 && axisIndex < static_cast<int>(kAxisCtrlBoolMbBase.size())) ? kAxisCtrlBoolMbBase[static_cast<size_t>(axisIndex)] + byteOffset : 0u;
+inline bool isValidAxisIndex(int axisIndex) {
+  return axisIndex >= 0 && axisIndex < kAxisCount;
+}
+inline bool isValidClCylinderIndex(int index) {
+  return index >= 0 && index < kClCylinderCount;
+}
+inline bool isValidGt2CylinderIndex(int index) {
+  return index >= 0 && index < kGt2CylinderCount;
+}
+
+inline quint32 axisCtrlMbAddress(int axisIndex) {
+  return isValidAxisIndex(axisIndex) ? kAxisCtrlMbBase + static_cast<quint32>(axisIndex) * kAxisCtrlStrideBytes : 0u;
+}
+inline quint32 axisCtrlBoolMbAddress(int axisIndex, quint32 bitOffset) {
+  return axisCtrlMbAddress(axisIndex) + bitOffset / 8u;
 }
 inline quint32 axisCtrlParamMbAddress(int axisIndex, quint32 byteOffset) {
-  return (axisIndex >= 0 && axisIndex < static_cast<int>(kAxisCtrlParamMbBase.size())) ? kAxisCtrlParamMbBase[static_cast<size_t>(axisIndex)] + byteOffset : 0u;
+  return axisCtrlMbAddress(axisIndex) + byteOffset;
 }
 inline quint32 axisStateMbAddress(int axisIndex) {
-  return (axisIndex >= 0 && axisIndex < static_cast<int>(kAxisStateMbBase.size())) ? kAxisStateMbBase[static_cast<size_t>(axisIndex)] : 0u;
+  return isValidAxisIndex(axisIndex) ? kAxisStateMbBase + static_cast<quint32>(axisIndex) * kAxisStateStrideBytes : 0u;
 }
 inline quint32 clCtrlMbAddress(int index) {
-  return (index >= 0 && index < static_cast<int>(kClCtrlMbBase.size())) ? kClCtrlMbBase[static_cast<size_t>(index)] : 0u;
+  return isValidClCylinderIndex(index) ? kClCtrlMbBase + static_cast<quint32>(index) : 0u;
 }
 inline quint32 gt2CtrlMbAddress(int index) {
-  return (index >= 0 && index < static_cast<int>(kGt2CtrlMbBase.size())) ? kGt2CtrlMbBase[static_cast<size_t>(index)] : 0u;
+  return isValidGt2CylinderIndex(index) ? kGt2CtrlMbBase + static_cast<quint32>(index) : 0u;
 }
 inline quint32 clStateMbAddress(int index) {
-  return (index >= 0 && index < static_cast<int>(kClStateMbBase.size())) ? kClStateMbBase[static_cast<size_t>(index)] : 0u;
+  return isValidClCylinderIndex(index) ? kClStateMbBase + static_cast<quint32>(index) * kCylinderStateStrideBytes : 0u;
 }
 inline quint32 gt2StateMbAddress(int index) {
-  return (index >= 0 && index < static_cast<int>(kGt2StateMbBase.size())) ? kGt2StateMbBase[static_cast<size_t>(index)] : 0u;
+  return isValidGt2CylinderIndex(index) ? kGt2StateMbBase + static_cast<quint32>(index) * kCylinderStateStrideBytes : 0u;
 }
 
 inline QString axisName(int axisIndex) {
-  static const QStringList names = {QStringLiteral("龙门X轴"), QStringLiteral("龙门Y轴"), QStringLiteral("龙门Z轴"), QStringLiteral("测量X1轴"), QStringLiteral("测量X2轴"), QStringLiteral("测量X3轴"), QStringLiteral("内外径R1轴"), QStringLiteral("内外径R2轴"), QStringLiteral("跳动R3轴"), QStringLiteral("跳动R4轴")};
+  static const QStringList names = {QStringLiteral("龙门X轴"), QStringLiteral("龙门Y轴"), QStringLiteral("龙门Z轴"), QStringLiteral("测量X1轴"), QStringLiteral("测量X2轴"), QStringLiteral("测量X3轴"), QStringLiteral("内外径R1轴"), QStringLiteral("内外径R2轴"), QStringLiteral("跳动R3轴"), QStringLiteral("跳动R4轴"), QStringLiteral("轴11")};
   return (axisIndex >= 0 && axisIndex < names.size()) ? names.at(axisIndex) : QStringLiteral("轴%1").arg(axisIndex + 1);
 }
 inline QString cylinderName(const QString &group, int index) {
-  if (group == QStringLiteral("LM")) return QStringLiteral("抓料气缸");
   if (group == QStringLiteral("CL")) {
-    static const QStringList names = {QStringLiteral("内外径夹持"), QStringLiteral("跳动夹持"), QStringLiteral("长度夹持")};
+    static const QStringList names = {QStringLiteral("内外径夹持"), QStringLiteral("跳动夹持"), QStringLiteral("长度夹持"), QStringLiteral("抓料气缸")};
     return (index >= 0 && index < names.size()) ? names.at(index) : QStringLiteral("夹持%1").arg(index + 1);
   }
+  if (group == QStringLiteral("LM")) return QStringLiteral("抓料气缸");
   return QStringLiteral("GT2_%1").arg(index + 1);
 }
 

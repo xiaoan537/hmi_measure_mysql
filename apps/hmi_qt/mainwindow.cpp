@@ -799,7 +799,7 @@ void MainWindow::refreshManualMaintainLiveStatus() {
   if (!manualMaintainWidget_ || !plcRuntime_ || !plcRuntime_->isConnected()) return;
   QString err;
   QStringList axisLines;
-  for (int axisIndex = 0; axisIndex < 10; ++axisIndex) {
+  for (int axisIndex = 0; axisIndex < core::plc_v26::kAxisCount; ++axisIndex) {
     core::PlcAxisStateV26 s;
     if (!plcRuntime_->readAxisState(axisIndex, &s, &err)) { handlePlcRuntimeError(err); break; }
     axisLines << QStringLiteral("%1 | En=%2 Homed=%3 Err=%4 Busy=%5 Done=%6 ErrId=%7 Pos=%8 Vel=%9")
@@ -827,9 +827,8 @@ void MainWindow::refreshManualMaintainLiveStatus() {
                     .arg(s.error_id);
     return true;
   };
-  if (!appendCyl(QStringLiteral("LM"), 0)) { handlePlcRuntimeError(err); return; }
-  for (int i = 0; i < 3; ++i) if (!appendCyl(QStringLiteral("CL"), i)) { handlePlcRuntimeError(err); return; }
-  for (int i = 0; i < 4; ++i) if (!appendCyl(QStringLiteral("GT2"), i)) { handlePlcRuntimeError(err); return; }
+  for (int i = 0; i < core::plc_v26::kClCylinderCount; ++i) if (!appendCyl(QStringLiteral("CL"), i)) { handlePlcRuntimeError(err); return; }
+  for (int i = 0; i < core::plc_v26::kGt2CylinderCount; ++i) if (!appendCyl(QStringLiteral("GT2"), i)) { handlePlcRuntimeError(err); return; }
   manualMaintainWidget_->setCylinderStatesText(cylLines.join(QStringLiteral("\n")));
 }
 

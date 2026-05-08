@@ -40,6 +40,11 @@ public:
   bool pulseCylinder(const QString &group, int index, int whichByte, QString *err = nullptr) const;
 
 private:
+  bool writeMbBit(quint32 mbByteAddress, quint32 bitOffset, bool value,
+                  QString *err = nullptr) const;
+  bool pulseMbBit(quint32 mbByteAddress, quint32 bitOffset,
+                  QString *err = nullptr) const;
+
   IPlcRegisterClientV2 *client_ = nullptr;
 };
 

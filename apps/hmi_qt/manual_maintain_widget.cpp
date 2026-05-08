@@ -33,12 +33,13 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent)
   ui_->axisCombo->addItem(QStringLiteral("内外径R2轴（右端旋转）"), 7);
   ui_->axisCombo->addItem(QStringLiteral("跳动R3轴（左端旋转）"), 8);
   ui_->axisCombo->addItem(QStringLiteral("跳动R4轴（右端旋转）"), 9);
+  ui_->axisCombo->addItem(QStringLiteral("轴11"), 10);
 
   ui_->cylCombo->clear();
-  ui_->cylCombo->addItem(QStringLiteral("抓料气缸"), QStringLiteral("LM:0"));
   ui_->cylCombo->addItem(QStringLiteral("内外径夹持"), QStringLiteral("CL:0"));
   ui_->cylCombo->addItem(QStringLiteral("跳动夹持"), QStringLiteral("CL:1"));
   ui_->cylCombo->addItem(QStringLiteral("长度夹持"), QStringLiteral("CL:2"));
+  ui_->cylCombo->addItem(QStringLiteral("抓料气缸"), QStringLiteral("CL:3"));
   ui_->cylCombo->addItem(QStringLiteral("GT2_1"), QStringLiteral("GT2:0"));
   ui_->cylCombo->addItem(QStringLiteral("GT2_2"), QStringLiteral("GT2:1"));
   ui_->cylCombo->addItem(QStringLiteral("GT2_3"), QStringLiteral("GT2:2"));
@@ -136,7 +137,7 @@ ManualMaintainWidget::ManualMaintainWidget(QWidget *parent)
   auto emitCyl = [this](const QString &action) {
     const QString data =
         ui_->cylCombo ? ui_->cylCombo->currentData().toString()
-                      : QStringLiteral("LM:0");
+                      : QStringLiteral("CL:3");
     const auto target = manual_maintain_logic::parseCylinderSelector(data);
     emit requestCylinderCommand(target.first, target.second, action);
   };
