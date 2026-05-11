@@ -184,7 +184,7 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
       ui_->comboAlgoBRunoutMetric->setCurrentIndex(0);
     }
   }
-  ui_->spinInvalidPointLimit->setValue(c.algo.invalid_point_limit);
+  ui_->spinMinValidPoints->setValue(c.algo.min_valid_points);
   ui_->checkCalASmoothLimitEnabled->setChecked(c.algo.cal_a_smooth_limit_enabled);
   ui_->doubleCalASmoothLimitMm->setValue(c.algo.cal_a_smooth_limit_mm);
   ui_->doubleCalASmoothGrossErrorMm->setValue(c.algo.cal_a_smooth_gross_error_mm);
@@ -302,7 +302,7 @@ core::AppConfig SettingsWidget::readFromUi() const
     c.algo.runout_metric = QStringLiteral("TIR_AXIS");
     break;
   }
-  c.algo.invalid_point_limit = ui_->spinInvalidPointLimit->value();
+  c.algo.min_valid_points = ui_->spinMinValidPoints->value();
   c.algo.cal_a_smooth_limit_enabled = ui_->checkCalASmoothLimitEnabled->isChecked();
   c.algo.cal_a_smooth_limit_mm = ui_->doubleCalASmoothLimitMm->value();
   c.algo.cal_a_smooth_gross_error_mm = ui_->doubleCalASmoothGrossErrorMm->value();
@@ -437,7 +437,8 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("b_v_block_angle_deg", c.algo.b_v_block_angle_deg);
   s.setValue("b_interpolation_factor", c.algo.b_interpolation_factor);
   s.setValue("runout_metric", c.algo.runout_metric);
-  s.setValue("invalid_point_limit", c.algo.invalid_point_limit);
+  s.setValue("min_valid_points", c.algo.min_valid_points);
+  s.remove("invalid_point_limit");
   s.setValue("cal_a_smooth_limit_enabled", c.algo.cal_a_smooth_limit_enabled ? 1 : 0);
   s.setValue("cal_a_smooth_limit_mm", c.algo.cal_a_smooth_limit_mm);
   s.setValue("cal_a_smooth_gross_error_mm", c.algo.cal_a_smooth_gross_error_mm);

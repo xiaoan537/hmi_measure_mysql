@@ -50,6 +50,7 @@ struct CircleFitResult
     int valid_count_raw = 0;
     int valid_count_final = 0;
     int rejected_count = 0;
+    int fit_pass_count = 0;
 
     QVector<double> residuals_mm;
     QVector<bool> final_mask;

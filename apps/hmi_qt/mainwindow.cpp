@@ -41,6 +41,7 @@
 
 #include "core/db.hpp"
 #include "core/measurement_compute_service.hpp"
+#include "core/measurement_geometry_algorithms.hpp"
 #include "core/measurement_ingest.hpp"
 #include "core/measurement_pipeline.hpp"
 #include "core/plc_contract_v2.hpp"
@@ -139,6 +140,108 @@ bool isRawPointValidForDisplay(double v) {
   return std::isfinite(v) && v <= kRawInvalidThresholdMm;
 }
 
+int rawFlatIndex(int channelCount, int ringCount, int pointCount,
+                 quint16 orderCode, int channel, int ring, int point);
+
+struct RawRunoutFitPointInfo {
+  double fit_radius_mm = qQNaN();
+  double point_radius_mm = qQNaN();
+  double residual_mm = qQNaN();
+};
+
+core::RunoutAlgoParams buildRawViewerRunoutParams(const core::AlgorithmConfig &algo,
+                                                  int pointCount,
+                                                  double kRunoutMm) {
+  const int minValidPoints = qBound(3, algo.min_valid_points, qMax(3, pointCount));
+  core::RunoutAlgoParams p;
+  p.angle_offset_deg = algo.b_angle_offset_deg;
+  p.k_runout_mm = kRunoutMm;
+  p.interpolation_factor = qMax(1, algo.b_interpolation_factor);
+  p.v_block_angle_deg = algo.b_v_block_angle_deg;
+  p.fit_options.residual_threshold_mm = algo.b_residual_threshold_mm;
+  p.fit_options.min_valid_points = minValidPoints;
+  return p;
+}
+
+void fillRunoutFitPointInfoForChannel(const QVector<double> &rawValues,
+                                      const QVector<int> &sourceIndexes,
+                                      double inputOffsetMm,
+                                      const core::RunoutAlgoParams &params,
+                                      QVector<RawRunoutFitPointInfo> *out) {
+  if (!out || rawValues.size() != sourceIndexes.size()) return;
+
+  QVector<double> adjusted;
+  QVector<bool> validMask;
+  adjusted.reserve(rawValues.size());
+  validMask.reserve(rawValues.size());
+  for (double raw : rawValues) {
+    const bool valid = isRawPointValidForDisplay(raw);
+    validMask.push_back(valid);
+    adjusted.push_back(valid ? raw + inputOffsetMm : raw);
+  }
+
+  const core::RunoutResult fit = core::computeRunoutAnalysis(adjusted, validMask, params);
+  if (!fit.circle_fit.success) return;
+
+  for (int i = 0; i < sourceIndexes.size(); ++i) {
+    const int src = sourceIndexes.at(i);
+    if (src < 0 || src >= out->size()) continue;
+    if (i >= fit.point_set.points.size() ||
+        i >= fit.circle_fit.residuals_mm.size() ||
+        !fit.point_set.points.at(i).valid) {
+      continue;
+    }
+    const double residual = fit.circle_fit.residuals_mm.at(i);
+    if (!std::isfinite(residual)) continue;
+    const core::Point2D &p = fit.point_set.points.at(i);
+    const double dx = p.x - fit.circle_fit.center_x_mm;
+    const double dy = p.y - fit.circle_fit.center_y_mm;
+    RawRunoutFitPointInfo info;
+    info.fit_radius_mm = fit.circle_fit.radius_mm;
+    info.point_radius_mm = std::sqrt(dx * dx + dy * dy);
+    info.residual_mm = residual;
+    (*out)[src] = info;
+  }
+}
+
+QVector<RawRunoutFitPointInfo> buildRawRunoutFitPointInfo(
+    const core::MeasurementSnapshot &raw,
+    const core::AlgorithmConfig &algo,
+    int channelCount,
+    int ringCount,
+    int pointCount) {
+  QVector<RawRunoutFitPointInfo> infos(raw.runout2.size());
+  if (raw.part_type.toUpper() != QChar('B') || channelCount != 2 || pointCount <= 0) {
+    return infos;
+  }
+
+  for (int ring = 0; ring < ringCount; ++ring) {
+    for (int ch = 0; ch < channelCount; ++ch) {
+      QVector<double> channelValues;
+      QVector<int> sourceIndexes;
+      channelValues.reserve(pointCount);
+      sourceIndexes.reserve(pointCount);
+      for (int pt = 0; pt < pointCount; ++pt) {
+        const int idx = rawFlatIndex(channelCount, ringCount, pointCount,
+                                     raw.run_spec.order_code, ch, ring, pt);
+        sourceIndexes.push_back(idx);
+        channelValues.push_back((idx >= 0 && idx < raw.runout2.size())
+                                    ? static_cast<double>(raw.runout2.at(idx))
+                                    : qQNaN());
+      }
+
+      const double inputOffset = (ch == 0) ? algo.b_a_input_offset_mm : algo.b_d_input_offset_mm;
+      const double kRunout = (ch == 0) ? algo.b_a_k_runout_mm : algo.b_d_k_runout_mm;
+      fillRunoutFitPointInfoForChannel(channelValues,
+                                       sourceIndexes,
+                                       inputOffset,
+                                       buildRawViewerRunoutParams(algo, pointCount, kRunout),
+                                       &infos);
+    }
+  }
+  return infos;
+}
+
 QStringList rawChannelNames(QChar partType) {
   if (partType.toUpper() == QChar('A')) {
     return {QStringLiteral("B端内径"), QStringLiteral("B端外径"),
@@ -164,7 +267,8 @@ int rawFlatIndex(int channelCount, int ringCount, int pointCount,
   return ring * channelCount * pointCount + channel * pointCount + point;
 }
 
-QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw) {
+QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw,
+                                       const core::AlgorithmConfig &algo) {
   const QChar partType = raw.part_type.toUpper();
   const QStringList names = rawChannelNames(partType);
   const QVector<float> values = (partType == QChar('A')) ? raw.confocal4 : raw.runout2;
@@ -175,6 +279,8 @@ QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw) {
   const double stepDeg = spec.angle_step_deg > 0.0f
                              ? static_cast<double>(spec.angle_step_deg)
                              : 360.0 / static_cast<double>(pointCount);
+  const QVector<RawRunoutFitPointInfo> runoutFitInfos =
+      buildRawRunoutFitPointInfo(raw, algo, channelCount, ringCount, pointCount);
 
   QVector<QStringList> rows;
   rows.reserve(channelCount * ringCount * pointCount);
@@ -187,12 +293,18 @@ QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw) {
                              ? static_cast<double>(values.at(idx))
                              : qQNaN();
         const bool valid = isRawPointValidForDisplay(v);
+        const RawRunoutFitPointInfo fitInfo =
+            (idx >= 0 && idx < runoutFitInfos.size()) ? runoutFitInfos.at(idx)
+                                                       : RawRunoutFitPointInfo{};
         rows.push_back({names.at(ch),
                         QString::number(ring + 1),
                         QString::number(pt + 1),
                         QString::number(stepDeg * pt, 'f', 3),
                         formatNumber(v),
-                        valid ? QStringLiteral("Y") : QStringLiteral("N")});
+                        valid ? QStringLiteral("Y") : QStringLiteral("N"),
+                        formatNumber(fitInfo.fit_radius_mm),
+                        formatNumber(fitInfo.point_radius_mm),
+                        formatNumber(fitInfo.residual_mm)});
       }
     }
   }
@@ -209,10 +321,11 @@ QString csvEscape(const QString &text) {
   return out;
 }
 
-QString buildRawCsvText(const core::MeasurementSnapshot &raw) {
+QString buildRawCsvText(const core::MeasurementSnapshot &raw,
+                        const core::AlgorithmConfig &algo) {
   QStringList lines;
-  lines << QStringLiteral("measurement_uuid,part_type,channel,ring,point,angle_deg,value_mm,valid");
-  const QVector<QStringList> rows = buildRawPointRows(raw);
+  lines << QStringLiteral("measurement_uuid,part_type,channel,ring,point,angle_deg,value_mm,valid,fit_radius_mm,point_radius_mm,residual_mm");
+  const QVector<QStringList> rows = buildRawPointRows(raw, algo);
   for (const QStringList &row : rows) {
     QStringList cols;
     cols << raw.measurement_uuid << QString(raw.part_type.toUpper());
@@ -1289,7 +1402,7 @@ void MainWindow::openRawFileForViewer(const QString &path) {
   rawViewerPath_ = absPath;
   rawViewerWidget_->setSummaryText(summary.join(QStringLiteral("\n")));
   rawViewerWidget_->setMetaJson(prettyMeta);
-  rawViewerWidget_->setRawPointRows(buildRawPointRows(raw));
+  rawViewerWidget_->setRawPointRows(buildRawPointRows(raw, appCfg_.algo));
   rawViewerWidget_->setComputeEnabled(true);
   rawViewerWidget_->setExportEnabled(true);
 
@@ -1344,7 +1457,7 @@ void MainWindow::exportLoadedRawCsvForViewer() {
   }
   QByteArray bytes;
   bytes.append("\xEF\xBB\xBF"); // 便于 Excel 正确识别 UTF-8 中文表头。
-  bytes.append(buildRawCsvText(*rawViewerSnapshot_).toUtf8());
+  bytes.append(buildRawCsvText(*rawViewerSnapshot_, appCfg_.algo).toUtf8());
   if (f.write(bytes) != bytes.size()) {
     QMessageBox::warning(this, QStringLiteral("RAW导出"),
                          QStringLiteral("写入 CSV 不完整：%1").arg(f.errorString()));

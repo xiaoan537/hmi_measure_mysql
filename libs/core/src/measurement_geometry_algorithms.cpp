@@ -513,6 +513,7 @@ CircleFitResult fitCircleRobust(const PointSet2D &pointSet,
         result.error = err;
         return result;
     }
+    result.fit_pass_count = 1;
 
     QVector<double> residuals = computeResiduals(pointSet, cx, cy, radius);
     QVector<bool> finalMask = rawMask;
@@ -536,6 +537,7 @@ CircleFitResult fitCircleRobust(const PointSet2D &pointSet,
                 result.error = err;
                 return result;
             }
+            result.fit_pass_count = 2;
             residuals = computeResiduals(pointSet, cx, cy, radius);
         } else {
             finalMask = rawMask;

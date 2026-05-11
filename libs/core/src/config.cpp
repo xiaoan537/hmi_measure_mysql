@@ -152,7 +152,7 @@ namespace core
         c.algo.b_interpolation_factor = s.value("b_interpolation_factor", 5).toInt();
         c.algo.runout_metric = normalizedRunoutMetric(
             s.value("runout_metric", s.value("b_runout_metric", "TIR_AXIS")).toString());
-        c.algo.invalid_point_limit = s.value("invalid_point_limit", 8).toInt();
+        c.algo.min_valid_points = s.value("min_valid_points", s.value("invalid_point_limit", 50)).toInt();
 
         c.algo.spec_a_total_len.standard_mm = s.value("spec_a_total_len_standard_mm", 0.0).toDouble();
         c.algo.spec_a_total_len.tolerance_mm = s.value("spec_a_total_len_tolerance_mm", -1.0).toDouble();

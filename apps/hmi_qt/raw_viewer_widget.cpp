@@ -11,10 +11,12 @@
 RawViewerWidget::RawViewerWidget(const core::AppConfig& cfg, QWidget* parent)
   : QWidget(parent), ui_(new Ui::RawViewerWidget), cfg_(cfg) {
   ui_->setupUi(this);
-  ui_->tableRawPoints->setColumnCount(6);
+  ui_->tableRawPoints->setColumnCount(9);
   ui_->tableRawPoints->setHorizontalHeaderLabels(
       {QStringLiteral("通道"), QStringLiteral("圈号"), QStringLiteral("点号"),
-       QStringLiteral("角度(°)"), QStringLiteral("原始值(mm)"), QStringLiteral("有效")});
+       QStringLiteral("角度(°)"), QStringLiteral("原始值(mm)"), QStringLiteral("有效"),
+       QStringLiteral("拟合半径(mm)"), QStringLiteral("点到圆心距离(mm)"),
+       QStringLiteral("残差(mm)")});
   ui_->tableRawPoints->horizontalHeader()->setStretchLastSection(true);
   ui_->tableRawPoints->verticalHeader()->setVisible(false);
   ui_->tableRawPoints->setEditTriggers(QAbstractItemView::NoEditTriggers);

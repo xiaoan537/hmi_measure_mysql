@@ -120,8 +120,8 @@ struct MesConfig
         // 跳动口径开关：TIR_AXIS | FIT_RESIDUAL | VBLOCK
         QString runout_metric = QStringLiteral("TIR_AXIS");
 
-        // 72点通道中，超过该无效点个数则判该通道无效
-        int invalid_point_limit = 8;
+        // 72点通道中，少于该有效点数则判该通道无效
+        int min_valid_points = 50;
 
         // 结果判定规格（标准值 + 公差）
         // A型
