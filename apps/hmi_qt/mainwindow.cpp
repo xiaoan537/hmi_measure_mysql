@@ -149,6 +149,26 @@ struct RawRunoutFitPointInfo {
   double residual_mm = qQNaN();
 };
 
+using RawFitPointInfo = RawRunoutFitPointInfo;
+
+core::DiameterAlgoParams buildRawViewerDiameterParams(const core::AlgorithmConfig &algo,
+                                                      int pointCount,
+                                                      double kInMm,
+                                                      double kOutMm) {
+  const int minValidPoints = qBound(3, algo.min_valid_points, qMax(3, pointCount));
+  core::DiameterAlgoParams p;
+  p.k_in_mm = kInMm;
+  p.k_out_mm = kOutMm;
+  p.use_explicit_k_out = algo.a_use_explicit_k_out;
+  p.probe_base_mm = algo.a_probe_base_mm;
+  p.angle_offset_deg = algo.a_angle_offset_deg;
+  p.inner_fit.residual_threshold_mm = algo.a_residual_threshold_in_mm;
+  p.outer_fit.residual_threshold_mm = algo.a_residual_threshold_out_mm;
+  p.inner_fit.min_valid_points = minValidPoints;
+  p.outer_fit.min_valid_points = minValidPoints;
+  return p;
+}
+
 core::RunoutAlgoParams buildRawViewerRunoutParams(const core::AlgorithmConfig &algo,
                                                   int pointCount,
                                                   double kRunoutMm) {
@@ -161,6 +181,60 @@ core::RunoutAlgoParams buildRawViewerRunoutParams(const core::AlgorithmConfig &a
   p.fit_options.residual_threshold_mm = algo.b_residual_threshold_mm;
   p.fit_options.min_valid_points = minValidPoints;
   return p;
+}
+
+RawFitPointInfo pointInfoFromCircleFit(const core::PointSet2D &pointSet,
+                                       const core::CircleFitResult &fit,
+                                       int pointIndex) {
+  RawFitPointInfo info;
+  if (!fit.success ||
+      pointIndex < 0 ||
+      pointIndex >= pointSet.points.size() ||
+      pointIndex >= fit.residuals_mm.size() ||
+      !pointSet.points.at(pointIndex).valid) {
+    return info;
+  }
+
+  const double residual = fit.residuals_mm.at(pointIndex);
+  if (!std::isfinite(residual)) return info;
+
+  const core::Point2D &p = pointSet.points.at(pointIndex);
+  const double dx = p.x - fit.center_x_mm;
+  const double dy = p.y - fit.center_y_mm;
+  info.fit_radius_mm = fit.radius_mm;
+  info.point_radius_mm = std::sqrt(dx * dx + dy * dy);
+  info.residual_mm = residual;
+  return info;
+}
+
+void fillDiameterFitPointInfoForChannel(const QVector<double> &rawValues,
+                                        const QVector<int> &sourceIndexes,
+                                        double inputOffsetMm,
+                                        bool innerChannel,
+                                        const core::DiameterAlgoParams &params,
+                                        QVector<RawFitPointInfo> *out) {
+  if (!out || rawValues.size() != sourceIndexes.size()) return;
+
+  QVector<double> adjusted;
+  QVector<bool> validMask;
+  adjusted.reserve(rawValues.size());
+  validMask.reserve(rawValues.size());
+  for (double raw : rawValues) {
+    const bool valid = isRawPointValidForDisplay(raw);
+    validMask.push_back(valid);
+    adjusted.push_back(valid ? raw + inputOffsetMm : raw);
+  }
+
+  const core::DiameterChannelResult fit = innerChannel
+      ? core::computeInnerDiameter(adjusted, validMask, params)
+      : core::computeOuterDiameter(adjusted, validMask, params);
+  if (!fit.circle_fit.success) return;
+
+  for (int i = 0; i < sourceIndexes.size(); ++i) {
+    const int src = sourceIndexes.at(i);
+    if (src < 0 || src >= out->size()) continue;
+    (*out)[src] = pointInfoFromCircleFit(fit.point_set, fit.circle_fit, i);
+  }
 }
 
 void fillRunoutFitPointInfoForChannel(const QVector<double> &rawValues,
@@ -186,22 +260,52 @@ void fillRunoutFitPointInfoForChannel(const QVector<double> &rawValues,
   for (int i = 0; i < sourceIndexes.size(); ++i) {
     const int src = sourceIndexes.at(i);
     if (src < 0 || src >= out->size()) continue;
-    if (i >= fit.point_set.points.size() ||
-        i >= fit.circle_fit.residuals_mm.size() ||
-        !fit.point_set.points.at(i).valid) {
-      continue;
-    }
-    const double residual = fit.circle_fit.residuals_mm.at(i);
-    if (!std::isfinite(residual)) continue;
-    const core::Point2D &p = fit.point_set.points.at(i);
-    const double dx = p.x - fit.circle_fit.center_x_mm;
-    const double dy = p.y - fit.circle_fit.center_y_mm;
-    RawRunoutFitPointInfo info;
-    info.fit_radius_mm = fit.circle_fit.radius_mm;
-    info.point_radius_mm = std::sqrt(dx * dx + dy * dy);
-    info.residual_mm = residual;
-    (*out)[src] = info;
+    (*out)[src] = pointInfoFromCircleFit(fit.point_set, fit.circle_fit, i);
   }
+}
+
+QVector<RawFitPointInfo> buildRawDiameterFitPointInfo(
+    const core::MeasurementSnapshot &raw,
+    const core::AlgorithmConfig &algo,
+    int channelCount,
+    int ringCount,
+    int pointCount) {
+  QVector<RawFitPointInfo> infos(raw.confocal4.size());
+  if (raw.part_type.toUpper() != QChar('A') || channelCount != 4 || pointCount <= 0) {
+    return infos;
+  }
+
+  for (int ring = 0; ring < ringCount; ++ring) {
+    for (int ch = 0; ch < channelCount; ++ch) {
+      QVector<double> channelValues;
+      QVector<int> sourceIndexes;
+      channelValues.reserve(pointCount);
+      sourceIndexes.reserve(pointCount);
+      for (int pt = 0; pt < pointCount; ++pt) {
+        const int idx = rawFlatIndex(channelCount, ringCount, pointCount,
+                                     raw.conf_spec.order_code, ch, ring, pt);
+        sourceIndexes.push_back(idx);
+        channelValues.push_back((idx >= 0 && idx < raw.confocal4.size())
+                                    ? static_cast<double>(raw.confocal4.at(idx))
+                                    : qQNaN());
+      }
+
+      const bool leftEnd = (ch < 2);
+      const bool innerChannel = (ch == 0 || ch == 2);
+      const double inputOffset = innerChannel ? algo.a_inner_input_offset_mm
+                                              : algo.a_outer_input_offset_mm;
+      const core::DiameterAlgoParams params = leftEnd
+          ? buildRawViewerDiameterParams(algo, pointCount, algo.a_b_k_in_mm, algo.a_b_k_out_mm)
+          : buildRawViewerDiameterParams(algo, pointCount, algo.a_c_k_in_mm, algo.a_c_k_out_mm);
+      fillDiameterFitPointInfoForChannel(channelValues,
+                                         sourceIndexes,
+                                         inputOffset,
+                                         innerChannel,
+                                         params,
+                                         &infos);
+    }
+  }
+  return infos;
 }
 
 QVector<RawRunoutFitPointInfo> buildRawRunoutFitPointInfo(
@@ -279,6 +383,8 @@ QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw,
   const double stepDeg = spec.angle_step_deg > 0.0f
                              ? static_cast<double>(spec.angle_step_deg)
                              : 360.0 / static_cast<double>(pointCount);
+  const QVector<RawFitPointInfo> diameterFitInfos =
+      buildRawDiameterFitPointInfo(raw, algo, channelCount, ringCount, pointCount);
   const QVector<RawRunoutFitPointInfo> runoutFitInfos =
       buildRawRunoutFitPointInfo(raw, algo, channelCount, ringCount, pointCount);
 
@@ -293,9 +399,12 @@ QVector<QStringList> buildRawPointRows(const core::MeasurementSnapshot &raw,
                              ? static_cast<double>(values.at(idx))
                              : qQNaN();
         const bool valid = isRawPointValidForDisplay(v);
-        const RawRunoutFitPointInfo fitInfo =
-            (idx >= 0 && idx < runoutFitInfos.size()) ? runoutFitInfos.at(idx)
-                                                       : RawRunoutFitPointInfo{};
+        const RawFitPointInfo fitInfo =
+            (partType == QChar('A') && idx >= 0 && idx < diameterFitInfos.size())
+                ? diameterFitInfos.at(idx)
+                : ((partType == QChar('B') && idx >= 0 && idx < runoutFitInfos.size())
+                       ? runoutFitInfos.at(idx)
+                       : RawFitPointInfo{});
         rows.push_back({names.at(ch),
                         QString::number(ring + 1),
                         QString::number(pt + 1),
