@@ -73,6 +73,7 @@ signals:
     void requestReloadSlotIds();                                // 实际语义：PLC->PC 读取扫码工件ID
 
     void requestReadMailbox();
+    void requestSaveTestRaw();
     void requestAckMailbox();
     void requestReconnectPlc();
     void requestSetPlcMode(int mode);

@@ -19,6 +19,7 @@ namespace core {
 enum class BusinessRunKind {
   Production = 0,
   Calibration = 1,
+  ManualTest = 2,
 };
 
 enum class BusinessMeasureMode {

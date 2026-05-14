@@ -158,6 +158,7 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
     connect(ui_->btnReadIds, &QPushButton::clicked, this, &ProductionWidget::requestReloadSlotIds);
     connect(ui_->btnContinue, &QPushButton::clicked, this, &ProductionWidget::requestContinueAfterIdCheck);
     connect(ui_->btnReadMb, &QPushButton::clicked, this, &ProductionWidget::requestReadMailbox);
+    connect(ui_->btnSaveTestRaw, &QPushButton::clicked, this, &ProductionWidget::requestSaveTestRaw);
     connect(ui_->btnAck, &QPushButton::clicked, this, &ProductionWidget::requestAckMailbox);
 
     connect(ui_->btnWriteSlotIds, &QPushButton::clicked, this, &ProductionWidget::onBtnWriteSlotIds);

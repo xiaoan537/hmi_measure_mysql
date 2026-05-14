@@ -492,6 +492,8 @@ QString toString(BusinessRunKind v) {
   switch (v) {
   case BusinessRunKind::Calibration:
     return QStringLiteral("CALIBRATION");
+  case BusinessRunKind::ManualTest:
+    return QStringLiteral("MANUAL_TEST");
   case BusinessRunKind::Production:
   default:
     return QStringLiteral("PRODUCTION");

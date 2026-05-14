@@ -25,6 +25,8 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QAbstractButton>
 #include <QUuid>
 #include <QStackedWidget>
@@ -744,6 +746,8 @@ void MainWindow::setupBusinessPageBindings() {
   if (productionWidget_) {
     connect(productionWidget_, &ProductionWidget::requestReadMailbox,
             this, [this] { handleReadMailboxRequested(productionWidget_ ? productionWidget_->selectedPartTypeText().at(0) : QChar('A'), false); });
+    connect(productionWidget_, &ProductionWidget::requestSaveTestRaw,
+            this, &MainWindow::handleSaveTestRawRequested);
     connect(productionWidget_, &ProductionWidget::requestReloadSlotIds,
             this, [this] {
               core::PlcTrayPartIdBlockV2 tray; QString err;
@@ -2095,6 +2099,128 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType, bool prefer
       for (float v : item.raw_points_um) vals << QString::number(v, 'f', 6);
       appendMailboxLog(QStringLiteral("    raw=[%1]").arg(vals.join(QStringLiteral(","))));
     }
+  }
+}
+
+void MainWindow::handleSaveTestRawRequested() {
+  if (!plcRuntime_) {
+    appendProductionLog(QStringLiteral("保存测试RAW失败：PLC未初始化"));
+    return;
+  }
+
+  QString partTypeText = productionWidget_ ? productionWidget_->selectedPartTypeText().trimmed().toUpper()
+                                           : QStringLiteral("A");
+  if (partTypeText != QStringLiteral("A") && partTypeText != QStringLiteral("B")) {
+    partTypeText = QStringLiteral("A");
+  }
+  const QChar partType = partTypeText.at(0);
+
+  core::PlcMailboxSnapshot snapshot;
+  QString err;
+  appendProductionLog(QStringLiteral("保存测试RAW：正在读取当前PLC测量包，类型=%1").arg(partTypeText));
+  if (!plcRuntime_->readSecondStageMailboxSnapshot(partType, &snapshot, &err)) {
+    handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("保存测试RAW失败：读取测量包失败") : err);
+    return;
+  }
+
+  core::PlcMailboxSnapshot saveSnapshot = snapshot;
+  QVector<int> presentItemIndexes;
+  for (int i = 0; i < saveSnapshot.items.size(); ++i) {
+    const auto &item = saveSnapshot.items.at(i);
+    if (item.present) {
+      presentItemIndexes.push_back(i);
+    }
+  }
+  if (presentItemIndexes.isEmpty()) {
+    appendProductionLog(QStringLiteral("保存测试RAW取消：当前测量包没有有效工件"));
+    return;
+  }
+
+  const QDateTime measuredAt = QDateTime::currentDateTime();
+  const QString stamp = measuredAt.toString(QStringLiteral("yyyyMMddHHmmss"));
+  for (int itemVectorIndex : presentItemIndexes) {
+    auto &item = saveSnapshot.items[itemVectorIndex];
+    const int slotNo = item.slot_index >= 0 ? item.slot_index + 1 : item.item_index + 1;
+    const QString currentId = item.part_id.trimmed();
+    const QString defaultId = (currentId.isEmpty() || currentId.toUpper() == QStringLiteral("NG"))
+                                  ? QStringLiteral("TEST-%1-S%2")
+                                        .arg(stamp)
+                                        .arg(slotNo, 2, 10, QLatin1Char('0'))
+                                  : currentId;
+
+    bool ok = false;
+    QString inputId = QInputDialog::getText(
+        this,
+        QStringLiteral("保存测试RAW"),
+        QStringLiteral("槽位%1 / item%2 工件ID：").arg(slotNo).arg(item.item_index),
+        QLineEdit::Normal,
+        defaultId,
+        &ok);
+    if (!ok) {
+      appendProductionLog(QStringLiteral("保存测试RAW已取消"));
+      return;
+    }
+    inputId = inputId.trimmed();
+    item.part_id = inputId.isEmpty() ? defaultId : inputId;
+  }
+
+  core::MeasurementComputeInput input;
+  input.snapshot = saveSnapshot;
+  input.context.run_kind = core::BusinessRunKind::ManualTest;
+  input.context.measure_mode =
+      productionWidget_ ? core::businessMeasureModeFromString(productionWidget_->selectedMeasureModeText())
+                        : core::BusinessMeasureMode::Unknown;
+  input.context.attempt_kind = core::BusinessAttemptKind::Primary;
+  input.context.source_mode = QStringLiteral("MANUAL_TEST");
+  input.context.measured_at_utc = measuredAt;
+
+  const QString rawDateDir = measuredAt.date().toString(QStringLiteral("yyyy-MM-dd"));
+  const QString rawOutputDir = QDir(appCfg_.paths.raw_dir).filePath(
+      QDir(QStringLiteral("manual_test")).filePath(rawDateDir));
+
+  QStringList savedPaths;
+  for (int itemVectorIndex : presentItemIndexes) {
+    const auto &item = saveSnapshot.items.at(itemVectorIndex);
+    const QString measurementUuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const core::MeasurementComputeResult placeholder =
+        core::makePlaceholderComputeResult(input, item.item_index);
+
+    core::RawLoopItemBuildResult built;
+    if (!core::buildRawLoopItem(input, item.item_index, placeholder,
+                                measurementUuid, &built, &err)) {
+      handlePlcRuntimeError(QStringLiteral("保存测试RAW失败：构建RAW失败：%1").arg(err));
+      return;
+    }
+
+    QJsonObject meta;
+    const QJsonDocument metaDoc = QJsonDocument::fromJson(built.raw_snapshot.meta_json.toUtf8());
+    if (metaDoc.isObject()) {
+      meta = metaDoc.object();
+    }
+    meta.insert(QStringLiteral("manual_test"), true);
+    meta.insert(QStringLiteral("source"), QStringLiteral("production_manual_save"));
+    meta.insert(QStringLiteral("saved_from"), QStringLiteral("production_page"));
+    meta.insert(QStringLiteral("operator_part_id"), item.part_id.trimmed());
+    if (hasLastStatus_) {
+      meta.insert(QStringLiteral("plc_step_state"), static_cast<int>(lastStatus_.step_state));
+      meta.insert(QStringLiteral("plc_machine_state"), static_cast<int>(lastStatus_.machine_state));
+    }
+    built.raw_snapshot.meta_json =
+        QString::fromUtf8(QJsonDocument(meta).toJson(QJsonDocument::Compact));
+
+    core::RawWriteInfoV2 rawInfo;
+    if (!core::writeRawV2(rawOutputDir, built.raw_snapshot, &rawInfo, &err)) {
+      handlePlcRuntimeError(QStringLiteral("保存测试RAW失败：写RAW文件失败：%1").arg(err));
+      return;
+    }
+    savedPaths.push_back(rawInfo.final_path);
+  }
+
+  appendProductionLog(QStringLiteral("保存测试RAW完成：%1个文件，目录=%2")
+                          .arg(savedPaths.size())
+                          .arg(rawOutputDir));
+  for (const QString &path : savedPaths) {
+    appendProductionLog(QStringLiteral("  %1").arg(path));
   }
 }
 
