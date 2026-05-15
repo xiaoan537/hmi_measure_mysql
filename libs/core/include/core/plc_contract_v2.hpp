@@ -16,6 +16,7 @@ constexpr int kCommandBlockRegsV26 = core::plc_v26::kCommandRegs;
 constexpr int kTrayAllCodingBytesV26 = core::plc_v26::kTrayAllCodingBytes;
 constexpr int kTrayAllCodingRegsV26 = core::plc_v26::kTrayAllCodingRegs;
 constexpr int kMailboxHeaderRegsV26 = core::plc_v26::kMailboxHeaderRegs;
+constexpr int kMailboxFixedRegsV26 = core::plc_v26::kMailboxFixedRegs;
 constexpr int kMailboxDataRegsV26 =
     core::plc_v26::kMailboxKeyenceRegs + core::plc_v26::kMailboxChuantecRegs;
 constexpr int kMailboxTotalRegsV26 = core::plc_v26::kMailboxTotalRegs;

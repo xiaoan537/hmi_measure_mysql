@@ -223,6 +223,11 @@ bool buildPlcTrayAllCodingBlockV26(const QVector<quint16> &trayRegs,
                                    QString *err = nullptr);
 bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
                                         QChar partType,
+                                        int pointCount,
+                                        PlcMailboxSnapshot *out,
+                                        QString *err = nullptr);
+bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
+                                        QChar partType,
                                         PlcMailboxSnapshot *out,
                                         QString *err = nullptr);
 

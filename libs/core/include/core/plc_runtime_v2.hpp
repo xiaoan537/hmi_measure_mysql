@@ -71,9 +71,13 @@ public slots:
   bool sendContinueWithoutRetest(qint16 partType, QString *err = nullptr);
   bool sendAlarmMute(qint16 partType, QString *err = nullptr);
   bool sendPcAck(quint16 pc_ack, QString *err = nullptr);
+  bool writeSamplePointCount(int pointCount, QString *err = nullptr);
   bool writeTrayPartIdSlot(int slotIndex, const QString &partId,
                            QString *err = nullptr);
   bool readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out,
+                                      QString *err = nullptr);
+  bool readSecondStageMailboxSnapshot(QChar partType, int pointCount,
+                                      PlcMailboxSnapshot *out,
                                       QString *err = nullptr);
   bool readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err = nullptr);
   bool setModeManual(QString *err = nullptr);
@@ -127,6 +131,7 @@ private:
 
   QTimer poll_timer_;
   bool poll_in_progress_ = false;
+  int current_sample_point_count_ = 72;
   int tray_id_poll_interval_ms_ = 1000;
   int tray_id_poll_elapsed_ms_ = 0;
 

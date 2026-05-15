@@ -828,6 +828,18 @@ void MainWindow::appendCalibrationLog(const QString &text) {
   if (calibrationWidget_) calibrationWidget_->appendLogMessage(trimmed);
 }
 
+int MainWindow::selectedMailboxPointCount(bool calibrationContext) const {
+  int pointCount = 72;
+  if (calibrationContext && calibrationWidget_) {
+    pointCount = calibrationWidget_->selectedSamplePointCount();
+  } else if (productionWidget_) {
+    pointCount = productionWidget_->selectedSamplePointCount();
+  } else {
+    pointCount = appCfg_.scan_a.points_per_ring;
+  }
+  return core::plc_v26::normalizeMailboxPointCount(pointCount);
+}
+
 void MainWindow::attemptReconnectPlc(bool manual) {
   if (!plcRuntime_) return;
   if (manual) appendProductionLog(QStringLiteral("手动重连 PLC..."));
@@ -1913,6 +1925,9 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (categoryMode == core::plc_v26::kPartTypeA || categoryMode == core::plc_v26::kPartTypeB) {
     lastCategoryMode_ = categoryMode;
   }
+  const int samplePointCount = core::plc_v26::normalizeMailboxPointCount(
+      static_cast<int>(mapArg(args, QStringLiteral("sample_points"),
+                              static_cast<quint32>(selectedMailboxPointCount(commandInCalibrationFlow)))));
 
   QString err;
   if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
@@ -1929,6 +1944,15 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   if (needRewriteModeAndCategory) {
     if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
     if (!plcRuntime_->setCategoryMode(categoryMode, &err)) { handlePlcRuntimeError(err); return; }
+  }
+  if (cmd == QStringLiteral("START_AUTO") ||
+      cmd == QStringLiteral("START_CALIBRATION") ||
+      cmd == QStringLiteral("START_RETEST_CURRENT")) {
+    if (!plcRuntime_->writeSamplePointCount(samplePointCount, &err)) {
+      handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写采样点数失败") : err);
+      return;
+    }
+    appendCmdLog(QStringLiteral("写采样点数到 PLC：%1点").arg(samplePointCount));
   }
   if (cmd == QStringLiteral("CONTINUE_NO_RETEST")) {
     if (!archivePendingMailbox()) {
@@ -2001,15 +2025,17 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
   awaitingCmdReply_ = true;
   pendingCmdBits_ = cmdBits;
 
-  appendCmdLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
+  appendCmdLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 sample=%4 code=0x%5")
                    .arg(cmd)
                    .arg(plcMode)
                    .arg(categoryMode)
+                   .arg(samplePointCount)
                    .arg(QString::number(cmdBits, 16).toUpper()));
-  if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 code=0x%4")
+  if (manualMaintainWidget_) manualMaintainWidget_->appendLog(QStringLiteral("写 PLC 命令：%1 mode=%2 category=%3 sample=%4 code=0x%5")
                           .arg(cmd)
                           .arg(plcMode)
                           .arg(categoryMode)
+                          .arg(samplePointCount)
                           .arg(QString::number(cmdBits, 16).toUpper()));
 }
 
@@ -2043,13 +2069,14 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType, bool prefer
   if (!plcRuntime_) return;
   const bool calibrationContext = preferCalibrationContext
                                || isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  const int pointCount = selectedMailboxPointCount(calibrationContext);
   auto appendMailboxLog = [this, calibrationContext](const QString &line) {
     if (calibrationContext) appendCalibrationLog(line);
     else appendProductionLog(line);
   };
   core::PlcMailboxSnapshot snapshot;
   QString err;
-  if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+  if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, pointCount, &snapshot, &err)) {
     handlePlcRuntimeError(err);
     return;
   }
@@ -2057,9 +2084,10 @@ void MainWindow::handleReadMailboxRequested(QChar preferredPartType, bool prefer
   *lastMailboxSnapshot_ = snapshot;
   hasLastMailboxSnapshot_ = true;
 
-  appendMailboxLog(QStringLiteral("读取测量包成功：part=%1 item_count=%2")
+  appendMailboxLog(QStringLiteral("读取测量包成功：part=%1 item_count=%2 point_count=%3")
                        .arg(QString(snapshot.part_type))
-                       .arg(snapshot.item_count));
+                       .arg(snapshot.item_count)
+                       .arg(snapshot.point_count));
   if (calibrationContext && calibrationWidget_) {
     for (const auto &item : snapshot.items) {
       if (item.slot_index != core::kCalibrationSlotIndex) continue;
@@ -2114,11 +2142,14 @@ void MainWindow::handleSaveTestRawRequested() {
     partTypeText = QStringLiteral("A");
   }
   const QChar partType = partTypeText.at(0);
+  const int pointCount = selectedMailboxPointCount(false);
 
   core::PlcMailboxSnapshot snapshot;
   QString err;
-  appendProductionLog(QStringLiteral("保存测试RAW：正在读取当前PLC测量包，类型=%1").arg(partTypeText));
-  if (!plcRuntime_->readSecondStageMailboxSnapshot(partType, &snapshot, &err)) {
+  appendProductionLog(QStringLiteral("保存测试RAW：正在读取当前PLC测量包，类型=%1，采样=%2点")
+                          .arg(partTypeText)
+                          .arg(pointCount));
+  if (!plcRuntime_->readSecondStageMailboxSnapshot(partType, pointCount, &snapshot, &err)) {
     handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("保存测试RAW失败：读取测量包失败") : err);
     return;
   }
@@ -2233,12 +2264,18 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
   lastComputePartType_ = preferredPartType.toUpper();
   clearPendingMailboxArchive();
 
+  const bool calibrationContext =
+      preferCalibrationContext ||
+      isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
+  const int pointCount = selectedMailboxPointCount(calibrationContext);
   core::PlcMailboxSnapshot snapshot;
-  if (!forceReloadMailbox && hasLastMailboxSnapshot_ && lastMailboxSnapshot_) {
+  if (!forceReloadMailbox && hasLastMailboxSnapshot_ && lastMailboxSnapshot_ &&
+      lastMailboxSnapshot_->point_count == pointCount &&
+      lastMailboxSnapshot_->part_type.toUpper() == preferredPartType.toUpper()) {
     snapshot = *lastMailboxSnapshot_;
   } else {
     QString err;
-    if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, &snapshot, &err)) {
+    if (!plcRuntime_->readSecondStageMailboxSnapshot(preferredPartType, pointCount, &snapshot, &err)) {
       handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("读取测量包失败，无法计算结果") : err);
       return false;
     }
@@ -2247,9 +2284,6 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
     hasLastMailboxSnapshot_ = true;
   }
 
-  const bool calibrationContext =
-      preferCalibrationContext ||
-      isCalibrationContext(hasLastStatus_, calibrationFlowExpected_, hasLastStatus_ ? lastStatus_.step_state : 0);
   auto appendComputeLog = [this, calibrationContext](const QString &line) {
     if (calibrationContext) appendCalibrationLog(line);
     else appendProductionLog(line);

@@ -17,10 +17,12 @@ public:
   bool readCommandRaw(QVector<quint16> *out, QString *err = nullptr) const;
   bool readTrayCodingRaw(QVector<quint16> *out, QString *err = nullptr) const;
   bool readMailboxRaw(QVector<quint16> *out, QString *err = nullptr) const;
+  bool readMailboxRaw(int pointCount, QVector<quint16> *out, QString *err = nullptr) const;
 
   bool writeMode(qint16 mode, QString *err = nullptr) const;
   bool writeCategory(qint16 category, QString *err = nullptr) const;
   bool writeCommandWord(quint16 cmdWord, QString *err = nullptr) const;
+  bool writeSamplePointCount(int pointCount, QString *err = nullptr) const;
   bool writeScanDone(quint16 value, QString *err = nullptr) const;
   bool writePcAck(quint16 value, QString *err = nullptr) const;
   bool writeJudgeResult(quint16 value, QString *err = nullptr) const;

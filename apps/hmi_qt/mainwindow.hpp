@@ -81,6 +81,7 @@ private:
     bool computeRawReplayForViewer(const core::MeasurementSnapshot &raw,
                                    QString *resultText,
                                    QString *err) const;
+    int selectedMailboxPointCount(bool calibrationContext) const;
     qint16 currentCategoryModeForAutoFlow() const;
     bool evaluateIdCheckAgainstMes(QStringList *mismatchDetails, QVector<int> *mismatchSlots) const;
     bool loadMockExpectedPartIds(QVector<QString> *out, QString *err) const;

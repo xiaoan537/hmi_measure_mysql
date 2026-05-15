@@ -502,6 +502,20 @@
               </widget>
              </item>
              <item>
+              <widget class="QLabel" name="lblSamplePointsCaption">
+               <property name="text">
+                <string>采样点数</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="comboSamplePoints">
+               <property name="minimumWidth">
+                <number>96</number>
+               </property>
+              </widget>
+             </item>
+             <item>
               <spacer name="spRunSelect">
                <property name="orientation">
                 <enum>Qt::Horizontal</enum>

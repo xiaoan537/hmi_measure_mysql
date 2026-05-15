@@ -41,6 +41,7 @@ bool PlcRuntimeServiceV2::applyConfig(const AppConfig &cfg, QString *err) {
   }
   stats_.plc_enabled = cfg_.plc.enabled;
   stats_.poll_interval_ms = cfg_.plc.poll_interval_ms;
+  current_sample_point_count_ = plc_v26::normalizeMailboxPointCount(cfg_.scan_a.points_per_ring);
   poll_timer_.setInterval(cfg_.plc.poll_interval_ms > 0 ? cfg_.plc.poll_interval_ms : 100);
   {
     const int pollMs = (cfg_.plc.poll_interval_ms > 0) ? cfg_.plc.poll_interval_ms : 100;
@@ -258,6 +259,20 @@ bool PlcRuntimeServiceV2::sendPcAck(quint16 pc_ack, QString *err) {
   return true;
 }
 
+bool PlcRuntimeServiceV2::writeSamplePointCount(int pointCount, QString *err) {
+  if (!ensureClientReady(err)) return false;
+  if (!service_ptr_->setSamplePointCount(pointCount, err)) {
+    if (auto *qtClient = dynamic_cast<QtModbusTcpRegisterClientV2 *>(client_)) qtClient->disconnectFromPlc();
+    refreshConnectionState();
+    publishError(err ? *err : QStringLiteral("写采样点数失败"));
+    return false;
+  }
+  current_sample_point_count_ = plc_v26::normalizeMailboxPointCount(pointCount);
+  refreshConnectionState();
+  emit statsUpdated(stats_);
+  return true;
+}
+
 bool PlcRuntimeServiceV2::readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QString *err) {
   if (!ensureClientReady(err)) return false;
   if (!service_ptr_->readTrayCoding(out, err)) return false;
@@ -266,8 +281,12 @@ bool PlcRuntimeServiceV2::readSecondStageTrayIds(PlcTrayPartIdBlockV2 *out, QStr
 }
 
 bool PlcRuntimeServiceV2::readSecondStageMailboxSnapshot(QChar partType, PlcMailboxSnapshot *out, QString *err) {
+  return readSecondStageMailboxSnapshot(partType, current_sample_point_count_, out, err);
+}
+
+bool PlcRuntimeServiceV2::readSecondStageMailboxSnapshot(QChar partType, int pointCount, PlcMailboxSnapshot *out, QString *err) {
   if (!ensureClientReady(err)) return false;
-  if (!service_ptr_->readMailbox(partType, out, err)) return false;
+  if (!service_ptr_->readMailbox(partType, pointCount, out, err)) return false;
   emit mailboxSnapshotUpdated(*out);
   return true;
 }
@@ -443,7 +462,7 @@ bool PlcRuntimeServiceV2::pollSecondStage(QString *err) {
     // read mailbox using current category if available, else infer from part type command/category
     const QChar partType = (command.category_mode == plc_v26::kPartTypeB) ? QChar('B') : QChar('A');
     PlcMailboxSnapshot mailbox;
-    if (service_ptr_->readMailbox(partType, &mailbox, err)) {
+    if (service_ptr_->readMailbox(partType, current_sample_point_count_, &mailbox, err)) {
       emit mailboxSnapshotUpdated(mailbox);
     }
   }

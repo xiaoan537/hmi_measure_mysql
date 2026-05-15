@@ -13,11 +13,15 @@ bool PlcServiceV26::readTrayCoding(PlcTrayPartIdBlockV2 *out, QString *err) cons
   QVector<quint16> regs; if (!repo_.readTrayCodingRaw(&regs, err)) return false; return buildPlcTrayAllCodingBlockV26(regs, out, err);
 }
 bool PlcServiceV26::readMailbox(QChar preferredPartType, PlcMailboxSnapshot *out, QString *err) const {
-  QVector<quint16> regs; if (!repo_.readMailboxRaw(&regs, err)) return false; return buildSecondStageMailboxSnapshotV26(regs, preferredPartType, out, err);
+  return readMailbox(preferredPartType, plc_v26::kMailboxPointCount72, out, err);
+}
+bool PlcServiceV26::readMailbox(QChar preferredPartType, int pointCount, PlcMailboxSnapshot *out, QString *err) const {
+  QVector<quint16> regs; if (!repo_.readMailboxRaw(pointCount, &regs, err)) return false; return buildSecondStageMailboxSnapshotV26(regs, preferredPartType, pointCount, out, err);
 }
 
 bool PlcServiceV26::setControlMode(qint16 mode, QString *err) const { return repo_.writeMode(mode, err); }
 bool PlcServiceV26::setPartType(qint16 partType, QString *err) const { return repo_.writeCategory(partType, err); }
+bool PlcServiceV26::setSamplePointCount(int pointCount, QString *err) const { return repo_.writeSamplePointCount(pointCount, err); }
 bool PlcServiceV26::sendCommandBitmap(quint16 cmdBits, qint16 partType, QString *err) const {
   // 约定：命令触发使用 0->bit 脉冲；category 与命令同一时刻下发，避免PLC侧读到旧类别。
   if (!repo_.writeCategory(partType, err)) {

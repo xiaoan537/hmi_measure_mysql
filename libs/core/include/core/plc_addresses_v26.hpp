@@ -40,11 +40,14 @@ constexpr quint32 kRegStatusStart = 3601;       // MB7202
 constexpr quint32 kRegCommandStart = 3650;      // MB7300
 constexpr quint32 kRegPcAck = 3675;             // MB7350
 constexpr quint32 kRegJudgeResult = 3676;       // MB7352
+constexpr quint32 kRegSamplePointCount = 3677;  // MB7354
 constexpr quint32 kRegTrayAllCoding = 3700;     // MB7400
 
 constexpr quint32 kRegMailboxStart = 1197;      // MB2394
 constexpr quint32 kRegKeyenceStart = 1280;      // MB2560
-constexpr quint32 kRegChuantecStart = 1296;     // MB2592
+constexpr quint32 kRegChuantecStart = 1296;     // MB2592, 72-point data area
+constexpr quint32 kRegChuantec72Start = kRegChuantecStart;
+constexpr quint32 kRegChuantec180Start = 10080; // MB20160, 180-point data area
 constexpr quint32 kRegRPosStart = 2448;         // MB4896
 
 constexpr int kStatusRegs = 16;
@@ -57,7 +60,13 @@ constexpr int kTrayAllCodingRegs = (kTrayAllCodingBytes + 1) / 2;
 constexpr int kMailboxHeaderBytes = 2 + 2 + (2 * kTraySlotBytes); // item_count + slot_mask + 2 strings
 constexpr int kMailboxHeaderRegs = (kMailboxHeaderBytes + 1) / 2;  // 83 regs
 constexpr int kMailboxKeyenceRegs = 16; // 4 x LREAL
-constexpr int kMailboxChuantecRegs = 1152; // 8 x 72 x REAL / 2 regs
+constexpr int kMailboxFixedRegs = kMailboxHeaderRegs + kMailboxKeyenceRegs;
+constexpr int kMailboxPointCount72 = 72;
+constexpr int kMailboxPointCount180 = 180;
+constexpr int kMailboxCurveChannels = 8;
+constexpr int kMailboxChuantec72Regs = kMailboxCurveChannels * kMailboxPointCount72 * 2; // 8 x 72 x REAL / 2 regs
+constexpr int kMailboxChuantec180Regs = kMailboxCurveChannels * kMailboxPointCount180 * 2; // 8 x 180 x REAL / 2 regs
+constexpr int kMailboxChuantecRegs = kMailboxChuantec72Regs; // historical 72-point layout
 constexpr int kMailboxTotalRegs = kMailboxHeaderRegs + kMailboxKeyenceRegs + kMailboxChuantecRegs;
 
 // status offsets from kRegStatusStart
@@ -79,6 +88,22 @@ constexpr int kCommandOffCmdResult = 2;
 constexpr int kCommandOffRejectInstruction = 3;
 
 constexpr float kInvalidRawThreshold = 5.0f;
+
+inline bool isValidMailboxPointCount(int pointCount) {
+  return pointCount == kMailboxPointCount72 || pointCount == kMailboxPointCount180;
+}
+inline int normalizeMailboxPointCount(int pointCount) {
+  return pointCount == kMailboxPointCount180 ? kMailboxPointCount180 : kMailboxPointCount72;
+}
+inline quint32 chuantecRegStartForPointCount(int pointCount) {
+  return normalizeMailboxPointCount(pointCount) == kMailboxPointCount180 ? kRegChuantec180Start : kRegChuantec72Start;
+}
+inline int chuantecRegsForPointCount(int pointCount) {
+  return normalizeMailboxPointCount(pointCount) == kMailboxPointCount180 ? kMailboxChuantec180Regs : kMailboxChuantec72Regs;
+}
+inline int chuantecFloatCountForPointCount(int pointCount) {
+  return kMailboxCurveChannels * normalizeMailboxPointCount(pointCount);
+}
 
 constexpr int kAxisCount = 11;
 constexpr quint32 kAxisCtrlMbBase = 0u;       // g_aPC_AxisCtrl[1] = MB0

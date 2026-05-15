@@ -125,7 +125,7 @@
           <item row="0" column="0"><widget class="QLabel" name="labelARings"><property name="text"><string>圈数</string></property></widget></item>
           <item row="0" column="1"><widget class="QSpinBox" name="spinARings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
           <item row="1" column="0"><widget class="QLabel" name="labelAPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-          <item row="1" column="1"><widget class="QSpinBox" name="spinAPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
+          <item row="1" column="1"><widget class="QSpinBox" name="spinAPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>180</number></property></widget></item>
          <item row="2" column="0"><widget class="QLabel" name="labelAAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
          </layout>
@@ -139,7 +139,7 @@
           <item row="0" column="0"><widget class="QLabel" name="labelBRings"><property name="text"><string>圈数</string></property></widget></item>
           <item row="0" column="1"><widget class="QSpinBox" name="spinBRings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
           <item row="1" column="0"><widget class="QLabel" name="labelBPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-          <item row="1" column="1"><widget class="QSpinBox" name="spinBPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>72</number></property></widget></item>
+          <item row="1" column="1"><widget class="QSpinBox" name="spinBPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>180</number></property></widget></item>
          <item row="2" column="0"><widget class="QLabel" name="labelBAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
          <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleBAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
          </layout>
@@ -215,7 +215,7 @@
           <layout class="QFormLayout" name="formJudgeCommon">
           <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
            <item row="0" column="0"><widget class="QLabel" name="labelMinValidPoints"><property name="text"><string>最少有效点数</string></property></widget></item>
-           <item row="0" column="1"><widget class="QSpinBox" name="spinMinValidPoints"><property name="minimum"><number>3</number></property><property name="maximum"><number>72</number></property><property name="value"><number>50</number></property></widget></item>
+           <item row="0" column="1"><widget class="QSpinBox" name="spinMinValidPoints"><property name="minimum"><number>3</number></property><property name="maximum"><number>180</number></property><property name="value"><number>50</number></property></widget></item>
            <item row="1" column="0"><widget class="QLabel" name="labelCalASmoothLimitEnabled"><property name="text"><string>标定A内外径平滑限幅</string></property></widget></item>
            <item row="1" column="1"><widget class="QCheckBox" name="checkCalASmoothLimitEnabled"/></item>
            <item row="2" column="0"><widget class="QLabel" name="labelCalASmoothLimitMm"><property name="text"><string>限幅目标(mm)</string></property></widget></item>

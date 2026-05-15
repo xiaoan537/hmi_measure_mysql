@@ -11,7 +11,7 @@
 namespace core {
 namespace {
 
-struct Channel72Series {
+struct ChannelPointSeries {
   QVector<double> values_mm;
   QVector<bool> valid_mask;
   int valid_points = 0;
@@ -218,11 +218,11 @@ int countValidMask(const QVector<bool> &mask) {
   return n;
 }
 
-Channel72Series buildChannel72Series(const QVector<float> &all, int offset, int minValidPoints) {
-  Channel72Series s;
-  s.values_mm.reserve(72);
-  s.valid_mask.reserve(72);
-  for (int i = 0; i < 72; ++i) {
+ChannelPointSeries buildChannelSeries(const QVector<float> &all, int offset, int pointCount, int minValidPoints) {
+  ChannelPointSeries s;
+  s.values_mm.reserve(pointCount);
+  s.valid_mask.reserve(pointCount);
+  for (int i = 0; i < pointCount; ++i) {
     const int idx = offset + i;
     const double v = (idx >= 0 && idx < all.size()) ? static_cast<double>(all.at(idx)) : qQNaN();
     const bool valid = isRawPointValid(v);
@@ -237,7 +237,7 @@ Channel72Series buildChannel72Series(const QVector<float> &all, int offset, int 
   return s;
 }
 
-void applyChannelOffset(Channel72Series *s, double offset_mm) {
+void applyChannelOffset(ChannelPointSeries *s, double offset_mm) {
   if (!s || offset_mm == 0.0) return;
   for (int i = 0; i < s->values_mm.size(); ++i) {
     if (i < s->valid_mask.size() && s->valid_mask.at(i) && std::isfinite(s->values_mm.at(i))) {
@@ -303,7 +303,8 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
     return false;
   }
 
-  const int minValidPoints = qBound(3, algo.min_valid_points, 72);
+  const int pointCount = snapshot.point_count;
+  const int minValidPoints = qBound(3, algo.min_valid_points, pointCount);
   const DiameterAlgoParams diameterParamsB =
       buildDiameterAlgoParams(algo, minValidPoints, algo.a_b_k_in_mm, algo.a_b_k_out_mm);
   const DiameterAlgoParams diameterParamsC =
@@ -329,6 +330,7 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                      .arg(QString(snapshot.part_type))
                      .arg(snapshot.item_count)
                      .arg(minValidPoints);
+  result.logs << QStringLiteral("采样点数：%1点/通道").arg(pointCount);
   result.logs << QStringLiteral("判定规则：%1")
                      .arg(calibration_context ? QStringLiteral("标定判定规则")
                                               : QStringLiteral("生产判定规则"));
@@ -381,27 +383,28 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
     slotSummary.compute.valid = true;
 
     if (snapshot.part_type.toUpper() == QChar('A')) {
-      if (item.raw_points_um.size() < 72 * 4) {
-        result.logs << QStringLiteral("计算失败：A型 item%1 raw点数不足，期望>=288，实际=%2")
+      if (item.raw_points_um.size() < pointCount * 4) {
+        result.logs << QStringLiteral("计算失败：A型 item%1 raw点数不足，期望>=%2，实际=%3")
                            .arg(item.item_index)
+                           .arg(pointCount * 4)
                            .arg(item.raw_points_um.size());
         continue;
       }
 
-      Channel72Series bInner = buildChannel72Series(item.raw_points_um, 0, minValidPoints);
-      Channel72Series bOuter = buildChannel72Series(item.raw_points_um, 72, minValidPoints);
-      Channel72Series cInner = buildChannel72Series(item.raw_points_um, 144, minValidPoints);
-      Channel72Series cOuter = buildChannel72Series(item.raw_points_um, 216, minValidPoints);
+      ChannelPointSeries bInner = buildChannelSeries(item.raw_points_um, 0, pointCount, minValidPoints);
+      ChannelPointSeries bOuter = buildChannelSeries(item.raw_points_um, pointCount, pointCount, minValidPoints);
+      ChannelPointSeries cInner = buildChannelSeries(item.raw_points_um, pointCount * 2, pointCount, minValidPoints);
+      ChannelPointSeries cOuter = buildChannelSeries(item.raw_points_um, pointCount * 3, pointCount, minValidPoints);
       applyChannelOffset(&bInner, algo.a_inner_input_offset_mm);
       applyChannelOffset(&cInner, algo.a_inner_input_offset_mm);
       applyChannelOffset(&bOuter, algo.a_outer_input_offset_mm);
       applyChannelOffset(&cOuter, algo.a_outer_input_offset_mm);
 
-      auto runInner = [&](const Channel72Series &ch, const DiameterAlgoParams &params) -> DiameterChannelResult {
+      auto runInner = [&](const ChannelPointSeries &ch, const DiameterAlgoParams &params) -> DiameterChannelResult {
         if (ch.not_enough_valid_points) return DiameterChannelResult{};
         return computeInnerDiameter(ch.values_mm, ch.valid_mask, params);
       };
-      auto runOuter = [&](const Channel72Series &ch, const DiameterAlgoParams &params) -> DiameterChannelResult {
+      auto runOuter = [&](const ChannelPointSeries &ch, const DiameterAlgoParams &params) -> DiameterChannelResult {
         if (ch.not_enough_valid_points) return DiameterChannelResult{};
         return computeOuterDiameter(ch.values_mm, ch.valid_mask, params);
       };
@@ -488,11 +491,12 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                          .arg(measurementFormatNumber(slotSummary.compute.values.od_left_mm))
                          .arg(measurementFormatNumber(slotSummary.compute.values.id_right_mm))
                          .arg(measurementFormatNumber(slotSummary.compute.values.od_right_mm));
-      result.logs << QStringLiteral("  A型通道有效点: B内=%1/72 B外=%2/72 C内=%3/72 C外=%4/72")
+      result.logs << QStringLiteral("  A型通道有效点: B内=%1/%5 B外=%2/%5 C内=%3/%5 C外=%4/%5")
                          .arg(countValidMask(bInner.valid_mask))
                          .arg(countValidMask(bOuter.valid_mask))
                          .arg(countValidMask(cInner.valid_mask))
-                         .arg(countValidMask(cOuter.valid_mask));
+                         .arg(countValidMask(cOuter.valid_mask))
+                         .arg(pointCount);
       result.logs << QStringLiteral("  A型圆拟合次数: B内=%1次(剔除%2点) B外=%3次(剔除%4点) C内=%5次(剔除%6点) C外=%7次(剔除%8点)")
                          .arg(rBInner.circle_fit.fit_pass_count)
                          .arg(rBInner.circle_fit.rejected_count)
@@ -514,21 +518,22 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                          .arg(slotSummary.judgement_ok ? QString()
                                                        : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
     } else if (snapshot.part_type.toUpper() == QChar('B')) {
-      if (item.raw_points_um.size() < 72 * 2) {
-        result.logs << QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=144，实际=%2")
+      if (item.raw_points_um.size() < pointCount * 2) {
+        result.logs << QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=%2，实际=%3")
                            .arg(item.item_index)
+                           .arg(pointCount * 2)
                            .arg(item.raw_points_um.size());
         continue;
       }
 
-      const Channel72Series aRunout = buildChannel72Series(item.raw_points_um, 0, minValidPoints);
-      const Channel72Series dRunout = buildChannel72Series(item.raw_points_um, 72, minValidPoints);
-      Channel72Series aRunoutAdjusted = aRunout;
-      Channel72Series dRunoutAdjusted = dRunout;
+      const ChannelPointSeries aRunout = buildChannelSeries(item.raw_points_um, 0, pointCount, minValidPoints);
+      const ChannelPointSeries dRunout = buildChannelSeries(item.raw_points_um, pointCount, pointCount, minValidPoints);
+      ChannelPointSeries aRunoutAdjusted = aRunout;
+      ChannelPointSeries dRunoutAdjusted = dRunout;
       applyChannelOffset(&aRunoutAdjusted, algo.b_a_input_offset_mm);
       applyChannelOffset(&dRunoutAdjusted, algo.b_d_input_offset_mm);
 
-      auto runRunout = [&](const Channel72Series &ch, const RunoutAlgoParams &params) -> RunoutResult {
+      auto runRunout = [&](const ChannelPointSeries &ch, const RunoutAlgoParams &params) -> RunoutResult {
         if (ch.not_enough_valid_points) return RunoutResult{};
         return computeRunoutAnalysis(ch.values_mm, ch.valid_mask, params);
       };
@@ -582,9 +587,10 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                          .arg(rA.circle_fit.rejected_count)
                          .arg(rD.circle_fit.fit_pass_count)
                          .arg(rD.circle_fit.rejected_count);
-      result.logs << QStringLiteral("  B型通道有效点: A点=%1/72 D点=%2/72")
+      result.logs << QStringLiteral("  B型通道有效点: A点=%1/%3 D点=%2/%3")
                          .arg(countValidMask(aRunout.valid_mask))
-                         .arg(countValidMask(dRunout.valid_mask));
+                         .arg(countValidMask(dRunout.valid_mask))
+                         .arg(pointCount);
 
       if (aRunout.not_enough_valid_points || dRunout.not_enough_valid_points) {
         result.logs << QStringLiteral("  B型通道无效：有效点少于最少要求(%1)").arg(minValidPoints);

@@ -106,6 +106,15 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
     partTypeCombo_->addItem(QStringLiteral("A型标定"), QStringLiteral("A"));
     partTypeCombo_->addItem(QStringLiteral("B型标定"), QStringLiteral("B"));
     ctrlRow->addWidget(partTypeCombo_);
+    ctrlRow->addSpacing(12);
+    ctrlRow->addWidget(new QLabel(QStringLiteral("采样点数"), this));
+    samplePointCombo_ = new QComboBox(this);
+    samplePointCombo_->addItem(QStringLiteral("72点"), 72);
+    samplePointCombo_->addItem(QStringLiteral("180点"), 180);
+    const int defaultPointCount = (cfg_.scan_a.points_per_ring == 180 || cfg_.scan_b.points_per_ring == 180) ? 180 : 72;
+    const int pointIndex = samplePointCombo_->findData(defaultPointCount);
+    if (pointIndex >= 0) samplePointCombo_->setCurrentIndex(pointIndex);
+    ctrlRow->addWidget(samplePointCombo_);
     ctrlRow->addStretch(1);
     ctrlLay->addLayout(ctrlRow);
 
@@ -159,6 +168,7 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
         args.insert(QStringLiteral("plc_mode"), selectedPlcModeValue());
         args.insert(QStringLiteral("part_type"), selectedPartTypeText());
         args.insert(QStringLiteral("part_type_arg"), static_cast<int>(selectedPartTypeArg()));
+        args.insert(QStringLiteral("sample_points"), selectedSamplePointCount());
         args.insert(QStringLiteral("ui_source"), QStringLiteral("calibration"));
         return args;
     };
@@ -362,6 +372,13 @@ QString CalibrationWidget::selectedPartTypeText() const
     if (!partTypeCombo_) return QStringLiteral("A");
     const QString v = partTypeCombo_->currentData().toString().trimmed().toUpper();
     return (v == QStringLiteral("B")) ? QStringLiteral("B") : QStringLiteral("A");
+}
+
+int CalibrationWidget::selectedSamplePointCount() const
+{
+    if (!samplePointCombo_) return 72;
+    const int v = samplePointCombo_->currentData().toInt();
+    return v == 180 ? 180 : 72;
 }
 
 quint32 CalibrationWidget::selectedPartTypeArg() const

@@ -428,6 +428,7 @@ bool buildPlcTrayAllCodingBlockV26(const QVector<quint16> &trayRegs,
 
 bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
                                         QChar partType,
+                                        int pointCount,
                                         PlcMailboxSnapshot *out,
                                         QString *err) {
   if (!out) return failWith(err, QStringLiteral("buildSecondStageMailboxSnapshotV26.out 不能为空")).isEmpty();
@@ -436,8 +437,17 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
     failWith(err, QStringLiteral("第二阶段读取 Mailbox 需要明确 partType=A/B"));
     return false;
   }
-  if (mailboxRegs.size() < kMailboxTotalRegsV26) {
-    failWith(err, QStringLiteral("mailboxRegs 长度不足，期望至少 %1，实际 %2").arg(kMailboxTotalRegsV26).arg(mailboxRegs.size()));
+  if (!plc_v26::isValidMailboxPointCount(pointCount)) {
+    failWith(err, QStringLiteral("Mailbox采样点数只支持72或180，当前=%1").arg(pointCount));
+    return false;
+  }
+  const int rawFloatCount = plc_v26::chuantecFloatCountForPointCount(pointCount);
+  const int requiredRegs = kMailboxFixedRegsV26 + rawFloatCount * 2;
+  if (mailboxRegs.size() < requiredRegs) {
+    failWith(err, QStringLiteral("mailboxRegs 长度不足，point_count=%1，期望至少 %2，实际 %3")
+                      .arg(pointCount)
+                      .arg(requiredRegs)
+                      .arg(mailboxRegs.size()));
     return false;
   }
   quint16 itemCount = 0, slotMask = 0;
@@ -454,13 +464,13 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
     lenValues.push_back(v);
   }
   QVector<float> rawValues;
-  if (!plcReadFloat32ArrayAbcd(mailboxRegs, keyenceOffset + 16, 576, &rawValues, err)) return false;
+  if (!plcReadFloat32ArrayAbcd(mailboxRegs, kMailboxFixedRegsV26, rawFloatCount, &rawValues, err)) return false;
   PlcMailboxSnapshot snapshot;
   snapshot.part_type = pt;
   snapshot.active_slot_mask = slotMask;
   snapshot.raw_layout_ver = 26;
   snapshot.ring_count = 1;
-  snapshot.point_count = 72;
+  snapshot.point_count = pointCount;
   snapshot.channel_count = (pt == QChar('A')) ? 4 : 2;
   snapshot.item_count = qBound(0, static_cast<int>(itemCount), 2);
   const auto slotList = logicalSlotsFromMaskV26(slotMask);
@@ -469,8 +479,8 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
     PlcMailboxItemSnapshot item;
     item.present = true; item.item_index = itemIndex; item.slot_index = slotForItem(itemIndex); item.part_id = normalizedAsciiField(partId);
     item.total_len_mm = static_cast<float>(lenValues.value(itemIndex));
-    item.raw_points_um.reserve(4 * 72);
-    for (int ch = 0; ch < 4; ++ch) { const int offset = (curveBase + ch) * 72; for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
+    item.raw_points_um.reserve(4 * pointCount);
+    for (int ch = 0; ch < 4; ++ch) { const int offset = (curveBase + ch) * pointCount; for (int ptIdx = 0; ptIdx < pointCount; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
     return item;
   };
   const auto buildItemB = [&](int itemIndex, const QString &partId, int curveBase) {
@@ -478,14 +488,23 @@ bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
     item.present = true; item.item_index = itemIndex; item.slot_index = slotForItem(itemIndex); item.part_id = normalizedAsciiField(partId);
     item.ad_len_mm = static_cast<float>(lenValues.value(itemIndex * 2));
     item.bc_len_mm = static_cast<float>(lenValues.value(itemIndex * 2 + 1));
-    item.raw_points_um.reserve(2 * 72);
-    for (int ch = 0; ch < 2; ++ch) { const int offset = (curveBase + ch) * 72; for (int ptIdx = 0; ptIdx < 72; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
+    item.raw_points_um.reserve(2 * pointCount);
+    for (int ch = 0; ch < 2; ++ch) { const int offset = (curveBase + ch) * pointCount; for (int ptIdx = 0; ptIdx < pointCount; ++ptIdx) item.raw_points_um.push_back(rawValues.at(offset + ptIdx)); }
     return item;
   };
   if (snapshot.item_count >= 1) snapshot.items.push_back(pt == QChar('A') ? buildItemA(0, id0, 0) : buildItemB(0, id0, 0));
   if (snapshot.item_count >= 2) snapshot.items.push_back(pt == QChar('A') ? buildItemA(1, id1, 4) : buildItemB(1, id1, 2));
   *out = snapshot;
   return true;
+}
+
+bool buildSecondStageMailboxSnapshotV26(const QVector<quint16> &mailboxRegs,
+                                        QChar partType,
+                                        PlcMailboxSnapshot *out,
+                                        QString *err) {
+  return buildSecondStageMailboxSnapshotV26(mailboxRegs, partType,
+                                           plc_v26::kMailboxPointCount72,
+                                           out, err);
 }
 
 QString toString(BusinessRunKind v) {

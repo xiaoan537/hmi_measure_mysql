@@ -24,11 +24,39 @@ bool PlcRepositoryV26::writeHolding(quint32 reg, const QVector<quint16> &values,
 bool PlcRepositoryV26::readStatusRaw(QVector<quint16> *out, QString *err) const { return readHolding(plc_v26::kRegStatusStart, plc_v26::kStatusRegs, out, err); }
 bool PlcRepositoryV26::readCommandRaw(QVector<quint16> *out, QString *err) const { return readHolding(plc_v26::kRegCommandStart, plc_v26::kCommandRegs, out, err); }
 bool PlcRepositoryV26::readTrayCodingRaw(QVector<quint16> *out, QString *err) const { return readHolding(plc_v26::kRegTrayAllCoding, static_cast<quint16>(plc_v26::kTrayAllCodingRegs), out, err); }
-bool PlcRepositoryV26::readMailboxRaw(QVector<quint16> *out, QString *err) const { return readHolding(plc_v26::kRegMailboxStart, static_cast<quint16>(plc_v26::kMailboxTotalRegs), out, err); }
+bool PlcRepositoryV26::readMailboxRaw(QVector<quint16> *out, QString *err) const {
+  return readMailboxRaw(plc_v26::kMailboxPointCount72, out, err);
+}
+bool PlcRepositoryV26::readMailboxRaw(int pointCount, QVector<quint16> *out, QString *err) const {
+  if (!out) { setErr(err, QStringLiteral("readMailboxRaw.out 不能为空")); return false; }
+  if (!plc_v26::isValidMailboxPointCount(pointCount)) {
+    setErr(err, QStringLiteral("采样点数只支持 72 或 180，当前=%1").arg(pointCount));
+    return false;
+  }
+  QVector<quint16> fixedRegs;
+  if (!readHolding(plc_v26::kRegMailboxStart, static_cast<quint16>(plc_v26::kMailboxFixedRegs), &fixedRegs, err)) return false;
+  QVector<quint16> curveRegs;
+  if (!readHolding(plc_v26::chuantecRegStartForPointCount(pointCount),
+                   static_cast<quint16>(plc_v26::chuantecRegsForPointCount(pointCount)),
+                   &curveRegs, err)) return false;
+  out->clear();
+  out->reserve(fixedRegs.size() + curveRegs.size());
+  for (quint16 reg : fixedRegs) out->push_back(reg);
+  for (quint16 reg : curveRegs) out->push_back(reg);
+  return true;
+}
 
 bool PlcRepositoryV26::writeMode(qint16 mode, QString *err) const { return writeHolding(plc_v26::kRegMode, QVector<quint16>{static_cast<quint16>(mode)}, err); }
 bool PlcRepositoryV26::writeCategory(qint16 category, QString *err) const { return writeHolding(plc_v26::kRegCommandStart + plc_v26::kCommandOffCategoryMode, QVector<quint16>{static_cast<quint16>(category)}, err); }
 bool PlcRepositoryV26::writeCommandWord(quint16 cmdWord, QString *err) const { return writeHolding(plc_v26::kRegCommandStart + plc_v26::kCommandOffCmdCode, QVector<quint16>{cmdWord}, err); }
+bool PlcRepositoryV26::writeSamplePointCount(int pointCount, QString *err) const {
+  if (!plc_v26::isValidMailboxPointCount(pointCount)) {
+    setErr(err, QStringLiteral("采样点数只支持 72 或 180，当前=%1").arg(pointCount));
+    return false;
+  }
+  return writeHolding(plc_v26::kRegSamplePointCount,
+                      QVector<quint16>{static_cast<quint16>(pointCount)}, err);
+}
 bool PlcRepositoryV26::writeScanDone(quint16 value, QString *err) const { return writeHolding(plc_v26::kRegStatusStart + plc_v26::kStatusOffScanDone, QVector<quint16>{value}, err); }
 bool PlcRepositoryV26::writePcAck(quint16 value, QString *err) const { return writeHolding(plc_v26::kRegPcAck, QVector<quint16>{value}, err); }
 bool PlcRepositoryV26::writeJudgeResult(quint16 value, QString *err) const { return writeHolding(plc_v26::kRegJudgeResult, QVector<quint16>{value}, err); }

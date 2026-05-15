@@ -33,6 +33,7 @@ public:
     QString masterPartIdForType(QChar partType) const;
 
     QString selectedPartTypeText() const;
+    int selectedSamplePointCount() const;
     quint32 selectedPartTypeArg() const;
     int selectedPlcModeValue() const;
 
@@ -64,6 +65,7 @@ private:
     QPushButton *btnStart_ = nullptr;
     QComboBox *partTypeCombo_ = nullptr;
     QComboBox *plcModeCombo_ = nullptr;
+    QComboBox *samplePointCombo_ = nullptr;
     quint16 trayPresentMask_ = 0;
     quint16 stepState_ = 0;
     bool masterIdLockedByStart_ = false;

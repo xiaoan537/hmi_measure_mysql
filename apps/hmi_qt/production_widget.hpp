@@ -61,6 +61,7 @@ public:
 
     QString selectedPartTypeText() const;
     QString selectedMeasureModeText() const;
+    int selectedSamplePointCount() const;
     quint32 selectedPartTypeArg() const;
     int selectedPlcModeValue() const;
     void appendPlcLogMessage(const QString &text);
@@ -144,5 +145,6 @@ private:
     class QComboBox *measureModeCombo_ = nullptr;
     class QComboBox *partTypeCombo_ = nullptr;
     class QComboBox *plcModeCombo_ = nullptr;
+    class QComboBox *samplePointCombo_ = nullptr;
     QString batch_part_type_ = QStringLiteral("A");
 };

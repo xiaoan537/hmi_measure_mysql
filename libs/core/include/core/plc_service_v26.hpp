@@ -15,9 +15,11 @@ public:
   bool readCommand(PlcCommandBlockV2 *out, QString *err = nullptr) const;
   bool readTrayCoding(PlcTrayPartIdBlockV2 *out, QString *err = nullptr) const;
   bool readMailbox(QChar preferredPartType, PlcMailboxSnapshot *out, QString *err = nullptr) const;
+  bool readMailbox(QChar preferredPartType, int pointCount, PlcMailboxSnapshot *out, QString *err = nullptr) const;
 
   bool setControlMode(qint16 mode, QString *err = nullptr) const;
   bool setPartType(qint16 partType, QString *err = nullptr) const;
+  bool setSamplePointCount(int pointCount, QString *err = nullptr) const;
   bool sendCommandBitmap(quint16 cmdBits, qint16 partType, QString *err = nullptr) const;
   bool sendInitialize(qint16 partType, QString *err = nullptr) const;
   bool sendStartMeasure(qint16 partType, QString *err = nullptr) const;
