@@ -61,6 +61,7 @@ private:
     QLabel *lblMeasureLine1_ = nullptr;
     QLabel *lblMeasureLine2_ = nullptr;
     QLabel *lblMeasureLine3_ = nullptr;
+    QLabel *lblParamSuggestion_ = nullptr;
     QListWidget *listMessages_ = nullptr;
     QPushButton *btnStart_ = nullptr;
     QComboBox *partTypeCombo_ = nullptr;

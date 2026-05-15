@@ -76,15 +76,15 @@ void SettingsWidget::setupCalibrationJudgeEditors()
     delete oldBottomSpacer;
   }
 
-  auto* labelHint = new QLabel(QStringLiteral("提示：标定判定独立于生产判定；公差<0 表示该项不参与判定"), this);
+  auto* labelHint = new QLabel(QStringLiteral("提示：标定标准件规格用于计算推荐标定参数。"), this);
   labelHint->setWordWrap(true);
   layout->addWidget(labelHint, 3, 0, 1, 2);
 
-  auto* groupCalA = new QGroupBox(QStringLiteral("A型标定判定规格（标准值 / 公差）"), this);
+  auto* groupCalA = new QGroupBox(QStringLiteral("A型标定标准件规格（标准值 / 设备精度要求）"), this);
   auto* gridCalA = new QGridLayout(groupCalA);
   gridCalA->addWidget(new QLabel(QStringLiteral("项目"), groupCalA), 0, 0, Qt::AlignLeft);
   gridCalA->addWidget(new QLabel(QStringLiteral("标准(mm)"), groupCalA), 0, 1, Qt::AlignLeft);
-  gridCalA->addWidget(new QLabel(QStringLiteral("公差(mm)"), groupCalA), 0, 2, Qt::AlignLeft);
+  gridCalA->addWidget(new QLabel(QStringLiteral("设备精度要求(mm)"), groupCalA), 0, 2, Qt::AlignLeft);
   setSpecRow(gridCalA, 1, QStringLiteral("A总长"), calSpecEditors_.a_total_len_std, calSpecEditors_.a_total_len_tol);
   setSpecRow(gridCalA, 2, QStringLiteral("A左内径"), calSpecEditors_.a_id_left_std, calSpecEditors_.a_id_left_tol);
   setSpecRow(gridCalA, 3, QStringLiteral("A左外径"), calSpecEditors_.a_od_left_std, calSpecEditors_.a_od_left_tol);
@@ -96,15 +96,17 @@ void SettingsWidget::setupCalibrationJudgeEditors()
   gridCalA->setColumnStretch(3, 1);
   layout->addWidget(groupCalA, 4, 0, Qt::AlignTop);
 
-  auto* groupCalB = new QGroupBox(QStringLiteral("B型标定判定规格（标准值 / 公差）"), this);
+  auto* groupCalB = new QGroupBox(QStringLiteral("B型标定标准件规格（标准值 / 设备精度要求）"), this);
   auto* gridCalB = new QGridLayout(groupCalB);
   gridCalB->addWidget(new QLabel(QStringLiteral("项目"), groupCalB), 0, 0, Qt::AlignLeft);
   gridCalB->addWidget(new QLabel(QStringLiteral("标准(mm)"), groupCalB), 0, 1, Qt::AlignLeft);
-  gridCalB->addWidget(new QLabel(QStringLiteral("公差(mm)"), groupCalB), 0, 2, Qt::AlignLeft);
+  gridCalB->addWidget(new QLabel(QStringLiteral("设备精度要求(mm)"), groupCalB), 0, 2, Qt::AlignLeft);
   setSpecRow(gridCalB, 1, QStringLiteral("B_AD长度"), calSpecEditors_.b_ad_len_std, calSpecEditors_.b_ad_len_tol);
   setSpecRow(gridCalB, 2, QStringLiteral("B_BC长度"), calSpecEditors_.b_bc_len_std, calSpecEditors_.b_bc_len_tol);
-  setSpecRow(gridCalB, 3, QStringLiteral("B左跳动"), calSpecEditors_.b_runout_left_std, calSpecEditors_.b_runout_left_tol);
-  setSpecRow(gridCalB, 4, QStringLiteral("B右跳动"), calSpecEditors_.b_runout_right_std, calSpecEditors_.b_runout_right_tol);
+  setSpecRow(gridCalB, 3, QStringLiteral("B A点拟合直径"), calSpecEditors_.b_fit_diameter_left_std, calSpecEditors_.b_fit_diameter_left_tol);
+  setSpecRow(gridCalB, 4, QStringLiteral("B D点拟合直径"), calSpecEditors_.b_fit_diameter_right_std, calSpecEditors_.b_fit_diameter_right_tol);
+  setSpecRow(gridCalB, 5, QStringLiteral("B左跳动"), calSpecEditors_.b_runout_left_std, calSpecEditors_.b_runout_left_tol);
+  setSpecRow(gridCalB, 6, QStringLiteral("B右跳动"), calSpecEditors_.b_runout_right_std, calSpecEditors_.b_runout_right_tol);
   gridCalB->setColumnStretch(0, 0);
   gridCalB->setColumnStretch(1, 0);
   gridCalB->setColumnStretch(2, 0);
@@ -225,6 +227,10 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   if (calSpecEditors_.b_ad_len_tol) calSpecEditors_.b_ad_len_tol->setValue(c.algo.cal_spec_b_ad_len.tolerance_mm);
   if (calSpecEditors_.b_bc_len_std) calSpecEditors_.b_bc_len_std->setValue(c.algo.cal_spec_b_bc_len.standard_mm);
   if (calSpecEditors_.b_bc_len_tol) calSpecEditors_.b_bc_len_tol->setValue(c.algo.cal_spec_b_bc_len.tolerance_mm);
+  if (calSpecEditors_.b_fit_diameter_left_std) calSpecEditors_.b_fit_diameter_left_std->setValue(c.algo.cal_spec_b_fit_diameter_left.standard_mm);
+  if (calSpecEditors_.b_fit_diameter_left_tol) calSpecEditors_.b_fit_diameter_left_tol->setValue(c.algo.cal_spec_b_fit_diameter_left.tolerance_mm);
+  if (calSpecEditors_.b_fit_diameter_right_std) calSpecEditors_.b_fit_diameter_right_std->setValue(c.algo.cal_spec_b_fit_diameter_right.standard_mm);
+  if (calSpecEditors_.b_fit_diameter_right_tol) calSpecEditors_.b_fit_diameter_right_tol->setValue(c.algo.cal_spec_b_fit_diameter_right.tolerance_mm);
   if (calSpecEditors_.b_runout_left_std) calSpecEditors_.b_runout_left_std->setValue(c.algo.cal_spec_b_runout_left.standard_mm);
   if (calSpecEditors_.b_runout_left_tol) calSpecEditors_.b_runout_left_tol->setValue(c.algo.cal_spec_b_runout_left.tolerance_mm);
   if (calSpecEditors_.b_runout_right_std) calSpecEditors_.b_runout_right_std->setValue(c.algo.cal_spec_b_runout_right.standard_mm);
@@ -342,6 +348,10 @@ core::AppConfig SettingsWidget::readFromUi() const
   if (calSpecEditors_.b_ad_len_tol) c.algo.cal_spec_b_ad_len.tolerance_mm = calSpecEditors_.b_ad_len_tol->value();
   if (calSpecEditors_.b_bc_len_std) c.algo.cal_spec_b_bc_len.standard_mm = calSpecEditors_.b_bc_len_std->value();
   if (calSpecEditors_.b_bc_len_tol) c.algo.cal_spec_b_bc_len.tolerance_mm = calSpecEditors_.b_bc_len_tol->value();
+  if (calSpecEditors_.b_fit_diameter_left_std) c.algo.cal_spec_b_fit_diameter_left.standard_mm = calSpecEditors_.b_fit_diameter_left_std->value();
+  if (calSpecEditors_.b_fit_diameter_left_tol) c.algo.cal_spec_b_fit_diameter_left.tolerance_mm = calSpecEditors_.b_fit_diameter_left_tol->value();
+  if (calSpecEditors_.b_fit_diameter_right_std) c.algo.cal_spec_b_fit_diameter_right.standard_mm = calSpecEditors_.b_fit_diameter_right_std->value();
+  if (calSpecEditors_.b_fit_diameter_right_tol) c.algo.cal_spec_b_fit_diameter_right.tolerance_mm = calSpecEditors_.b_fit_diameter_right_tol->value();
   if (calSpecEditors_.b_runout_left_std) c.algo.cal_spec_b_runout_left.standard_mm = calSpecEditors_.b_runout_left_std->value();
   if (calSpecEditors_.b_runout_left_tol) c.algo.cal_spec_b_runout_left.tolerance_mm = calSpecEditors_.b_runout_left_tol->value();
   if (calSpecEditors_.b_runout_right_std) c.algo.cal_spec_b_runout_right.standard_mm = calSpecEditors_.b_runout_right_std->value();
@@ -477,6 +487,10 @@ bool SettingsWidget::saveToIni(const core::AppConfig& c, QString* err)
   s.setValue("cal_spec_b_ad_len_tolerance_mm", c.algo.cal_spec_b_ad_len.tolerance_mm);
   s.setValue("cal_spec_b_bc_len_standard_mm", c.algo.cal_spec_b_bc_len.standard_mm);
   s.setValue("cal_spec_b_bc_len_tolerance_mm", c.algo.cal_spec_b_bc_len.tolerance_mm);
+  s.setValue("cal_spec_b_fit_diameter_left_standard_mm", c.algo.cal_spec_b_fit_diameter_left.standard_mm);
+  s.setValue("cal_spec_b_fit_diameter_left_tolerance_mm", c.algo.cal_spec_b_fit_diameter_left.tolerance_mm);
+  s.setValue("cal_spec_b_fit_diameter_right_standard_mm", c.algo.cal_spec_b_fit_diameter_right.standard_mm);
+  s.setValue("cal_spec_b_fit_diameter_right_tolerance_mm", c.algo.cal_spec_b_fit_diameter_right.tolerance_mm);
   s.setValue("cal_spec_b_runout_left_standard_mm", c.algo.cal_spec_b_runout_left.standard_mm);
   s.setValue("cal_spec_b_runout_left_tolerance_mm", c.algo.cal_spec_b_runout_left.tolerance_mm);
   s.setValue("cal_spec_b_runout_right_standard_mm", c.algo.cal_spec_b_runout_right.standard_mm);

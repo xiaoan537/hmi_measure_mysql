@@ -7,6 +7,9 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -18,6 +21,30 @@ namespace {
 QString formatValue(double v, int prec = 6) {
     if (qIsNaN(v) || qIsInf(v)) return QStringLiteral("--");
     return QString::number(v, 'f', prec);
+}
+
+QString buildParameterSuggestionText(const QString &extraJson)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(extraJson.toUtf8());
+    if (!doc.isObject()) return QStringLiteral("推荐参数：--");
+    const QJsonArray arr = doc.object().value(QStringLiteral("parameter_recommendations")).toArray();
+    if (arr.isEmpty()) return QStringLiteral("推荐参数：未生成，请检查标定标准件规格配置");
+
+    QStringList lines;
+    lines << QStringLiteral("推荐参数：");
+    for (const QJsonValue &v : arr) {
+        const QJsonObject o = v.toObject();
+        const QString name = o.value(QStringLiteral("name")).toString(QStringLiteral("--"));
+        const double current = o.value(QStringLiteral("current_mm")).toDouble(qQNaN());
+        const double recommended = o.value(QStringLiteral("recommended_mm")).toDouble(qQNaN());
+        const double delta = o.value(QStringLiteral("delta_mm")).toDouble(qQNaN());
+        lines << QStringLiteral("%1：当前=%2，推荐=%3，Δ=%4")
+                     .arg(name)
+                     .arg(formatValue(current))
+                     .arg(formatValue(recommended))
+                     .arg(formatValue(delta));
+    }
+    return lines.join(QStringLiteral("\n"));
 }
 } // namespace
 
@@ -79,17 +106,20 @@ CalibrationWidget::CalibrationWidget(const core::AppConfig &cfg, QWidget *parent
 
     auto *resultBox = new QGroupBox(QStringLiteral("标定结果详情"), this);
     auto *resultLay = new QVBoxLayout(resultBox);
-    lblResultJudge_ = new QLabel(QStringLiteral("判定：—"), this);
-    lblResultReason_ = new QLabel(QStringLiteral("不合格原因：—"), this);
+    lblResultJudge_ = new QLabel(QStringLiteral("参数计算：—"), this);
+    lblResultReason_ = new QLabel(QStringLiteral("提示：—"), this);
     lblMeasureLine1_ = new QLabel(QStringLiteral("A型总长(mm)：--"), this);
     lblMeasureLine2_ = new QLabel(QStringLiteral("左端内/外径：-- / --"), this);
     lblMeasureLine3_ = new QLabel(QStringLiteral("右端内/外径：-- / --"), this);
+    lblParamSuggestion_ = new QLabel(QStringLiteral("推荐参数：--"), this);
     lblResultReason_->setWordWrap(true);
+    lblParamSuggestion_->setWordWrap(true);
     resultLay->addWidget(lblResultJudge_);
     resultLay->addWidget(lblResultReason_);
     resultLay->addWidget(lblMeasureLine1_);
     resultLay->addWidget(lblMeasureLine2_);
     resultLay->addWidget(lblMeasureLine3_);
+    resultLay->addWidget(lblParamSuggestion_);
     root->addWidget(resultBox);
 
     auto *ctrlBox = new QGroupBox(QStringLiteral("标定控制 / 自动流程"), this);
@@ -290,20 +320,21 @@ void CalibrationWidget::setSlotSummary(const core::CalibrationSlotSummary &s)
     if (s.valid) appendLogMessage(summary);
 
     const QString type = s.calibration_type.trimmed().toUpper();
-    QString judge = QStringLiteral("待计算");
-    if (s.judgement_known) {
-        judge = s.judgement_ok ? QStringLiteral("合格") : QStringLiteral("不合格");
-    } else if (s.valid && s.compute.judgement == core::MeasurementJudgement::Ok) {
-        judge = QStringLiteral("合格");
-    } else if (s.valid && s.compute.judgement == core::MeasurementJudgement::Ng) {
-        judge = QStringLiteral("不合格");
+    QString state = QStringLiteral("待计算");
+    if (s.valid && s.compute.valid) {
+        state = QStringLiteral("成功");
+    } else if (s.valid || s.compute.judgement == core::MeasurementJudgement::Invalid) {
+        state = QStringLiteral("失败");
     }
-    if (lblResultJudge_) lblResultJudge_->setText(QStringLiteral("判定：%1").arg(judge));
+    if (lblResultJudge_) lblResultJudge_->setText(QStringLiteral("参数计算：%1").arg(state));
     if (lblResultReason_) {
-        lblResultReason_->setText(QStringLiteral("不合格原因：%1")
+        lblResultReason_->setText(QStringLiteral("提示：%1")
                                       .arg(s.fail_reason_text.trimmed().isEmpty()
                                                ? QStringLiteral("—")
                                                : s.fail_reason_text.trimmed()));
+    }
+    if (lblParamSuggestion_) {
+        lblParamSuggestion_->setText(buildParameterSuggestionText(s.compute.extra_json));
     }
 
     if (type == QStringLiteral("B")) {

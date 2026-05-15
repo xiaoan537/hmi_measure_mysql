@@ -174,7 +174,7 @@ namespace core
         c.algo.spec_b_runout_right.standard_mm = s.value("spec_b_runout_right_standard_mm", 0.0).toDouble();
         c.algo.spec_b_runout_right.tolerance_mm = s.value("spec_b_runout_right_tolerance_mm", -1.0).toDouble();
 
-        // 标定判定规格（默认继承生产判定，方便升级兼容）
+        // 标定标准件规格（默认继承生产判定，方便升级兼容）
         c.algo.cal_spec_a_total_len.standard_mm = s.value("cal_spec_a_total_len_standard_mm", c.algo.spec_a_total_len.standard_mm).toDouble();
         c.algo.cal_spec_a_total_len.tolerance_mm = s.value("cal_spec_a_total_len_tolerance_mm", c.algo.spec_a_total_len.tolerance_mm).toDouble();
         c.algo.cal_spec_a_id_left.standard_mm = s.value("cal_spec_a_id_left_standard_mm", c.algo.spec_a_id_left.standard_mm).toDouble();
@@ -190,6 +190,10 @@ namespace core
         c.algo.cal_spec_b_ad_len.tolerance_mm = s.value("cal_spec_b_ad_len_tolerance_mm", c.algo.spec_b_ad_len.tolerance_mm).toDouble();
         c.algo.cal_spec_b_bc_len.standard_mm = s.value("cal_spec_b_bc_len_standard_mm", c.algo.spec_b_bc_len.standard_mm).toDouble();
         c.algo.cal_spec_b_bc_len.tolerance_mm = s.value("cal_spec_b_bc_len_tolerance_mm", c.algo.spec_b_bc_len.tolerance_mm).toDouble();
+        c.algo.cal_spec_b_fit_diameter_left.standard_mm = s.value("cal_spec_b_fit_diameter_left_standard_mm", 0.0).toDouble();
+        c.algo.cal_spec_b_fit_diameter_left.tolerance_mm = s.value("cal_spec_b_fit_diameter_left_tolerance_mm", -1.0).toDouble();
+        c.algo.cal_spec_b_fit_diameter_right.standard_mm = s.value("cal_spec_b_fit_diameter_right_standard_mm", 0.0).toDouble();
+        c.algo.cal_spec_b_fit_diameter_right.tolerance_mm = s.value("cal_spec_b_fit_diameter_right_tolerance_mm", -1.0).toDouble();
         c.algo.cal_spec_b_runout_left.standard_mm = s.value("cal_spec_b_runout_left_standard_mm", c.algo.spec_b_runout_left.standard_mm).toDouble();
         c.algo.cal_spec_b_runout_left.tolerance_mm = s.value("cal_spec_b_runout_left_tolerance_mm", c.algo.spec_b_runout_left.tolerance_mm).toDouble();
         c.algo.cal_spec_b_runout_right.standard_mm = s.value("cal_spec_b_runout_right_standard_mm", c.algo.spec_b_runout_right.standard_mm).toDouble();

@@ -43,6 +43,10 @@ private:
     QDoubleSpinBox* b_ad_len_tol = nullptr;
     QDoubleSpinBox* b_bc_len_std = nullptr;
     QDoubleSpinBox* b_bc_len_tol = nullptr;
+    QDoubleSpinBox* b_fit_diameter_left_std = nullptr;
+    QDoubleSpinBox* b_fit_diameter_left_tol = nullptr;
+    QDoubleSpinBox* b_fit_diameter_right_std = nullptr;
+    QDoubleSpinBox* b_fit_diameter_right_tol = nullptr;
     QDoubleSpinBox* b_runout_left_std = nullptr;
     QDoubleSpinBox* b_runout_left_tol = nullptr;
     QDoubleSpinBox* b_runout_right_std = nullptr;

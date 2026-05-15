@@ -1629,8 +1629,25 @@ bool MainWindow::computeRawReplayForViewer(const core::MeasurementSnapshot &raw,
   if (!computed.items.isEmpty()) {
     const core::ProductionSlotSummary &summary = computed.items.first().summary;
     lines << QStringLiteral("--- 回放结果摘要 ---");
-    lines << QStringLiteral("结果：%1").arg(summary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
-    lines << QStringLiteral("原因：%1").arg(summary.fail_reason_text.isEmpty() ? QStringLiteral("-") : summary.fail_reason_text);
+    if (calibrationContext) {
+      lines << QStringLiteral("标定参数计算：%1").arg(summary.compute.valid ? QStringLiteral("成功") : QStringLiteral("失败"));
+      lines << QStringLiteral("提示：%1").arg(summary.fail_reason_text.isEmpty() ? QStringLiteral("-") : summary.fail_reason_text);
+      const QJsonDocument doc = QJsonDocument::fromJson(summary.compute.extra_json.toUtf8());
+      const QJsonArray recs = doc.isObject()
+                                  ? doc.object().value(QStringLiteral("parameter_recommendations")).toArray()
+                                  : QJsonArray{};
+      for (const QJsonValue &v : recs) {
+        const QJsonObject o = v.toObject();
+        lines << QStringLiteral("推荐参数 %1：当前=%2 推荐=%3 Δ=%4")
+                     .arg(o.value(QStringLiteral("name")).toString(QStringLiteral("--")))
+                     .arg(core::measurementFormatNumber(o.value(QStringLiteral("current_mm")).toDouble(qQNaN())))
+                     .arg(core::measurementFormatNumber(o.value(QStringLiteral("recommended_mm")).toDouble(qQNaN())))
+                     .arg(core::measurementFormatNumber(o.value(QStringLiteral("delta_mm")).toDouble(qQNaN())));
+      }
+    } else {
+      lines << QStringLiteral("结果：%1").arg(summary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"));
+      lines << QStringLiteral("原因：%1").arg(summary.fail_reason_text.isEmpty() ? QStringLiteral("-") : summary.fail_reason_text);
+    }
     if (summary.part_type.toUpper() == QChar('A')) {
       lines << QStringLiteral("A总长(mm)：%1").arg(core::measurementFormatNumber(summary.compute.values.total_len_mm));
       lines << QStringLiteral("左端 内/外径(mm)：%1 / %2")
@@ -2340,7 +2357,8 @@ bool MainWindow::handleComputeResultRequested(QChar preferredPartType,
     if (!plcRuntime_->writeJudgeResult(judgeResult, &err)) {
       handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写 iJudge_Result 失败") : err);
     } else {
-      appendComputeLog(QStringLiteral("已写 iJudge_Result=%1 (%2)")
+      appendComputeLog(QStringLiteral("%1已写 iJudge_Result=%2 (%3)")
+                           .arg(calibrationContext ? QStringLiteral("标定参数计算完成，") : QString())
                            .arg(judgeResult)
                            .arg(computed.overall_ok ? QStringLiteral("OK") : QStringLiteral("NG")));
     }

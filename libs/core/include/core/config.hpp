@@ -136,7 +136,7 @@ struct MesConfig
         SpecValueConfig spec_b_runout_left;
         SpecValueConfig spec_b_runout_right;
 
-        // 标定判定规格（与生产判定分离）
+        // 标定标准件规格（用于计算推荐标定参数，与生产判定分离）
         // A型标定
         SpecValueConfig cal_spec_a_total_len;
         SpecValueConfig cal_spec_a_id_left;
@@ -146,10 +146,12 @@ struct MesConfig
         // B型标定
         SpecValueConfig cal_spec_b_ad_len;
         SpecValueConfig cal_spec_b_bc_len;
+        SpecValueConfig cal_spec_b_fit_diameter_left;
+        SpecValueConfig cal_spec_b_fit_diameter_right;
         SpecValueConfig cal_spec_b_runout_left;
         SpecValueConfig cal_spec_b_runout_right;
 
-        // 标定A型内外径平滑限幅（仅标定流程生效）
+        // A型内外径结果平滑限幅（仅用于结果判定/显示，不参与标定参数推荐）
         // 关闭时使用真实计算值；开启时优先使用平滑限幅值；
         // 若与标准值误差超过“离谱阈值”，则回退到真实值。
         bool cal_a_smooth_limit_enabled = false;

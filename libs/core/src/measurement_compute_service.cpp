@@ -2,6 +2,9 @@
 
 #include "core/measurement_geometry_algorithms.hpp"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -80,6 +83,96 @@ struct SmoothValueResult {
   bool used_raw_by_gross = false;
   bool corrected = false;
 };
+
+bool isConfiguredCalibrationStandard(const AlgorithmConfig::SpecValueConfig &spec) {
+  return std::isfinite(spec.standard_mm) && std::fabs(spec.standard_mm) > 1e-9;
+}
+
+QJsonObject makeCalibrationRecommendation(const QString &name,
+                                           const QString &configKey,
+                                           double currentValue,
+                                           double measuredValue,
+                                           const AlgorithmConfig::SpecValueConfig &targetSpec) {
+  QJsonObject obj;
+  obj.insert(QStringLiteral("name"), name);
+  obj.insert(QStringLiteral("config_key"), configKey);
+  obj.insert(QStringLiteral("current_mm"), currentValue);
+  obj.insert(QStringLiteral("measured_mm"), measuredValue);
+  obj.insert(QStringLiteral("standard_mm"), targetSpec.standard_mm);
+  obj.insert(QStringLiteral("error_mm"), measuredValue - targetSpec.standard_mm);
+  const double recommended = currentValue + (targetSpec.standard_mm - measuredValue) * 0.5;
+  obj.insert(QStringLiteral("recommended_mm"), recommended);
+  obj.insert(QStringLiteral("delta_mm"), recommended - currentValue);
+  return obj;
+}
+
+bool appendCalibrationRecommendation(QJsonArray *items,
+                                     QStringList *logs,
+                                     const QString &name,
+                                     const QString &configKey,
+                                     double currentValue,
+                                     double measuredValue,
+                                     const AlgorithmConfig::SpecValueConfig &targetSpec) {
+  if (!items) return false;
+  if (!std::isfinite(currentValue) || !std::isfinite(measuredValue)
+      || !isConfiguredCalibrationStandard(targetSpec)) {
+    if (logs) {
+      logs->push_back(QStringLiteral("  标定参数跳过：%1（当前值/测量值/标准值无效或未配置）").arg(name));
+    }
+    return false;
+  }
+  const QJsonObject obj = makeCalibrationRecommendation(name, configKey, currentValue, measuredValue, targetSpec);
+  items->push_back(obj);
+  if (logs) {
+    logs->push_back(QStringLiteral("  推荐参数：%1 当前=%2 测量=%3 标准=%4 推荐=%5 Δ=%6")
+                        .arg(name)
+                        .arg(measurementFormatNumber(currentValue))
+                        .arg(measurementFormatNumber(measuredValue))
+                        .arg(measurementFormatNumber(targetSpec.standard_mm))
+                        .arg(measurementFormatNumber(obj.value(QStringLiteral("recommended_mm")).toDouble()))
+                        .arg(measurementFormatNumber(obj.value(QStringLiteral("delta_mm")).toDouble())));
+  }
+  return true;
+}
+
+QString calibrationExtraJson(const QString &partType,
+                             const QJsonArray &recommendations,
+                             const QJsonObject &measured) {
+  QJsonObject obj;
+  obj.insert(QStringLiteral("calibration_mode"), true);
+  obj.insert(QStringLiteral("part_type"), partType);
+  obj.insert(QStringLiteral("parameter_recommendations"), recommendations);
+  obj.insert(QStringLiteral("measured"), measured);
+  return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+void finalizeCalibrationCompute(ProductionSlotSummary *slot,
+                                int recommendationCount,
+                                int requiredRecommendationCount) {
+  if (!slot) return;
+  slot->judgement_known = false;
+  slot->judgement_ok = slot->compute.valid && recommendationCount >= requiredRecommendationCount;
+  if (!slot->compute.valid) {
+    slot->fail_reason_text = slot->compute.fail_reason_text.trimmed().isEmpty()
+                                  ? QStringLiteral("测量计算失败")
+                                  : slot->compute.fail_reason_text.trimmed();
+  } else if (recommendationCount < requiredRecommendationCount) {
+    slot->compute.valid = false;
+    slot->fail_reason_text = QStringLiteral("未生成完整标定参数，请检查标准件规格配置和测量通道有效性");
+  } else {
+    slot->fail_reason_text.clear();
+  }
+
+  if (slot->compute.valid) {
+    slot->compute.judgement = MeasurementJudgement::Ok;
+    slot->compute.fail_class = MeasurementFailClass::None;
+    slot->compute.fail_reason_text.clear();
+  } else {
+    slot->compute.judgement = MeasurementJudgement::Invalid;
+    slot->compute.fail_class = MeasurementFailClass::Geometry;
+    slot->compute.fail_reason_text = slot->fail_reason_text;
+  }
+}
 
 SmoothValueResult applyASmoothLimitValue(double rawValue,
                                          const AlgorithmConfig::SpecValueConfig &spec,
@@ -323,6 +416,7 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
   const auto &spec_b_bc_len = calibration_context ? algo.cal_spec_b_bc_len : algo.spec_b_bc_len;
   const auto &spec_b_runout_left = calibration_context ? algo.cal_spec_b_runout_left : algo.spec_b_runout_left;
   const auto &spec_b_runout_right = calibration_context ? algo.cal_spec_b_runout_right : algo.spec_b_runout_right;
+  const bool enableSmoothLimitForResult = !calibration_context && algo.cal_a_smooth_limit_enabled;
 
   MeasurementComputeServiceResult result;
   result.part_type = snapshot.part_type.toUpper();
@@ -331,9 +425,9 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                      .arg(snapshot.item_count)
                      .arg(minValidPoints);
   result.logs << QStringLiteral("采样点数：%1点/通道").arg(pointCount);
-  result.logs << QStringLiteral("判定规则：%1")
-                     .arg(calibration_context ? QStringLiteral("标定判定规则")
-                                              : QStringLiteral("生产判定规则"));
+  result.logs << QStringLiteral("%1")
+                     .arg(calibration_context ? QStringLiteral("标定模式：计算标定参数，不做工件合格判定")
+                                              : QStringLiteral("判定规则：生产判定规则"));
   const QString runoutMetric = normalizedRunoutMetric(algo.runout_metric);
   const QChar partType = snapshot.part_type.toUpper();
   if (partType == QChar('A')) {
@@ -345,11 +439,13 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                        .arg(measurementFormatNumber(algo.a_b_k_out_mm))
                        .arg(measurementFormatNumber(algo.a_c_k_in_mm))
                        .arg(measurementFormatNumber(algo.a_c_k_out_mm));
-    if (algo.cal_a_smooth_limit_enabled) {
+    if (enableSmoothLimitForResult) {
       result.logs << QStringLiteral("%1A内外径平滑限幅：ON limit=%2 gross=%3")
                          .arg(calibration_context ? QStringLiteral("标定") : QStringLiteral("生产"))
                          .arg(measurementFormatNumber(algo.cal_a_smooth_limit_mm))
                          .arg(measurementFormatNumber(algo.cal_a_smooth_gross_error_mm));
+    } else if (calibration_context && algo.cal_a_smooth_limit_enabled) {
+      result.logs << QStringLiteral("标定参数计算：平滑限幅配置为ON，但参数推荐使用真实计算值");
     } else {
       result.logs << QStringLiteral("%1A内外径平滑限幅：OFF")
                          .arg(calibration_context ? QStringLiteral("标定") : QStringLiteral("生产"));
@@ -426,7 +522,7 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
       slotSummary.compute.values.od_right_mm = static_cast<float>(rawOdRight);
       slotSummary.compute.valid = rBInner.success && rBOuter.success && rCInner.success && rCOuter.success;
 
-      if (algo.cal_a_smooth_limit_enabled) {
+      if (enableSmoothLimitForResult) {
         const SmoothValueResult idLeftAdj = applyASmoothLimitValue(rawIdLeft, spec_a_id_left, algo);
         const SmoothValueResult odLeftAdj = applyASmoothLimitValue(rawOdLeft, spec_a_od_left, algo);
         const SmoothValueResult idRightAdj = applyASmoothLimitValue(rawIdRight, spec_a_id_right, algo);
@@ -467,20 +563,59 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
         logAdj(QStringLiteral("A右外径"), rawOdRight, odRightAdj, spec_a_od_right.standard_mm);
       }
 
-      JudgeEvalState judge;
-      evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,
-                       spec_a_total_len, true, &judge);
-      evaluateSpecItem(QStringLiteral("A左内径"), slotSummary.compute.values.id_left_mm,
-                       spec_a_id_left, false, &judge);
-      evaluateSpecItem(QStringLiteral("A左外径"), slotSummary.compute.values.od_left_mm,
-                       spec_a_od_left, false, &judge);
-      evaluateSpecItem(QStringLiteral("A右内径"), slotSummary.compute.values.id_right_mm,
-                       spec_a_id_right, false, &judge);
-      evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
-                       spec_a_od_right, false, &judge);
-      finalizeSlotJudgement(&slotSummary, &judge);
-      result.judged_item_count += 1;
-      if (!slotSummary.judgement_ok) overallOk = false;
+      if (calibration_context) {
+        QJsonArray recommendations;
+        int recommendationCount = 0;
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("B端 K_in"),
+                                                               QStringLiteral("a_b_k_in_mm"),
+                                                               algo.a_b_k_in_mm,
+                                                               rawIdLeft,
+                                                               algo.cal_spec_a_id_left) ? 1 : 0;
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("B端 K_out"),
+                                                               QStringLiteral("a_b_k_out_mm"),
+                                                               algo.a_b_k_out_mm,
+                                                               rawOdLeft,
+                                                               algo.cal_spec_a_od_left) ? 1 : 0;
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("C端 K_in"),
+                                                               QStringLiteral("a_c_k_in_mm"),
+                                                               algo.a_c_k_in_mm,
+                                                               rawIdRight,
+                                                               algo.cal_spec_a_id_right) ? 1 : 0;
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("C端 K_out"),
+                                                               QStringLiteral("a_c_k_out_mm"),
+                                                               algo.a_c_k_out_mm,
+                                                               rawOdRight,
+                                                               algo.cal_spec_a_od_right) ? 1 : 0;
+        QJsonObject measured;
+        measured.insert(QStringLiteral("total_len_mm"), item.total_len_mm);
+        measured.insert(QStringLiteral("id_left_mm"), rawIdLeft);
+        measured.insert(QStringLiteral("od_left_mm"), rawOdLeft);
+        measured.insert(QStringLiteral("id_right_mm"), rawIdRight);
+        measured.insert(QStringLiteral("od_right_mm"), rawOdRight);
+        slotSummary.compute.extra_json = calibrationExtraJson(QStringLiteral("A"), recommendations, measured);
+        finalizeCalibrationCompute(&slotSummary, recommendationCount, 4);
+        result.judged_item_count += 1;
+        if (!slotSummary.compute.valid) overallOk = false;
+      } else {
+        JudgeEvalState judge;
+        evaluateSpecItem(QStringLiteral("A总长"), slotSummary.compute.values.total_len_mm,
+                         spec_a_total_len, true, &judge);
+        evaluateSpecItem(QStringLiteral("A左内径"), slotSummary.compute.values.id_left_mm,
+                         spec_a_id_left, false, &judge);
+        evaluateSpecItem(QStringLiteral("A左外径"), slotSummary.compute.values.od_left_mm,
+                         spec_a_od_left, false, &judge);
+        evaluateSpecItem(QStringLiteral("A右内径"), slotSummary.compute.values.id_right_mm,
+                         spec_a_id_right, false, &judge);
+        evaluateSpecItem(QStringLiteral("A右外径"), slotSummary.compute.values.od_right_mm,
+                         spec_a_od_right, false, &judge);
+        finalizeSlotJudgement(&slotSummary, &judge);
+        result.judged_item_count += 1;
+        if (!slotSummary.judgement_ok) overallOk = false;
+      }
 
       result.logs << QStringLiteral("A型 item%1 slot=%2 id=%3 总长=%4 ID(B)=%5 OD(B)=%6 ID(C)=%7 OD(C)=%8")
                          .arg(item.item_index)
@@ -513,10 +648,17 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
         result.logs << QStringLiteral("  A型拟合失败：B内[%1] B外[%2] C内[%3] C外[%4]")
                            .arg(rBInner.error, rBOuter.error, rCInner.error, rCOuter.error);
       }
-      result.logs << QStringLiteral("  判定=%1%2")
-                         .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
-                         .arg(slotSummary.judgement_ok ? QString()
-                                                       : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      if (calibration_context) {
+        result.logs << QStringLiteral("  标定参数计算=%1%2")
+                           .arg(slotSummary.compute.valid ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.compute.valid ? QString()
+                                                         : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      } else {
+        result.logs << QStringLiteral("  判定=%1%2")
+                           .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.judgement_ok ? QString()
+                                                         : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      }
     } else if (snapshot.part_type.toUpper() == QChar('B')) {
       if (item.raw_points_um.size() < pointCount * 2) {
         result.logs << QStringLiteral("计算失败：B型 item%1 raw点数不足，期望>=%2，实际=%3")
@@ -551,18 +693,48 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
                                && std::isfinite(selectedLeftRunout)
                                && std::isfinite(selectedRightRunout);
 
-      JudgeEvalState judge;
-      evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
-                       spec_b_ad_len, true, &judge);
-      evaluateSpecItem(QStringLiteral("B_BC长度"), slotSummary.compute.values.bc_len_mm,
-                       spec_b_bc_len, true, &judge);
-      evaluateSpecItem(QStringLiteral("B左跳动"), slotSummary.compute.values.runout_left_mm,
-                       spec_b_runout_left, false, &judge);
-      evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
-                       spec_b_runout_right, false, &judge);
-      finalizeSlotJudgement(&slotSummary, &judge);
-      result.judged_item_count += 1;
-      if (!slotSummary.judgement_ok) overallOk = false;
+      if (calibration_context) {
+        QJsonArray recommendations;
+        int recommendationCount = 0;
+        const double fitDiameterA = rA.circle_fit.success ? rA.circle_fit.diameter_mm : qQNaN();
+        const double fitDiameterD = rD.circle_fit.success ? rD.circle_fit.diameter_mm : qQNaN();
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("A点 K_runout"),
+                                                               QStringLiteral("b_a_k_runout_mm"),
+                                                               algo.b_a_k_runout_mm,
+                                                               fitDiameterA,
+                                                               algo.cal_spec_b_fit_diameter_left) ? 1 : 0;
+        recommendationCount += appendCalibrationRecommendation(&recommendations, &result.logs,
+                                                               QStringLiteral("D点 K_runout"),
+                                                               QStringLiteral("b_d_k_runout_mm"),
+                                                               algo.b_d_k_runout_mm,
+                                                               fitDiameterD,
+                                                               algo.cal_spec_b_fit_diameter_right) ? 1 : 0;
+        QJsonObject measured;
+        measured.insert(QStringLiteral("ad_len_mm"), item.ad_len_mm);
+        measured.insert(QStringLiteral("bc_len_mm"), item.bc_len_mm);
+        measured.insert(QStringLiteral("runout_left_mm"), selectedLeftRunout);
+        measured.insert(QStringLiteral("runout_right_mm"), selectedRightRunout);
+        measured.insert(QStringLiteral("fit_diameter_left_mm"), fitDiameterA);
+        measured.insert(QStringLiteral("fit_diameter_right_mm"), fitDiameterD);
+        slotSummary.compute.extra_json = calibrationExtraJson(QStringLiteral("B"), recommendations, measured);
+        finalizeCalibrationCompute(&slotSummary, recommendationCount, 2);
+        result.judged_item_count += 1;
+        if (!slotSummary.compute.valid) overallOk = false;
+      } else {
+        JudgeEvalState judge;
+        evaluateSpecItem(QStringLiteral("B_AD长度"), slotSummary.compute.values.ad_len_mm,
+                         spec_b_ad_len, true, &judge);
+        evaluateSpecItem(QStringLiteral("B_BC长度"), slotSummary.compute.values.bc_len_mm,
+                         spec_b_bc_len, true, &judge);
+        evaluateSpecItem(QStringLiteral("B左跳动"), slotSummary.compute.values.runout_left_mm,
+                         spec_b_runout_left, false, &judge);
+        evaluateSpecItem(QStringLiteral("B右跳动"), slotSummary.compute.values.runout_right_mm,
+                         spec_b_runout_right, false, &judge);
+        finalizeSlotJudgement(&slotSummary, &judge);
+        result.judged_item_count += 1;
+        if (!slotSummary.judgement_ok) overallOk = false;
+      }
 
       result.logs << QStringLiteral("B型 item%1 slot=%2 id=%3 AD=%4 BC=%5 跳动A=%6 跳动D=%7")
                          .arg(item.item_index)
@@ -597,10 +769,17 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
       } else if (!slotSummary.compute.valid) {
         result.logs << QStringLiteral("  B型拟合失败：A点[%1] D点[%2]").arg(rA.error, rD.error);
       }
-      result.logs << QStringLiteral("  判定=%1%2")
-                         .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
-                         .arg(slotSummary.judgement_ok ? QString()
-                                                       : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      if (calibration_context) {
+        result.logs << QStringLiteral("  标定参数计算=%1%2")
+                           .arg(slotSummary.compute.valid ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.compute.valid ? QString()
+                                                         : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      } else {
+        result.logs << QStringLiteral("  判定=%1%2")
+                           .arg(slotSummary.judgement_ok ? QStringLiteral("OK") : QStringLiteral("NG"))
+                           .arg(slotSummary.judgement_ok ? QString()
+                                                         : QStringLiteral(" 原因=%1").arg(slotSummary.fail_reason_text));
+      }
     } else {
       result.logs << QStringLiteral("计算失败：未知part_type=%1").arg(QString(snapshot.part_type));
       continue;
@@ -614,9 +793,13 @@ bool computeMailboxSnapshot(const PlcMailboxSnapshot &snapshot,
 
   if (result.expected_item_count > 0 && result.judged_item_count < result.expected_item_count) {
     overallOk = false;
-    result.logs << QStringLiteral("警告：部分工件未生成有效判定（expected=%1, judged=%2），总判定按 NG 处理")
-                       .arg(result.expected_item_count)
-                       .arg(result.judged_item_count);
+    result.logs << (calibration_context
+                        ? QStringLiteral("警告：部分工件未完成标定参数计算（expected=%1, processed=%2），本次标定按失败处理")
+                              .arg(result.expected_item_count)
+                              .arg(result.judged_item_count)
+                        : QStringLiteral("警告：部分工件未生成有效判定（expected=%1, judged=%2），总判定按 NG 处理")
+                              .arg(result.expected_item_count)
+                              .arg(result.judged_item_count));
   }
   result.has_items = (result.expected_item_count > 0);
   result.overall_ok = result.has_items ? overallOk : false;

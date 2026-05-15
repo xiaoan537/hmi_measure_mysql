@@ -43,15 +43,10 @@ QString buildSummaryText(const core::CalibrationSlotSummary &summary)
                        .arg(who)
                        .arg(measured);
     if (summary.valid) {
-        if (summary.compute.judgement == core::MeasurementJudgement::Ok) {
-            text += QStringLiteral("，判定=OK");
-        } else if (summary.compute.judgement == core::MeasurementJudgement::Ng) {
-            text += QStringLiteral("，判定=NG");
-        } else {
-            text += QStringLiteral("，判定=待算法");
-        }
+        text += summary.compute.valid ? QStringLiteral("，参数计算=OK")
+                                      : QStringLiteral("，参数计算=失败");
         if (!summary.fail_reason_text.isEmpty()) {
-            text += QStringLiteral("，原因=%1").arg(summary.fail_reason_text);
+            text += QStringLiteral("，提示=%1").arg(summary.fail_reason_text);
         }
     }
     return text;
