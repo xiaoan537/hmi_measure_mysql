@@ -64,20 +64,18 @@
       <layout class="QVBoxLayout" name="vDb">
        <item>
         <layout class="QFormLayout" name="formDb">
-         <item row="0" column="0"><widget class="QLabel" name="labelDbDriver"><property name="text"><string>驱动</string></property></widget></item>
-         <item row="0" column="1"><widget class="QLineEdit" name="editDbDriver" /></item>
-         <item row="1" column="0"><widget class="QLabel" name="labelDbHost"><property name="text"><string>主机</string></property></widget></item>
-         <item row="1" column="1"><widget class="QLineEdit" name="editDbHost" /></item>
-         <item row="2" column="0"><widget class="QLabel" name="labelDbPort"><property name="text"><string>端口</string></property></widget></item>
-         <item row="2" column="1"><widget class="QSpinBox" name="spinDbPort"><property name="maximum"><number>65535</number></property><property name="value"><number>3306</number></property></widget></item>
-         <item row="3" column="0"><widget class="QLabel" name="labelDbName"><property name="text"><string>库名</string></property></widget></item>
-         <item row="3" column="1"><widget class="QLineEdit" name="editDbName" /></item>
-         <item row="4" column="0"><widget class="QLabel" name="labelDbUser"><property name="text"><string>用户名</string></property></widget></item>
-         <item row="4" column="1"><widget class="QLineEdit" name="editDbUser" /></item>
-         <item row="5" column="0"><widget class="QLabel" name="labelDbPass"><property name="text"><string>密码</string></property></widget></item>
-         <item row="5" column="1"><widget class="QLineEdit" name="editDbPass"><property name="echoMode"><enum>QLineEdit::Password</enum></property></widget></item>
-         <item row="6" column="0"><widget class="QLabel" name="labelDbOptions"><property name="text"><string>选项</string></property></widget></item>
-         <item row="6" column="1"><widget class="QLineEdit" name="editDbOptions" /></item>
+         <item row="0" column="0"><widget class="QLabel" name="labelDbHost"><property name="text"><string>主机</string></property></widget></item>
+         <item row="0" column="1"><widget class="QLineEdit" name="editDbHost" /></item>
+         <item row="1" column="0"><widget class="QLabel" name="labelDbPort"><property name="text"><string>端口</string></property></widget></item>
+         <item row="1" column="1"><widget class="QSpinBox" name="spinDbPort"><property name="maximum"><number>65535</number></property><property name="value"><number>3306</number></property></widget></item>
+         <item row="2" column="0"><widget class="QLabel" name="labelDbName"><property name="text"><string>库名</string></property></widget></item>
+         <item row="2" column="1"><widget class="QLineEdit" name="editDbName" /></item>
+         <item row="3" column="0"><widget class="QLabel" name="labelDbUser"><property name="text"><string>用户名</string></property></widget></item>
+         <item row="3" column="1"><widget class="QLineEdit" name="editDbUser" /></item>
+         <item row="4" column="0"><widget class="QLabel" name="labelDbPass"><property name="text"><string>密码</string></property></widget></item>
+         <item row="4" column="1"><widget class="QLineEdit" name="editDbPass"><property name="echoMode"><enum>QLineEdit::Password</enum></property></widget></item>
+         <item row="5" column="0"><widget class="QLabel" name="labelDbOptions"><property name="text"><string>选项</string></property></widget></item>
+         <item row="5" column="1"><widget class="QLineEdit" name="editDbOptions" /></item>
         </layout>
        </item>
        <item>
@@ -112,40 +110,12 @@
       </layout>
      </widget>
      <widget class="QWidget" name="tabScan">
-      <attribute name="title"><string>扫描参数</string></attribute>
+      <attribute name="title"><string>算法参数</string></attribute>
       <property name="styleSheet">
        <string>QSpinBox, QDoubleSpinBox { min-width: 120px; max-width: 180px; }</string>
       </property>
       <layout class="QGridLayout" name="gridScan">
        <item row="0" column="0">
-        <widget class="QGroupBox" name="groupScanA">
-         <property name="title"><string>A型（CONF4）扫描参数</string></property>
-         <layout class="QFormLayout" name="formA">
-          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
-          <item row="0" column="0"><widget class="QLabel" name="labelARings"><property name="text"><string>圈数</string></property></widget></item>
-          <item row="0" column="1"><widget class="QSpinBox" name="spinARings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
-          <item row="1" column="0"><widget class="QLabel" name="labelAPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-          <item row="1" column="1"><widget class="QSpinBox" name="spinAPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>180</number></property></widget></item>
-         <item row="2" column="0"><widget class="QLabel" name="labelAAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
-         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleAAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-         </layout>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QGroupBox" name="groupScanB">
-         <property name="title"><string>B型（RUNO2）扫描参数</string></property>
-         <layout class="QFormLayout" name="formB">
-          <property name="fieldGrowthPolicy"><enum>QFormLayout::FieldsStayAtSizeHint</enum></property>
-          <item row="0" column="0"><widget class="QLabel" name="labelBRings"><property name="text"><string>圈数</string></property></widget></item>
-          <item row="0" column="1"><widget class="QSpinBox" name="spinBRings"><property name="minimum"><number>1</number></property><property name="maximum"><number>2</number></property></widget></item>
-          <item row="1" column="0"><widget class="QLabel" name="labelBPoints"><property name="text"><string>每圈点数</string></property></widget></item>
-          <item row="1" column="1"><widget class="QSpinBox" name="spinBPoints"><property name="minimum"><number>1</number></property><property name="maximum"><number>180</number></property></widget></item>
-         <item row="2" column="0"><widget class="QLabel" name="labelBAngle"><property name="text"><string>角度步进(°)</string></property></widget></item>
-         <item row="2" column="1"><widget class="QDoubleSpinBox" name="doubleBAngle"><property name="decimals"><number>3</number></property><property name="maximum"><double>360.000000000000000</double></property></widget></item>
-         </layout>
-        </widget>
-       </item>
-       <item row="1" column="0">
         <widget class="QGroupBox" name="groupAlgoA">
          <property name="title"><string>A型算法参数（内外径）</string></property>
          <layout class="QFormLayout" name="formAlgoA">
@@ -175,7 +145,7 @@
          </layout>
         </widget>
        </item>
-       <item row="1" column="1">
+       <item row="0" column="1">
         <widget class="QGroupBox" name="groupAlgoB">
          <property name="title"><string>B型算法参数（跳动）</string></property>
          <layout class="QFormLayout" name="formAlgoB">
@@ -207,7 +177,7 @@
          </layout>
         </widget>
        </item>
-       <item row="2" column="0" colspan="2">
+       <item row="1" column="0" colspan="2">
        <layout class="QGridLayout" name="layoutAlgoJudge">
         <item row="0" column="0" colspan="2">
          <widget class="QGroupBox" name="groupJudgeCommon">

@@ -124,7 +124,6 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->editLogDir->setText(c.paths.log_dir);
 
   // DB
-  ui_->editDbDriver->setText(c.db.driver);
   ui_->editDbHost->setText(c.db.host);
   ui_->spinDbPort->setValue(c.db.port);
   ui_->editDbName->setText(c.db.name);
@@ -142,16 +141,6 @@ void SettingsWidget::loadToUi(const core::AppConfig& c)
   ui_->spinMesTimeout->setValue(c.mes.timeout_ms);
   ui_->spinRetryBase->setValue(c.mes.retry_base_seconds);
   ui_->spinRetryMax->setValue(c.mes.retry_max_seconds);
-
-  // Scan A
-  ui_->spinARings->setValue(c.scan_a.rings);
-  ui_->spinAPoints->setValue(c.scan_a.points_per_ring);
-  ui_->doubleAAngle->setValue(c.scan_a.angle_step_deg);
-
-  // Scan B
-  ui_->spinBRings->setValue(c.scan_b.rings);
-  ui_->spinBPoints->setValue(c.scan_b.points_per_ring);
-  ui_->doubleBAngle->setValue(c.scan_b.angle_step_deg);
 
   // Algorithm
   ui_->doubleAlgoAKIn->setValue(c.algo.a_b_k_in_mm);
@@ -245,7 +234,8 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.paths.raw_dir = ui_->editRawDir->text().trimmed();
   c.paths.log_dir = ui_->editLogDir->text().trimmed();
 
-  c.db.driver = ui_->editDbDriver->text().trimmed();
+  c.db.driver = cfg_.db.driver.trimmed().isEmpty() ? QStringLiteral("QMYSQL")
+                                                   : cfg_.db.driver.trimmed();
   c.db.host = ui_->editDbHost->text().trimmed();
   c.db.port = ui_->spinDbPort->value();
   c.db.name = ui_->editDbName->text().trimmed();
@@ -262,14 +252,6 @@ core::AppConfig SettingsWidget::readFromUi() const
   c.mes.timeout_ms = ui_->spinMesTimeout->value();
   c.mes.retry_base_seconds = ui_->spinRetryBase->value();
   c.mes.retry_max_seconds = ui_->spinRetryMax->value();
-
-  c.scan_a.rings = ui_->spinARings->value();
-  c.scan_a.points_per_ring = ui_->spinAPoints->value();
-  c.scan_a.angle_step_deg = ui_->doubleAAngle->value();
-
-  c.scan_b.rings = ui_->spinBRings->value();
-  c.scan_b.points_per_ring = ui_->spinBPoints->value();
-  c.scan_b.angle_step_deg = ui_->doubleBAngle->value();
 
   c.algo.a_b_k_in_mm = ui_->doubleAlgoAKIn->value();
   c.algo.a_b_k_out_mm = ui_->doubleAlgoAKOut->value();
