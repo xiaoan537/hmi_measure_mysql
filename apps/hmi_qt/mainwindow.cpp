@@ -772,6 +772,18 @@ void MainWindow::setupBusinessPageBindings() {
             this, [this](int mode){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->writePlcMode(static_cast<qint16>(mode), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写 PLC 模式：%1").arg(plcModeTextV26(mode))); plcRuntime_->pollOnce(); });
     connect(productionWidget_, &ProductionWidget::requestWriteCategoryMode,
             this, [this](int partTypeArg){ if (!plcRuntime_) return; QString err; if (!plcRuntime_->setCategoryMode(static_cast<qint16>(partTypeArg), &err)) { handlePlcRuntimeError(err); return; } appendProductionLog(QStringLiteral("写工件类型到 PLC：%1").arg(partTypeArg == 1 ? QStringLiteral("B型") : QStringLiteral("A型"))); });
+    connect(productionWidget_, &ProductionWidget::requestWriteSamplePointCount,
+            this, [this](int pointCount){
+              if (!plcRuntime_) return;
+              QString err;
+              const int normalized = core::plc_v26::normalizeMailboxPointCount(pointCount);
+              if (!plcRuntime_->writeSamplePointCount(normalized, &err)) {
+                handlePlcRuntimeError(err.isEmpty() ? QStringLiteral("写采样点数失败") : err);
+                return;
+              }
+              appendProductionLog(QStringLiteral("写采样点数到 PLC：%1点").arg(normalized));
+              plcRuntime_->pollOnce();
+            });
     connect(productionWidget_, &ProductionWidget::requestWriteSlotId,
             this, &MainWindow::handleWriteTrayPartIdRequested);
     connect(productionWidget_, &ProductionWidget::uiCommandRequested,
@@ -1962,7 +1974,8 @@ void MainWindow::handleUiCommandRequested(const QString &cmd, const QVariantMap 
     if (!plcRuntime_->writePlcMode(plcMode, &err)) { handlePlcRuntimeError(err); return; }
     if (!plcRuntime_->setCategoryMode(categoryMode, &err)) { handlePlcRuntimeError(err); return; }
   }
-  if (cmd == QStringLiteral("START_AUTO") ||
+  if (cmd == QStringLiteral("INITIALIZE") ||
+      cmd == QStringLiteral("START_AUTO") ||
       cmd == QStringLiteral("START_CALIBRATION") ||
       cmd == QStringLiteral("START_RETEST_CURRENT")) {
     if (!plcRuntime_->writeSamplePointCount(samplePointCount, &err)) {

@@ -2,6 +2,8 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QNetworkProxy>
+#include <QNetworkProxyFactory>
 #include <QSettings>
 
 #include "login_dialog.hpp"
@@ -31,6 +33,10 @@ static QString resolveConfigPath(const QStringList &args) {
 
 int main(int argc, char *argv[]) {
   QApplication a(argc, argv);
+
+  // 禁用Qt的系统代理设置，确保应用程序不受系统代理配置的影响，直接连接到网络资源。这对于某些网络环境或调试场景可能是必要的。
+  QNetworkProxyFactory::setUseSystemConfiguration(false);
+  QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::NoProxy));
 
   const QString iniPath = resolveConfigPath(QCoreApplication::arguments());
   if (!QFileInfo::exists(iniPath)) {

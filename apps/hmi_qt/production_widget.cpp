@@ -149,6 +149,9 @@ ProductionWidget::ProductionWidget(const core::AppConfig &cfg, QWidget *parent)
         refreshSelectedDetail();
         emit requestWriteCategoryMode(static_cast<int>(selectedPartTypeArg()));
     });
+    connect(samplePointCombo_, qOverload<int>(&QComboBox::activated), this, [this](int){
+        emit requestWriteSamplePointCount(selectedSamplePointCount());
+    });
     connect(ui_->btnInit, &QPushButton::clicked, this, [this]{
         batch_part_type_ = selectedPartTypeTextInternal();
         refreshSelectedDetail();

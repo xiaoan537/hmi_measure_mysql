@@ -57,8 +57,9 @@ bool readFloat32WordSwapped(const QVector<quint16> &regs, int offset, float *out
 }
 
 bool readFloat64WordSwapped(const QVector<quint16> &regs, int offset, double *out, QString *err) {
-  if (!out || offset < 0 || offset + 3 >= regs.size()) { setErr(err, QStringLiteral("readFloat64WordSwapped 越界 offset=%1 size=%2").arg(offset).arg(regs.size())); return false; }
-  quint64 bits = 0;
+  if (!out) { setErr(err, QStringLiteral("readFloat64WordSwapped out指针为空")); return false; }
+  if (offset < 0 || offset + 4 > regs.size()) { setErr(err, QStringLiteral("readFloat64WordSwapped 越界 offset=%1 size=%2").arg(offset).arg(regs.size())); return false; }
+  quint64 bits{0};
   bits |= static_cast<quint64>(regs.at(offset)) << 0;
   bits |= static_cast<quint64>(regs.at(offset + 1)) << 16;
   bits |= static_cast<quint64>(regs.at(offset + 2)) << 32;

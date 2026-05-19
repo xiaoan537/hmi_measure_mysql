@@ -74,7 +74,7 @@ bool Db::open(const DbConfig &cfg, QString *err) {
   db_.setUserName(cfg.user);
   db_.setPassword(cfg.pass);
   QStringList connectOptions;
-  for (const QString &option : cfg.options.split(';', Qt::SkipEmptyParts)) {
+  for (const QString &option : cfg.options.split(';', QString::SkipEmptyParts)) {
     const QString trimmed = option.trimmed();
     if (trimmed.startsWith(QStringLiteral("MYSQL_OPT_RECONNECT"),
                            Qt::CaseInsensitive)) {

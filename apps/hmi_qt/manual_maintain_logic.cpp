@@ -27,7 +27,7 @@ QPair<QString, int> parseCylinderSelector(const QString &rawData)
 QVector<ParsedStateRow> parseStateRows(const QString &text, int valueCount)
 {
     QVector<ParsedStateRow> rows;
-    const QStringList lines = text.split(QStringLiteral("\n"), Qt::SkipEmptyParts);
+    const QStringList lines = text.split(QStringLiteral("\n"), QString::SkipEmptyParts);
     rows.reserve(lines.size());
 
     for (const QString &line : lines) {
@@ -39,7 +39,7 @@ QVector<ParsedStateRow> parseStateRows(const QString &text, int valueCount)
 
         QStringList values;
         if (parts.size() > 1) {
-            const QStringList kvs = parts.at(1).split(' ', Qt::SkipEmptyParts);
+            const QStringList kvs = parts.at(1).split(' ', QString::SkipEmptyParts);
             for (const QString &kv : kvs) {
                 const int pos = kv.indexOf('=');
                 values << (pos >= 0 ? kv.mid(pos + 1).trimmed() : kv.trimmed());

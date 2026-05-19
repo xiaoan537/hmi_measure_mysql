@@ -316,7 +316,7 @@ bool DevToolsWidget::parseDoubleSeriesText(const QString &text,
   normalized.replace(';', ',');
   normalized.replace('\t', ',');
   normalized.replace(' ', ',');
-  const QStringList parts = normalized.split(',', Qt::SkipEmptyParts);
+  const QStringList parts = normalized.split(',', QString::SkipEmptyParts);
   for (int i = 0; i < parts.size(); ++i) {
     bool ok = false;
     const double v = parts.at(i).trimmed().toDouble(&ok);
@@ -343,7 +343,7 @@ bool DevToolsWidget::parseBoolSeriesText(const QString &text, int expectedSize,
   normalized.replace(';', ',');
   normalized.replace('\t', ',');
   normalized.replace(' ', ',');
-  const QStringList parts = normalized.split(',', Qt::SkipEmptyParts);
+  const QStringList parts = normalized.split(',', QString::SkipEmptyParts);
   if (parts.size() != expectedSize) {
     if (err) *err = QStringLiteral("有效mask数量(%1)与数据点数量(%2)不一致").arg(parts.size()).arg(expectedSize);
     return false;

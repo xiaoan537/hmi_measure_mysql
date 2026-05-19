@@ -79,6 +79,7 @@ signals:
     void requestReconnectPlc();
     void requestSetPlcMode(int mode);
     void requestWriteCategoryMode(int partTypeArg);
+    void requestWriteSamplePointCount(int pointCount);
     void requestContinueAfterIdCheck();
 
 private slots:
